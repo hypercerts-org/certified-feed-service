@@ -9,8 +9,8 @@
   "scripts": {
     "codegen": "lex build --lexicons ./lexicons --out ./src/lexicons --clear --indexFile",
     "prebuild": "npm run codegen",
-    "build": "tsc -p tsconfig.build.json",
-    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-sql.mjs && node scripts/check-build.mjs",
+    "dev": "tsx watch --include src/feed/feed-query.sql src/server.ts",
     "pretest": "npm run codegen",
     "test": "vitest run test/*.unit.test.ts",
     "pretest:unit": "npm run codegen",

@@ -55,7 +55,7 @@ Missing rows produce a smaller feed. They do not make readiness fail, and readin
 
 ## Query ownership
 
-`src/feed/query.ts` owns one parameterized CTE statement with these stages:
+`src/feed/feed-query.sql` owns one parameterized CTE statement, while `src/feed/query.ts` owns parameter binding, execution, and result mapping. The statement has these stages:
 
 1. Choose explicit authors or current Certified outbound follows.
 2. Resolve current evaluator endorsement subjects directly from `record`.
@@ -114,7 +114,7 @@ The deployment role should have `SELECT` only on `record`, `actor`, and `label`.
 
 ## Performance verification
 
-Before production traffic, run the statement from `src/feed/query.ts` through:
+Before production traffic, run `src/feed/feed-query.sql` through:
 
 ```sql
 EXPLAIN (ANALYZE, BUFFERS)

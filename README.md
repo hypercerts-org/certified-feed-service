@@ -139,6 +139,8 @@ npm run build
 
 Generated Lexicon TypeScript lives under `src/lexicons/` and is intentionally ignored. The canonical `com.atproto.repo.strongRef` schema is vendored under `lexicons/com/atproto/repo/strongRef.json`. `codegen`, `build`, `check`, and test scripts regenerate ignored output from the committed JSON Lexicons; run `npm run codegen` after changing them.
 
+The canonical feed statement lives in `src/feed/feed-query.sql`. `npm run dev` watches it alongside the TypeScript sources, and the build copies it beside `dist/feed/query.js` before smoke-testing that the production adapter loads.
+
 ### Postgres integration tests
 
 Integration tests never connect to a deployment automatically. Point them at an empty disposable Postgres 16+ database:
