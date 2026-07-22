@@ -1,0 +1,147 @@
+{
+  "lexicon": 1,
+  "id": "app.certified.feed.beta.getFeedSkeleton",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Builds an ordered feed skeleton from current records indexed for the requested viewer scope. The caller hydrates returned strong references separately.",
+      "errors": [
+        { "name": "INVALID_REQUEST", "description": "The request is malformed or semantically invalid." },
+        { "name": "INVALID_VIEWER", "description": "viewerDid is not a valid DID." },
+        { "name": "AUTHORS_FILTER_TOO_LARGE", "description": "The authors filter exceeds its supported size." },
+        { "name": "TRUSTED_EVALUATORS_TOO_LARGE", "description": "The trusted evaluator filter exceeds its supported size." },
+        { "name": "FEED_SCOPE_TOO_LARGE", "description": "The resolved author scope exceeds its supported size." },
+        { "name": "INVALID_KIND", "description": "The request contains an unsupported event kind." },
+        { "name": "INVALID_CURSOR", "description": "The cursor is invalid or incompatible." },
+        { "name": "INTERNAL_ERROR", "description": "The service encountered an internal error." }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["viewerDid"],
+          "properties": {
+            "viewerDid": {
+              "type": "string",
+              "format": "did",
+              "maxLength": 256,
+              "description": "Viewer whose Certified follows supply the default author scope."
+            },
+            "authors": {
+              "type": "array",
+              "maxLength": 1000,
+              "description": "Optional replacement for the viewer's direct-follow author set. An explicitly empty array selects no base authors.",
+              "items": { "type": "string", "format": "did", "maxLength": 256 }
+            },
+            "trustedEvaluators": {
+              "type": "array",
+              "maxLength": 128,
+              "description": "Evaluator DIDs whose active endorsement subjects extend the author scope.",
+              "items": { "type": "string", "format": "did", "maxLength": 256 }
+            },
+            "organizationQuality": {
+              "type": "ref",
+              "ref": "#organizationQualityPolicy"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "description": "Maximum number of skeleton items to return."
+            },
+            "cursor": {
+              "type": "string",
+              "maxLength": 4096,
+              "description": "Opaque keyset cursor returned by a previous request."
+            },
+            "kinds": {
+              "type": "array",
+              "maxLength": 32,
+              "description": "Final event kinds to include. Omitted or empty means every supported kind.",
+              "items": {
+                "type": "string",
+                "maxLength": 64,
+                "knownValues": [
+                  "cert.create",
+                  "collection.create",
+                  "project.created_with_cert",
+                  "evaluation.create",
+                  "measurement.create",
+                  "hyperboard.create",
+                  "update.create",
+                  "endorsement.award"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "description": "Returns ordered feed skeleton items with exact record references and an optional cursor for the next page.",
+          "type": "object",
+          "required": ["items"],
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": { "type": "ref", "ref": "#feedSkeletonItem" }
+            },
+            "cursor": {
+              "type": "string",
+              "maxLength": 4096,
+              "description": "Cursor for the next page. Omitted when no later page is known."
+            }
+          }
+        }
+      }
+    },
+    "organizationQualityPolicy": {
+      "type": "object",
+      "required": ["allowed", "includeUnrated"],
+      "description": "Controls which known organizations qualify before event pagination.",
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "maxLength": 8,
+          "items": {
+            "type": "string",
+            "maxLength": 32,
+            "knownValues": ["high-quality", "standard", "draft", "likely-test"]
+          },
+          "description": "Organization quality values allowed into the feed."
+        },
+        "includeUnrated": {
+          "type": "boolean",
+          "description": "Whether known organizations without an active trusted quality label qualify."
+        }
+      }
+    },
+    "feedSkeletonItem": {
+      "type": "object",
+      "required": ["id", "kind", "subject", "actorDid", "sortAt"],
+      "description": "One classified feed event represented by its exact indexed record version.",
+      "properties": {
+        "id": { "type": "string", "format": "at-uri" },
+        "kind": {
+          "type": "string",
+          "maxLength": 64,
+          "knownValues": [
+            "cert.create",
+            "collection.create",
+            "project.created_with_cert",
+            "evaluation.create",
+            "measurement.create",
+            "hyperboard.create",
+            "update.create",
+            "endorsement.award"
+          ]
+        },
+        "subject": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
+        "actorDid": { "type": "string", "format": "did" },
+        "sortAt": { "type": "string", "format": "datetime" }
+      }
+    }
+  }
+}

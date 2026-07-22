@@ -1,0 +1,108 @@
+import {
+  Counter,
+  Gauge,
+  Histogram,
+  Registry,
+  collectDefaultMetrics,
+} from 'prom-client'
+
+import type { FeedErrorCode } from './feed/errors.js'
+import type { FeedKind } from './feed/types.js'
+
+const boundedHttpMethod = (method: string): 'GET' | 'POST' | 'OTHER' => {
+  if (method === 'GET' || method === 'POST') return method
+  return 'OTHER'
+}
+
+/** Bounded-label Prometheus instruments for HTTP and feed-query behavior. */
+export class Metrics {
+  readonly registry = new Registry()
+  readonly #requests: Counter<'route' | 'method' | 'status'>
+  readonly #requestDuration: Histogram<'route' | 'method'>
+  readonly #databaseDuration: Histogram<'operation'>
+  readonly #resultItems: Histogram
+  readonly #resultKinds: Counter<'kind'>
+  readonly #errors: Counter<'error'>
+  readonly #ready: Gauge
+
+  /** Creates an isolated registry so tests and multiple app instances do not share labels. */
+  constructor() {
+    collectDefaultMetrics({ register: this.registry, prefix: 'certified_feed_' })
+    this.#requests = new Counter({
+      name: 'certified_feed_http_requests_total',
+      help: 'HTTP requests handled by route, method, and status.',
+      labelNames: ['route', 'method', 'status'],
+      registers: [this.registry],
+    })
+    this.#requestDuration = new Histogram({
+      name: 'certified_feed_http_request_duration_seconds',
+      help: 'HTTP request duration by bounded route and method labels.',
+      labelNames: ['route', 'method'],
+      buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+      registers: [this.registry],
+    })
+    this.#databaseDuration = new Histogram({
+      name: 'certified_feed_database_duration_seconds',
+      help: 'Database operation duration.',
+      labelNames: ['operation'],
+      buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+      registers: [this.registry],
+    })
+    this.#resultItems = new Histogram({
+      name: 'certified_feed_result_items',
+      help: 'Number of skeleton items returned by a successful request.',
+      buckets: [0, 1, 5, 10, 20, 30, 40, 50],
+      registers: [this.registry],
+    })
+    this.#resultKinds = new Counter({
+      name: 'certified_feed_result_kinds_total',
+      help: 'Returned skeleton items grouped by bounded event kind.',
+      labelNames: ['kind'],
+      registers: [this.registry],
+    })
+    this.#errors = new Counter({
+      name: 'certified_feed_errors_total',
+      help: 'Feed endpoint failures grouped by stable public error name.',
+      labelNames: ['error'],
+      registers: [this.registry],
+    })
+    this.#ready = new Gauge({
+      name: 'certified_feed_ready',
+      help: 'Whether the latest readiness check passed.',
+      registers: [this.registry],
+    })
+  }
+
+  /** Records one completed HTTP exchange without using caller-controlled labels. */
+  observeRequest(
+    route: string,
+    method: string,
+    status: number,
+    durationSeconds: number,
+  ): void {
+    const methodLabel = boundedHttpMethod(method)
+    this.#requests.inc({ route, method: methodLabel, status: String(status) })
+    this.#requestDuration.observe({ route, method: methodLabel }, durationSeconds)
+  }
+
+  /** Records the duration of one named database operation. */
+  observeDatabase(operation: 'feed' | 'readiness', durationSeconds: number): void {
+    this.#databaseDuration.observe({ operation }, durationSeconds)
+  }
+
+  /** Records successful result size and the bounded event-kind distribution. */
+  observeResult(kinds: readonly FeedKind[]): void {
+    this.#resultItems.observe(kinds.length)
+    for (const kind of kinds) this.#resultKinds.inc({ kind })
+  }
+
+  /** Records one stable public endpoint error. */
+  observeError(error: FeedErrorCode): void {
+    this.#errors.inc({ error })
+  }
+
+  /** Updates the readiness gauge after a bounded compatibility probe. */
+  setReady(ready: boolean): void {
+    this.#ready.set(ready ? 1 : 0)
+  }
+}
