@@ -927,20 +927,20 @@ describe('FeedRepository against Postgres', () => {
       '2026-07-22T06:00:00Z',
     )
 
-    await expect(
-      service.getFeedSkeleton({ viewerDid: viewer, authors: [evaluator] }),
-    ).resolves.toMatchObject({
-      items: [expect.objectContaining({ subject: { uri: awardUri } })],
+    const authorOutput = await service.getFeedSkeleton({
+      viewerDid: viewer,
+      authors: [evaluator],
     })
-    await expect(
-      service.getFeedSkeleton({
-        viewerDid: viewer,
-        authors: [],
-        trustedEvaluators: [evaluator],
-      }),
-    ).resolves.toMatchObject({
-      items: [expect.objectContaining({ subject: { uri: subjectActivity } })],
+    expect(authorOutput.items).toHaveLength(1)
+    expect(authorOutput.items[0]?.subject.uri).toBe(awardUri)
+
+    const evaluatorOutput = await service.getFeedSkeleton({
+      viewerDid: viewer,
+      authors: [],
+      trustedEvaluators: [evaluator],
     })
+    expect(evaluatorOutput.items).toHaveLength(1)
+    expect(evaluatorOutput.items[0]?.subject.uri).toBe(subjectActivity)
   })
 
   it('keeps an explicitly empty author and evaluator scope empty', async () => {
