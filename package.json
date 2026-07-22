@@ -1,0 +1,41 @@
+{
+  "name": "@hypercerts/certified-feed-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "codegen": "lex build --lexicons ./lexicons --out ./src/lexicons --clear --indexFile",
+    "prebuild": "npm run codegen",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/server.ts",
+    "pretest": "npm run codegen",
+    "test": "vitest run test/*.unit.test.ts",
+    "pretest:unit": "npm run codegen",
+    "test:unit": "vitest run test/*.unit.test.ts",
+    "pretest:integration": "npm run codegen",
+    "test:integration": "vitest run test/*.integration.test.ts",
+    "test:integration:magic": "sh scripts/test-magic-schema.sh",
+    "precheck": "npm run codegen",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@atproto/lex": "^0.3.0",
+    "@atproto/lex-server": "^0.1.9",
+    "@atproto/syntax": "^0.7.2",
+    "dotenv": "^17.4.2",
+    "pg": "^8.16.3",
+    "pino": "^9.14.0",
+    "prom-client": "^15.1.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/pg": "^8.15.6",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  }
+}
