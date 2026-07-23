@@ -28,6 +28,8 @@ export class Database implements DatabaseCompatibilityChecker {
     const poolConfig: PoolConfig = {
       connectionString: config.databaseUrl,
       max: config.databaseMaxConnections,
+      min: 1,
+      idleTimeoutMillis: config.databaseIdleTimeoutMs,
       connectionTimeoutMillis: config.databaseConnectionTimeoutMs,
       statement_timeout: config.databaseStatementTimeoutMs,
       application_name: 'certified-feed-service',

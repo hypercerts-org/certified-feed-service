@@ -10,6 +10,8 @@ export interface Config {
   readonly databaseUrl: string
   /** Maximum number of Postgres sessions held by this sidecar. */
   readonly databaseMaxConnections: number
+  /** Time an excess Postgres session may remain idle before the pool closes it. */
+  readonly databaseIdleTimeoutMs: number
   /** Maximum time to wait for a database connection. */
   readonly databaseConnectionTimeoutMs: number
   /** Per-statement Postgres timeout. */
@@ -90,6 +92,13 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
       5,
       1,
       20,
+    ),
+    databaseIdleTimeoutMs: integerEnv(
+      env,
+      'DATABASE_IDLE_TIMEOUT_MS',
+      60_000,
+      1_000,
+      3_600_000,
     ),
     databaseConnectionTimeoutMs: integerEnv(
       env,

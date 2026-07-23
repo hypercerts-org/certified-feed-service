@@ -99,7 +99,8 @@ Copy `.env.example` to `.env` for local development, or copy its values into you
 | `PORT` | no | `3000` | HTTP listen port |
 | `HOST` | no | `0.0.0.0` | HTTP listen interface |
 | `LOG_LEVEL` | no | `info` | Pino log level |
-| `DATABASE_MAX_CONNECTIONS` | no | `5` | Pool size, maximum 20 |
+| `DATABASE_MAX_CONNECTIONS` | no | `5` | Maximum pool size, capped at 20; the pool keeps one connection warm |
+| `DATABASE_IDLE_TIMEOUT_MS` | no | `60000` | Time before idle connections above the one-connection minimum are closed |
 | `DATABASE_CONNECTION_TIMEOUT_MS` | no | `2000` | Pool acquisition timeout |
 | `DATABASE_STATEMENT_TIMEOUT_MS` | no | `5000` | Postgres statement timeout |
 | `REQUEST_TIMEOUT_MS` | no | `10000` | Maximum time allowed to receive an HTTP request; not a handler or database deadline |
@@ -111,6 +112,8 @@ Trusted quality labelers are service configuration. Callers cannot choose label 
 ## Database access
 
 Use a dedicated login with only `SELECT` access. The service also sets `default_transaction_read_only=on` on every pool session, but grants remain the primary boundary.
+
+Each service replica maintains its own bounded in-process pool. The initial readiness check opens a connection, the pool retains one warm connection to avoid reconnect churn, and idle connections above that minimum close after `DATABASE_IDLE_TIMEOUT_MS`. Account for `replica count × DATABASE_MAX_CONNECTIONS` when budgeting database connections; use an external pooler when many independently scaling replicas share a constrained Postgres server.
 
 Example operator setup:
 
