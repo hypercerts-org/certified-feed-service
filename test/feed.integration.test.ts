@@ -8,6 +8,8 @@ import { loadConfig } from '../src/config.js'
 import { Database } from '../src/database.js'
 import { FeedRepository } from '../src/feed/query.js'
 import { FeedService } from '../src/feed/service.js'
+import { PostgresActorReader } from '../src/hydration/actors.js'
+import { PostgresCertifiedProfileReader } from '../src/hydration/profiles.js'
 import { PostgresExactRecordReader } from '../src/hydration/query.js'
 import { strongRefKey } from '../src/hydration/types.js'
 import { Metrics } from '../src/metrics.js'
@@ -33,6 +35,8 @@ describe('FeedRepository against Postgres', () => {
   const logger = pino({ enabled: false })
   let admin: Pool
   let database: Database
+  let actors: PostgresActorReader
+  let profiles: PostgresCertifiedProfileReader
   let exactRecords: PostgresExactRecordReader
   let service: FeedService
 
@@ -66,6 +70,9 @@ describe('FeedRepository against Postgres', () => {
       );
       CREATE TABLE IF NOT EXISTS actor (
         did text PRIMARY KEY NOT NULL,
+        handle text,
+        display_name text,
+        avatar_cid text,
         indexed_at timestamptz NOT NULL DEFAULT NOW(),
         is_active boolean NOT NULL DEFAULT true,
         is_certified_organization boolean NOT NULL DEFAULT false
@@ -88,6 +95,8 @@ describe('FeedRepository against Postgres', () => {
       DATABASE_STATEMENT_TIMEOUT_MS: '10000',
     })
     database = new Database(config, logger)
+    actors = new PostgresActorReader(database)
+    profiles = new PostgresCertifiedProfileReader(database)
     exactRecords = new PostgresExactRecordReader(database)
     service = new FeedService(
       new FeedRepository(database),
@@ -103,12 +112,33 @@ describe('FeedRepository against Postgres', () => {
 
   const seedActor = async (
     did: string,
-    options: { active?: boolean; organization?: boolean } = {},
+    options: {
+      active?: boolean
+      organization?: boolean
+      handle?: string
+      displayName?: string
+      avatarCid?: string
+    } = {},
   ): Promise<void> => {
     await admin.query(
-      `INSERT INTO actor (did, indexed_at, is_active, is_certified_organization)
-       VALUES ($1, NOW(), $2, $3)`,
-      [did, options.active ?? true, options.organization ?? false],
+      `INSERT INTO actor (
+         did,
+         handle,
+         display_name,
+         avatar_cid,
+         indexed_at,
+         is_active,
+         is_certified_organization
+       )
+       VALUES ($1, $2, $3, $4, NOW(), $5, $6)`,
+      [
+        did,
+        options.handle ?? null,
+        options.displayName ?? null,
+        options.avatarCid ?? null,
+        options.active ?? true,
+        options.organization ?? false,
+      ],
     )
   }
 
@@ -222,6 +252,96 @@ describe('FeedRepository against Postgres', () => {
           strongRefKey(mismatchB),
           { state: 'cidMismatch', subject: mismatchB },
         ],
+      ]),
+    )
+  })
+
+  it('batches current stored actor summary fields and omits missing rows', async () => {
+    const actorA = randomDid()
+    const actorB = randomDid()
+    const missingActor = randomDid()
+    await seedActor(actorA, {
+      handle: 'alice.example',
+      displayName: 'Alice',
+      avatarCid: cid,
+    })
+    await seedActor(actorB, { active: false, displayName: 'Bob' })
+
+    await expect(
+      actors.getByDids([actorA, actorB, missingActor, actorA]),
+    ).resolves.toEqual(
+      new Map([
+        [
+          actorA,
+          {
+            did: actorA,
+            handle: 'alice.example',
+            displayName: 'Alice',
+            avatarCid: cid,
+          },
+        ],
+        [
+          actorB,
+          {
+            did: actorB,
+            handle: null,
+            displayName: 'Bob',
+            avatarCid: null,
+          },
+        ],
+      ]),
+    )
+  })
+
+  it('reads only current deterministic Certified profile self records by URI', async () => {
+    const profileDid = randomDid()
+    const sourceDidMismatch = randomDid()
+    const missingDid = randomDid()
+    const wrongCollectionDid = randomDid()
+    const staleBody = { marker: 'stale-self-body' }
+    const currentBody = { marker: 'current-self-body' }
+    const unrelatedBody = { marker: 'matching-did-wrong-rkey' }
+    const selfUri = `at://${profileDid}/app.certified.actor.profile/self`
+
+    await admin.query(
+      `INSERT INTO record (uri, cid, did, collection, json, sort_at)
+       VALUES ($1, $2, $3, 'app.certified.actor.profile', $4::jsonb, NOW())`,
+      [selfUri, cid, sourceDidMismatch, JSON.stringify(staleBody)],
+    )
+    await seedRecord(
+      profileDid,
+      'app.certified.actor.profile',
+      'not-self',
+      unrelatedBody,
+      '2026-07-20T00:00:00Z',
+    )
+    await admin.query(
+      `INSERT INTO record (uri, cid, did, collection, json, sort_at)
+       VALUES ($1, $2, $3, 'org.hypercerts.collection', $4::jsonb, NOW())`,
+      [
+        `at://${wrongCollectionDid}/app.certified.actor.profile/self`,
+        cid,
+        wrongCollectionDid,
+        JSON.stringify({ marker: 'wrong-collection' }),
+      ],
+    )
+    await admin.query(
+      `UPDATE record
+       SET cid = $2, json = $3::jsonb
+       WHERE uri = $1`,
+      [selfUri, staleCid, JSON.stringify(currentBody)],
+    )
+
+    await expect(
+      profiles.getByDids([
+        profileDid,
+        missingDid,
+        wrongCollectionDid,
+        profileDid,
+      ]),
+    ).resolves.toEqual(
+      new Map([
+        [profileDid, { did: profileDid, value: currentBody }],
       ]),
     )
   })

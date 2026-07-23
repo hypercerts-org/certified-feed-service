@@ -21,6 +21,9 @@ record.indexed_at          timestamptz
 record.subject_did         text
 
 actor.did                  text
+actor.handle               text
+actor.display_name         text
+actor.avatar_cid           text
 actor.is_active            boolean
 actor.is_certified_organization boolean
 
@@ -40,6 +43,7 @@ Postgres 16+ is required because createdAt ordering uses `pg_input_is_valid` bef
 
 ```text
 app.certified.graph.follow
+app.certified.actor.profile
 org.hypercerts.claim.activity
 org.hypercerts.collection
 org.hypercerts.context.evaluation
@@ -51,7 +55,7 @@ app.certified.badge.definition
 app.certified.badge.response
 ```
 
-Missing rows produce a smaller feed. They do not make readiness fail, and readiness does not verify schema shape or ingestion completeness.
+Missing source-event rows produce a smaller feed. Missing actor or Certified profile rows do not remove selected items; hydration falls back to stored actor fields or a DID-only summary. Missing rows do not make readiness fail, and readiness does not verify schema shape or ingestion completeness.
 
 ## Query ownership
 
@@ -68,6 +72,14 @@ Missing rows produce a smaller feed. They do not make readiness fail, and readin
 9. Order by valid `createdAt` (falling back to `sort_at`) descending with URI descending as the tie-breaker, then fetch `limit + 1`.
 
 Only fixed collection and event-kind constants appear in SQL text. Every request-controlled value is a bind parameter.
+
+Hydration uses separate parameterized current-state reads through the same bounded, read-only pool:
+
+- `src/hydration/query.ts` deduplicates combined URI/CID references, joins the requested pairs to `record` by URI, and returns `record.json` only when the current CID exactly matches. Missing URIs and CID mismatches never expose another record body.
+- `src/hydration/actors.ts` batches requested DIDs and reads only `actor.did`, `actor.handle`, `actor.display_name`, and `actor.avatar_cid`. It does not re-check `actor.is_active`; skeleton scope resolution owns actor-liveness filtering.
+- `src/hydration/profiles.ts` reads the current `record.json` only at each deterministic `at://<did>/app.certified.actor.profile/self` URI with the matching collection. It does not select profiles by `record.did` or accept a stale feed CID.
+
+Missing individual actor or profile rows are degradable data. A rejected hydration query still fails the request. These are separate current-state reads rather than one page-wide snapshot, so a source row can change between skeleton selection and hydration; exact top-level CID matching prevents substitution of a newer body.
 
 ## Active label semantics
 

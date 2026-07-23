@@ -1,2 +1,6 @@
 await import(new URL('../dist/feed/query.js', import.meta.url))
+await import(new URL('../dist/hydration/actors.js', import.meta.url))
+await import(new URL('../dist/hydration/profiles.js', import.meta.url))
 await import(new URL('../dist/hydration/query.js', import.meta.url))
+await import(new URL('../dist/hydration/validation.js', import.meta.url))
+await import(new URL('../dist/hydration/views.js', import.meta.url))

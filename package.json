@@ -25,7 +25,9 @@
   "dependencies": {
     "@atproto/lex": "^0.3.0",
     "@atproto/lex-server": "^0.1.9",
+    "@atproto/lexicon": "0.6.2",
     "@atproto/syntax": "^0.7.2",
+    "@hypercerts-org/lexicon": "1.0.0",
     "dotenv": "^17.4.2",
     "pg": "^8.16.3",
     "pino": "^9.14.0",
