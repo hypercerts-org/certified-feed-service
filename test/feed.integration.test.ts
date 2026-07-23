@@ -8,6 +8,8 @@ import { loadConfig } from '../src/config.js'
 import { Database } from '../src/database.js'
 import { FeedRepository } from '../src/feed/query.js'
 import { FeedService } from '../src/feed/service.js'
+import { PostgresExactRecordReader } from '../src/hydration/query.js'
+import { strongRefKey } from '../src/hydration/types.js'
 import { Metrics } from '../src/metrics.js'
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL
@@ -31,6 +33,7 @@ describe('FeedRepository against Postgres', () => {
   const logger = pino({ enabled: false })
   let admin: Pool
   let database: Database
+  let exactRecords: PostgresExactRecordReader
   let service: FeedService
 
   beforeAll(async () => {
@@ -85,6 +88,7 @@ describe('FeedRepository against Postgres', () => {
       DATABASE_STATEMENT_TIMEOUT_MS: '10000',
     })
     database = new Database(config, logger)
+    exactRecords = new PostgresExactRecordReader(database)
     service = new FeedService(
       new FeedRepository(database),
       [],
@@ -114,12 +118,13 @@ describe('FeedRepository against Postgres', () => {
     rkey: string,
     body: Record<string, unknown>,
     sortAt: string,
+    recordCid: string = cid,
   ): Promise<string> => {
     const uri = `at://${did}/${collection}/${rkey}`
     await admin.query(
       `INSERT INTO record (uri, cid, did, collection, json, sort_at)
        VALUES ($1, $2, $3, $4, $5::jsonb, $6::timestamptz)`,
-      [uri, cid, did, collection, JSON.stringify(body), sortAt],
+      [uri, recordCid, did, collection, JSON.stringify(body), sortAt],
     )
     return uri
   }
@@ -135,6 +140,90 @@ describe('FeedRepository against Postgres', () => {
         [randomDid()],
       ),
     ).rejects.toThrow(/read-only/i)
+  })
+
+  it('resolves exact URI and CID pairs without crossing or substituting versions', async () => {
+    const actorA = randomDid()
+    const actorB = randomDid()
+    const bodyA = { marker: 'body-a' }
+    const bodyB = { marker: 'body-b' }
+    const uriA = await seedRecord(
+      actorA,
+      'org.hypercerts.claim.activity',
+      'exact-a',
+      bodyA,
+      '2026-07-20T00:00:00Z',
+      cid,
+    )
+    const uriB = await seedRecord(
+      actorB,
+      'org.hypercerts.collection',
+      'exact-b',
+      bodyB,
+      '2026-07-20T00:00:01Z',
+      staleCid,
+    )
+    const missingUri = `at://${randomDid()}/org.hypercerts.claim.activity/missing`
+    const exactA = { uri: uriA, cid }
+    const mismatchA = { uri: uriA, cid: staleCid }
+    const mismatchB = { uri: uriB, cid }
+    const exactB = { uri: uriB, cid: staleCid }
+    const missing = { uri: missingUri, cid }
+
+    const results = await exactRecords.getByStrongRefs([
+      exactA,
+      exactA,
+      mismatchA,
+      mismatchB,
+      exactB,
+      missing,
+    ])
+
+    expect(results).toHaveLength(5)
+    expect(results.get(strongRefKey(exactA))).toEqual({
+      state: 'available',
+      subject: exactA,
+      collection: 'org.hypercerts.claim.activity',
+      did: actorA,
+      value: bodyA,
+    })
+    expect(results.get(strongRefKey(exactB))).toEqual({
+      state: 'available',
+      subject: exactB,
+      collection: 'org.hypercerts.collection',
+      did: actorB,
+      value: bodyB,
+    })
+    expect(results.get(strongRefKey(mismatchA))).toEqual({
+      state: 'cidMismatch',
+      subject: mismatchA,
+    })
+    expect(results.get(strongRefKey(mismatchB))).toEqual({
+      state: 'cidMismatch',
+      subject: mismatchB,
+    })
+    expect(results.get(strongRefKey(missing))).toEqual({
+      state: 'notFound',
+      subject: missing,
+    })
+
+    const crossedOnlyResults = await exactRecords.getByStrongRefs([
+      mismatchA,
+      mismatchB,
+    ])
+
+    expect(crossedOnlyResults).toEqual(
+      new Map([
+        [
+          strongRefKey(mismatchA),
+          { state: 'cidMismatch', subject: mismatchA },
+        ],
+        [
+          strongRefKey(mismatchB),
+          { state: 'cidMismatch', subject: mismatchB },
+        ],
+      ]),
+    )
   })
 
   it('resolves follows and evaluators, applies quality, and classifies before filtering', async () => {
