@@ -1,0 +1,28 @@
+{
+  "lexicon": 1,
+  "id": "app.certified.feed.beta.defs",
+  "description": "Shared wire definitions for Certified feed procedures.",
+  "defs": {
+    "organizationQualityPolicy": {
+      "type": "object",
+      "required": ["allowed", "includeUnrated"],
+      "description": "Controls which known organizations qualify before event pagination.",
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "maxLength": 8,
+          "items": {
+            "type": "string",
+            "maxLength": 32,
+            "knownValues": ["high-quality", "standard", "draft", "likely-test"]
+          },
+          "description": "Organization quality values allowed into the feed."
+        },
+        "includeUnrated": {
+          "type": "boolean",
+          "description": "Whether known organizations without an active trusted quality label qualify."
+        }
+      }
+    }
+  }
+}

@@ -4,16 +4,15 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Builds an ordered feed skeleton from current records indexed for the requested viewer scope. The caller hydrates returned strong references separately.",
+      "description": "Builds an ordered feed skeleton from current indexed records for the viewer scope supplied in the request. Authentication is not required, and viewerDid is not verified against an authenticated caller. The caller hydrates returned strong references separately.",
       "errors": [
-        { "name": "INVALID_REQUEST", "description": "The request is malformed or semantically invalid." },
-        { "name": "INVALID_VIEWER", "description": "viewerDid is not a valid DID." },
-        { "name": "AUTHORS_FILTER_TOO_LARGE", "description": "The authors filter exceeds its supported size." },
-        { "name": "TRUSTED_EVALUATORS_TOO_LARGE", "description": "The trusted evaluator filter exceeds its supported size." },
-        { "name": "FEED_SCOPE_TOO_LARGE", "description": "The resolved author scope exceeds its supported size." },
-        { "name": "INVALID_KIND", "description": "The request contains an unsupported event kind." },
-        { "name": "INVALID_CURSOR", "description": "The cursor is invalid or incompatible." },
-        { "name": "INTERNAL_ERROR", "description": "The service encountered an internal error." }
+        { "name": "InvalidRequest", "description": "The request is malformed or semantically invalid." },
+        { "name": "AuthorsFilterTooLarge", "description": "The authors filter exceeds its supported size." },
+        { "name": "TrustedEvaluatorsTooLarge", "description": "The trusted evaluator filter exceeds its supported size." },
+        { "name": "FeedScopeTooLarge", "description": "The resolved author scope exceeds its supported size." },
+        { "name": "InvalidKind", "description": "The request contains an unsupported event kind." },
+        { "name": "InvalidCursor", "description": "The cursor is invalid or incompatible." },
+        { "name": "InternalError", "description": "The service encountered an internal error." }
       ],
       "input": {
         "encoding": "application/json",
@@ -41,7 +40,7 @@
             },
             "organizationQuality": {
               "type": "ref",
-              "ref": "#organizationQualityPolicy"
+              "ref": "app.certified.feed.beta.defs#organizationQualityPolicy"
             },
             "limit": {
               "type": "integer",
@@ -94,27 +93,6 @@
               "description": "Cursor for the next page. Omitted when no later page is known."
             }
           }
-        }
-      }
-    },
-    "organizationQualityPolicy": {
-      "type": "object",
-      "required": ["allowed", "includeUnrated"],
-      "description": "Controls which known organizations qualify before event pagination.",
-      "properties": {
-        "allowed": {
-          "type": "array",
-          "maxLength": 8,
-          "items": {
-            "type": "string",
-            "maxLength": 32,
-            "knownValues": ["high-quality", "standard", "draft", "likely-test"]
-          },
-          "description": "Organization quality values allowed into the feed."
-        },
-        "includeUnrated": {
-          "type": "boolean",
-          "description": "Whether known organizations without an active trusted quality label qualify."
         }
       }
     },

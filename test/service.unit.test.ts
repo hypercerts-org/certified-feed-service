@@ -89,7 +89,7 @@ describe('FeedService', () => {
     await expect(
       service.getFeedSkeleton({ viewerDid: viewer, authors: [] }),
     ).rejects.toEqual(
-      expect.objectContaining<Partial<FeedError>>({ code: 'FEED_SCOPE_TOO_LARGE' }),
+      expect.objectContaining<Partial<FeedError>>({ code: 'FeedScopeTooLarge' }),
     )
   })
 })

@@ -76,7 +76,7 @@ describe('HTTP application', () => {
     expect(response.status).toBe(400)
     expect(getFeedSkeleton).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toMatchObject({
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
       message: expect.stringContaining('not valid JSON'),
     })
   })
@@ -103,7 +103,7 @@ describe('HTTP application', () => {
     expect(response.status).toBe(413)
     expect(getFeedSkeleton).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toEqual({
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
       message:
         'Request body exceeds the 65536-byte limit; remove unnecessary authors, evaluators, or other fields before retrying.',
     })
@@ -138,7 +138,7 @@ describe('HTTP application', () => {
     expect(cancel).toHaveBeenCalledWith('request body limit exceeded')
     expect(getFeedSkeleton).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toEqual({
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
       message:
         'Request body exceeds the 65536-byte limit; remove unnecessary authors, evaluators, or other fields before retrying.',
     })
@@ -158,7 +158,7 @@ describe('HTTP application', () => {
     expect(response.status).toBe(405)
     expect(getFeedSkeleton).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toMatchObject({
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
     })
   })
 
@@ -191,11 +191,11 @@ describe('HTTP application', () => {
 
     expect(response.status).toBe(500)
     await expect(response.json()).resolves.toMatchObject({
-      error: 'INTERNAL_ERROR',
+      error: 'InternalError',
     })
   })
 
-  it('normalizes lexicon validation failures to INVALID_REQUEST', async () => {
+  it('normalizes Lexicon validation failures to InvalidRequest', async () => {
     const feed: FeedSkeletonReader = {
       getFeedSkeleton: vi.fn(),
     }
@@ -214,7 +214,31 @@ describe('HTTP application', () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
+    })
+  })
+
+  it('rejects a malformed viewer as InvalidRequest before invoking the service', async () => {
+    const getFeedSkeleton = vi.fn()
+    const feed: FeedSkeletonReader = { getFeedSkeleton }
+    const app = createApp(compatibleDatabase, feed, new Metrics(), logger)
+
+    const response = await app.fetch(
+      new Request(
+        'http://localhost/xrpc/app.certified.feed.beta.getFeedSkeleton',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ viewerDid: 'alice.test' }),
+        },
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    expect(getFeedSkeleton).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'InvalidRequest',
+      message: expect.stringContaining('Invalid DID'),
     })
   })
 
@@ -222,7 +246,7 @@ describe('HTTP application', () => {
     const internalCause = new Error('secret database detail')
     const getFeedSkeleton = vi.fn(async () => {
       throw new FeedError(
-        'FEED_SCOPE_TOO_LARGE',
+        'FeedScopeTooLarge',
         'Reduce authors or trustedEvaluators before retrying.',
         422,
         { cause: internalCause },
@@ -246,7 +270,7 @@ describe('HTTP application', () => {
     expect(getFeedSkeleton).toHaveBeenCalledOnce()
     expect(response.status).toBe(422)
     expect(JSON.parse(responseText)).toEqual({
-      error: 'FEED_SCOPE_TOO_LARGE',
+      error: 'FeedScopeTooLarge',
       message: 'Reduce authors or trustedEvaluators before retrying.',
     })
     expect(responseText).not.toContain(internalCause.message)

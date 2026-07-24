@@ -28,7 +28,7 @@ describe('feed cursor', () => {
     ).toString('base64url')
 
     expect(() => decodeCursor(encoded)).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'INVALID_CURSOR' }),
+      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidCursor' }),
     )
   })
 
@@ -43,7 +43,7 @@ describe('feed cursor', () => {
     ).toString('base64url'),
   ])('rejects malformed cursor %s', (cursor) => {
     expect(() => decodeCursor(cursor)).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'INVALID_CURSOR' }),
+      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidCursor' }),
     )
   })
 })

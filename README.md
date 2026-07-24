@@ -11,7 +11,7 @@ POST /xrpc/app.certified.feed.beta.getFeedSkeleton
 Content-Type: application/json
 ```
 
-This is an app-specific XRPC procedure, not the Bluesky `app.bsky.feed.getFeedSkeleton` query. `certified.app` or the Hypercerts data plane calls it directly, then hydrates each returned URI and CID.
+This is an unauthenticated, app-specific XRPC procedure, not the Bluesky `app.bsky.feed.getFeedSkeleton` query. The request's `viewerDid` selects the viewer scope and is not verified against an authenticated caller. `certified.app` or the Hypercerts data plane calls it directly, then hydrates each returned URI and CID.
 
 ```bash
 curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeedSkeleton \
@@ -47,11 +47,11 @@ Example response:
 }
 ```
 
-The cursor is opaque to callers and is valid only for descending `createdAt` pagination. Cursors from the previous multi-mode contract return `INVALID_CURSOR`.
+The cursor is opaque to callers and is valid only for descending `createdAt` pagination. Cursors from the previous multi-mode contract return `InvalidCursor`.
 
 ## Request behavior
 
-- Malformed JSON returns HTTP 400 with `INVALID_REQUEST`; it never becomes an internal server error.
+- Malformed JSON or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`; it never becomes an internal server error.
 - Omitted `authors` resolves the viewer's current `app.certified.graph.follow` records; malformed follow subjects are ignored.
 - `authors: []` selects an empty base. It never means every indexed author.
 - Explicit `authors` replaces only the direct-follow base.
@@ -192,14 +192,13 @@ Metrics use only bounded route, status, operation, event-kind, and error labels.
 Stable public feed errors:
 
 ```text
-INVALID_REQUEST
-INVALID_VIEWER
-AUTHORS_FILTER_TOO_LARGE
-TRUSTED_EVALUATORS_TOO_LARGE
-FEED_SCOPE_TOO_LARGE
-INVALID_KIND
-INVALID_CURSOR
-INTERNAL_ERROR
+InvalidRequest
+AuthorsFilterTooLarge
+TrustedEvaluatorsTooLarge
+FeedScopeTooLarge
+InvalidKind
+InvalidCursor
+InternalError
 ```
 
 Public errors do not include SQL, database credentials, table contents, or internal stack traces.

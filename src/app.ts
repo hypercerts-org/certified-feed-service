@@ -22,7 +22,7 @@ const jsonResponse = (body: unknown, status = 200): Response =>
 const requestTooLargeResponse = (): Response =>
   jsonResponse(
     {
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
       message: `Request body exceeds the ${MAX_REQUEST_BODY_BYTES}-byte limit; remove unnecessary authors, evaluators, or other fields before retrying.`,
     },
     413,
@@ -31,7 +31,7 @@ const requestTooLargeResponse = (): Response =>
 const methodNotAllowed = (expected: 'GET' | 'POST'): Response =>
   jsonResponse(
     {
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
       message: `This endpoint requires ${expected}; change the HTTP method and retry.`,
     },
     405,
@@ -93,7 +93,7 @@ const rejectMalformedJson = async (
   } catch {
     return jsonResponse(
       {
-        error: 'INVALID_REQUEST',
+        error: 'InvalidRequest',
         message:
           'Request body is not valid JSON; correct the JSON syntax and retry.',
       },
@@ -128,10 +128,10 @@ const normalizeLexiconValidationError = async (
     'message' in body && typeof body.message === 'string'
       ? ` Details: ${body.message}`
       : ''
-  metrics.observeError('INVALID_REQUEST')
+  metrics.observeError('InvalidRequest')
   return jsonResponse(
     {
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
       message: `Request body does not match app.certified.feed.beta.getFeedSkeleton; correct the missing or invalid field and retry.${detail}`,
     },
     400,
@@ -191,14 +191,14 @@ export const createApp = (
                 })
               : methodNotAllowed('GET')
         } else if (url.pathname === XRPC_PATH && originalRequest.method !== 'POST') {
-          metrics.observeError('INVALID_REQUEST')
+          metrics.observeError('InvalidRequest')
           response = methodNotAllowed('POST')
         } else {
           let request = originalRequest
           if (url.pathname === XRPC_PATH && originalRequest.method === 'POST') {
             const bounded = await readBoundedRequest(originalRequest)
             if (bounded instanceof Response) {
-              metrics.observeError('INVALID_REQUEST')
+              metrics.observeError('InvalidRequest')
               response = bounded
               status = response.status
               return response
@@ -206,7 +206,7 @@ export const createApp = (
             request = bounded
             const malformedJson = await rejectMalformedJson(request)
             if (malformedJson) {
-              metrics.observeError('INVALID_REQUEST')
+              metrics.observeError('InvalidRequest')
               response = malformedJson
               status = response.status
               return response
