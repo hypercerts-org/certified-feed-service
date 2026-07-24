@@ -3,6 +3,27 @@
   "id": "app.certified.feed.beta.defs",
   "description": "Shared wire definitions for Certified feed procedures.",
   "defs": {
+    "organizationQualityPolicy": {
+      "type": "object",
+      "required": ["allowed", "includeUnrated"],
+      "description": "Controls which known organizations qualify before event pagination.",
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "maxLength": 8,
+          "items": {
+            "type": "string",
+            "maxLength": 32,
+            "knownValues": ["high-quality", "standard", "draft", "likely-test"]
+          },
+          "description": "Organization quality values allowed into the feed."
+        },
+        "includeUnrated": {
+          "type": "boolean",
+          "description": "Whether known organizations without an active trusted quality label qualify."
+        }
+      }
+    },
     "uriImage": {
       "type": "object",
       "required": ["uri"],
@@ -114,12 +135,16 @@
         "target": { "type": "ref", "ref": "com.atproto.repo.strongRef" }
       }
     },
-    "hydratedFeedItem": {
+    "availableFeedItem": {
       "type": "object",
-      "required": ["id", "kind", "subject", "sortAt", "actor", "recordState"],
-      "description": "One view-only hydrated feed event. Available records carry a view; invalid records omit it.",
+      "required": ["id", "kind", "subject", "sortAt", "actor", "recordState", "view"],
+      "description": "A feed event whose indexed source record was validated and projected into a view.",
       "properties": {
-        "id": { "type": "string", "format": "at-uri" },
+        "id": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "Stable event identifier, currently the source record AT URI."
+        },
         "kind": {
           "type": "string",
           "maxLength": 64,
@@ -135,12 +160,15 @@
           ]
         },
         "subject": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
-        "sortAt": { "type": "string", "format": "datetime" },
+        "sortAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "Effective timestamp used to order this item."
+        },
         "actor": { "type": "ref", "ref": "#actorSummary" },
-        "recordState": { "type": "string", "enum": ["available", "invalid"] },
+        "recordState": { "type": "string", "const": "available" },
         "view": {
           "type": "union",
-          "closed": true,
           "refs": [
             "#activityView",
             "#collectionView",
@@ -151,6 +179,40 @@
             "#updateView"
           ]
         }
+      }
+    },
+    "invalidFeedItem": {
+      "type": "object",
+      "required": ["id", "kind", "subject", "sortAt", "actor", "recordState"],
+      "description": "A feed event whose indexed source record could not be validated. No view is available.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "Stable event identifier, currently the source record AT URI."
+        },
+        "kind": {
+          "type": "string",
+          "maxLength": 64,
+          "knownValues": [
+            "cert.create",
+            "collection.create",
+            "project.created_with_cert",
+            "evaluation.create",
+            "measurement.create",
+            "hyperboard.create",
+            "update.create",
+            "endorsement.award"
+          ]
+        },
+        "subject": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
+        "sortAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "Effective timestamp used to order this item."
+        },
+        "actor": { "type": "ref", "ref": "#actorSummary" },
+        "recordState": { "type": "string", "const": "invalid" }
       }
     }
   }

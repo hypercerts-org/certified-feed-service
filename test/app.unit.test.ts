@@ -89,6 +89,8 @@ describe('HTTP application', () => {
         return {
           items: [
             {
+              $type:
+                'app.certified.feed.beta.defs#availableFeedItem' as const,
               id: uri,
               kind: 'cert.create' as const,
               subject: { uri, cid },
@@ -121,6 +123,7 @@ describe('HTTP application', () => {
     await expect(response.json()).resolves.toMatchObject({
       items: [
         {
+          $type: 'app.certified.feed.beta.defs#availableFeedItem',
           id: uri,
           actor: { did: actor },
           recordState: 'available',
@@ -149,7 +152,7 @@ describe('HTTP application', () => {
     expect(getFeedSkeleton).not.toHaveBeenCalled()
     expect(getFeed).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toMatchObject({
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
       message: expect.stringContaining('not valid JSON'),
     })
   })
@@ -182,7 +185,7 @@ describe('HTTP application', () => {
     expect(getFeedSkeleton).not.toHaveBeenCalled()
     expect(getFeed).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toEqual({
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
       message:
         'Request body exceeds the 65536-byte limit; remove unnecessary authors, evaluators, or other fields before retrying.',
     })
@@ -240,7 +243,7 @@ describe('HTTP application', () => {
     expect(getFeedSkeleton).not.toHaveBeenCalled()
     expect(getFeed).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toMatchObject({
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
     })
   })
 
@@ -269,6 +272,7 @@ describe('HTTP application', () => {
         getFeed: vi.fn(async () => ({
           items: [
             {
+              $type: 'app.certified.feed.beta.defs#invalidFeedItem' as const,
               id: 'not-an-at-uri',
               kind: 'cert.create' as const,
               subject: { uri: 'bad', cid: 'bad' },
@@ -289,7 +293,7 @@ describe('HTTP application', () => {
 
     expect(response.status).toBe(500)
     await expect(response.json()).resolves.toMatchObject({
-      error: 'INTERNAL_ERROR',
+      error: 'InternalError',
     })
   })
 
@@ -308,15 +312,41 @@ describe('HTTP application', () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
-      error: 'INVALID_REQUEST',
+      error: 'InvalidRequest',
       message: expect.stringContaining(nsid),
+    })
+  })
+
+  it.each([
+    ['skeleton', skeletonPath],
+    ['hydrated', hydratedPath],
+  ])('rejects a malformed viewer for the %s route as InvalidRequest', async (_label, url) => {
+    const getFeedSkeleton = vi.fn()
+    const getFeed = vi.fn()
+    const app = createApp(
+      compatibleDatabase,
+      appServices({ getFeedSkeleton }, { getFeed }),
+      new Metrics(),
+      logger,
+    )
+
+    const response = await app.fetch(
+      post(url, JSON.stringify({ viewerDid: 'alice.test' })),
+    )
+
+    expect(response.status).toBe(400)
+    expect(getFeedSkeleton).not.toHaveBeenCalled()
+    expect(getFeed).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'InvalidRequest',
+      message: expect.stringContaining('Invalid DID'),
     })
   })
 
   it('keeps expected skeleton FeedError translation unchanged', async () => {
     const getFeedSkeleton = vi.fn(async () => {
       throw new FeedError(
-        'FEED_SCOPE_TOO_LARGE',
+        'FeedScopeTooLarge',
         'Reduce authors or trustedEvaluators before retrying.',
         422,
       )
@@ -334,7 +364,7 @@ describe('HTTP application', () => {
 
     expect(response.status).toBe(422)
     await expect(response.json()).resolves.toEqual({
-      error: 'FEED_SCOPE_TOO_LARGE',
+      error: 'FeedScopeTooLarge',
       message: 'Reduce authors or trustedEvaluators before retrying.',
     })
   })
@@ -343,7 +373,7 @@ describe('HTTP application', () => {
     const internalCause = new Error('secret database detail')
     const getFeed = vi.fn(async () => {
       throw new FeedError(
-        'FEED_SCOPE_TOO_LARGE',
+        'FeedScopeTooLarge',
         'Reduce authors or trustedEvaluators before retrying.',
         422,
         { cause: internalCause },
@@ -364,7 +394,7 @@ describe('HTTP application', () => {
     expect(getFeed).toHaveBeenCalledOnce()
     expect(response.status).toBe(422)
     expect(JSON.parse(responseText)).toEqual({
-      error: 'FEED_SCOPE_TOO_LARGE',
+      error: 'FeedScopeTooLarge',
       message: 'Reduce authors or trustedEvaluators before retrying.',
     })
     expect(responseText).not.toContain(internalCause.message)
@@ -390,9 +420,9 @@ describe('HTTP application', () => {
 
     expect(response.status).toBe(500)
     expect(responseText).not.toContain('secret hydrated failure')
-    expect(JSON.parse(responseText)).toMatchObject({ error: 'INTERNAL_ERROR' })
+    expect(JSON.parse(responseText)).toMatchObject({ error: 'InternalError' })
     expect(metricText).toContain('route="feed_hydrated"')
-    expect(metricText).toContain('error="INTERNAL_ERROR"')
+    expect(metricText).toContain('error="InternalError"')
     expect(metricText).not.toContain(viewer)
     expect(metricText).not.toContain(uri)
   })

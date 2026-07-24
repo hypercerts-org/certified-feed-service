@@ -122,7 +122,7 @@ describe('PostgresFeedPageLoader', () => {
     await expect(
       loader.loadPage({ viewerDid: viewer, authors: [] }, 'metadata'),
     ).rejects.toEqual(
-      expect.objectContaining<Partial<FeedError>>({ code: 'FEED_SCOPE_TOO_LARGE' }),
+      expect.objectContaining<Partial<FeedError>>({ code: 'FeedScopeTooLarge' }),
     )
   })
 

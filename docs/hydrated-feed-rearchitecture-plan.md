@@ -248,16 +248,18 @@ export interface HydratedFeedItemBase {
 
 export type HydratedFeedItem =
   | (HydratedFeedItemBase & {
+      readonly $type: 'app.certified.feed.beta.defs#availableFeedItem'
       readonly recordState: 'available'
       readonly view: FeedItemView
     })
   | (HydratedFeedItemBase & {
+      readonly $type: 'app.certified.feed.beta.defs#invalidFeedItem'
       readonly recordState: 'invalid'
       readonly view?: never
     })
 ```
 
-Public Lexicon limitations may require representing `view` as optional plus `recordState` known values. Keep the stronger invariant in internal TypeScript and tests even if the wire schema cannot express the conditional relationship directly.
+The public Lexicon exposes an open union of the known available and invalid item variants. The available variant requires `view`; the invalid variant does not declare it. Lexicon v1 still ignores or warns about unexpected object fields, so internal TypeScript and tests ensure the service never emits a view on invalid items.
 
 Do not return:
 
@@ -564,17 +566,18 @@ Add tests for:
 Revise the original Milestones 5–6 around the new model:
 
 - shared skeleton definitions remain wire-compatible;
-- hydrated item has view-only output;
-- image and view unions retain full `$type` discriminators;
+- hydrated output is an open union of `availableFeedItem` and `invalidFeedItem`;
+- known items and views retain full `$type` discriminators;
+- the available-item view union is open to unknown future variants;
 - target uses a strong-reference schema;
-- `recordState` contains only `available` and `invalid`;
+- `recordState` is a variant-specific `available` or `invalid` constant;
 - no raw `record` field;
 - no `profileSource` field;
 - input and stable public errors continue matching the skeleton endpoint;
 - `getFeed` remains unauthenticated POST;
 - generated output fixtures cover every view and target shape;
 - handler output validation remains inside the expected error boundary;
-- unknown failures remain `INTERNAL_ERROR`.
+- unknown failures remain `InternalError`.
 
 Production composition should remain constructor-based and explicit. A target shape is:
 

@@ -133,9 +133,9 @@ Preserve these unless the public contract is intentionally revised and documente
 - Omitted `authors` uses the viewer's current Certified follows. Explicit `authors` replaces only that base; `authors: []` means an empty base. Preserve `hasExplicitAuthors` through validation and SQL.
 - Deduplicate request lists before enforcing semantic limits: 500 explicit authors, 64 evaluators, 16 kinds, 500 resolved authors, and 1–50 page items.
 - Evaluator endorsement subjects are unioned after base-author resolution. Remove the viewer, deduplicate candidates, remove known inactive actors, and keep actors absent from `actor` eligible.
-- Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with `INVALID_KIND`.
+- Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with `InvalidKind`.
 - Organization-quality policy uses only service-configured `TRUSTED_QUALITY_LABELER_DIDS`. `includeUnrated` applies only when no active trusted label exists; an active disallowed label is not unrated.
-- Cap scope after all unions and membership filtering. Oversized scope returns its count without project/event scans, then fails with `FEED_SCOPE_TOO_LARGE`; never truncate silently.
+- Cap scope after all unions and membership filtering. Oversized scope returns its count without project/event scans, then fails with `FeedScopeTooLarge`; never truncate silently.
 - Evaluator expansion and visible endorsement events use the same account-subject, self-endorsement, exact definition URI/CID, badge type, allowed-issuer, and latest exact response rules. Do not use `endorsement_edge`.
 - Project/activity pairing happens before kind filtering and pagination. It requires the same actor, exact activity URI/CID, and a `sort_at` gap strictly below 60 seconds. Paired activities remain suppressed across pages.
 - Ordering is effective timestamp descending, URI descending. Keep `pg_input_is_valid` before casting untrusted `createdAt` text.
@@ -147,8 +147,9 @@ Preserve these unless the public contract is intentionally revised and documente
 - Every requested identity DID receives a context. Missing storage rows degrade to a DID-only summary; query rejection fails the request.
 - A valid meaningful Certified profile supplies display/avatar fields wholesale while preserving an independently valid stored handle. Otherwise use sanitized stored Bluesky fields, then DID-only fallback. Do not expose provenance.
 - Known source records validate against `@hypercerts-org/lexicon` exactly `1.0.0`, selected by trusted collection plus feed kind. Keep the compatible direct `@atproto/lexicon` pin and supplemental MIME, integer-size, nonnegative-size, and maximum-size checks.
-- Public hydrated output is view-only. `available` always has a view; `invalid` never has one but keeps page metadata and event-author identity. Do not expose source JSON or redundant event-author DID fields.
-- All eight feed kinds map exhaustively to seven view variants; both collection kinds use `collectionView`.
+- Public hydrated output is view-only. Known available items use `app.certified.feed.beta.defs#availableFeedItem` and always have a view; known invalid items use `app.certified.feed.beta.defs#invalidFeedItem`, never have a view, and keep page metadata and event-author identity. Do not expose source JSON or redundant event-author DID fields.
+- Hydrated items and available-item views are open unions. Preserve item and view `$type` discriminators, and require clients to tolerate unknown future variants.
+- All eight current feed kinds map exhaustively to seven known view variants; both collection kinds use `collectionView`. The service owns this kind/view mapping.
 - Endorsement views are total and use the exact account-subject summary.
 - Evaluation, measurement, and update targets are exact strong references only. Do not query target records, discover target identities, build previews, or recurse. Hyperboard has no target in this version.
 - Results are mutable current state, not snapshots across requests or an event log.

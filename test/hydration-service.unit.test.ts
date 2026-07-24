@@ -181,6 +181,7 @@ describe('HydratedFeedService', () => {
       endorsementUri,
     ])
     expect(output.items[0]).toEqual({
+      $type: 'app.certified.feed.beta.defs#availableFeedItem',
       id: activityUri,
       kind: 'cert.create',
       subject: { uri: activityUri, cid },
@@ -200,6 +201,7 @@ describe('HydratedFeedService', () => {
       },
     })
     expect(output.items[1]).toEqual({
+      $type: 'app.certified.feed.beta.defs#invalidFeedItem',
       id: invalidUri,
       kind: 'collection.create',
       subject: { uri: invalidUri, cid },
@@ -208,6 +210,7 @@ describe('HydratedFeedService', () => {
       recordState: 'invalid',
     })
     expect(output.items[2]).toMatchObject({
+      $type: 'app.certified.feed.beta.defs#availableFeedItem',
       id: endorsementUri,
       actor: { did: authorDid },
       recordState: 'available',
@@ -260,6 +263,7 @@ describe('HydratedFeedService', () => {
 
     expect(identities.calls).toEqual([[authorDid]])
     expect(output.items[0]).toMatchObject({
+      $type: 'app.certified.feed.beta.defs#availableFeedItem',
       recordState: 'available',
       view: {
         $type: 'app.certified.feed.beta.defs#measurementView',

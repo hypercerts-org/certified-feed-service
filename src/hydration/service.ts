@@ -100,7 +100,11 @@ export class HydratedFeedService implements HydratedFeedReader {
       }
       const record = records[index]
       if (record === undefined) {
-        return { ...base, recordState: 'invalid' }
+        return {
+          ...base,
+          $type: 'app.certified.feed.beta.defs#invalidFeedItem',
+          recordState: 'invalid',
+        }
       }
 
       const endorsedDid = getEndorsedActorDid(record)
@@ -108,6 +112,7 @@ export class HydratedFeedService implements HydratedFeedReader {
         endorsedDid === undefined ? undefined : summaries.get(endorsedDid)
       return {
         ...base,
+        $type: 'app.certified.feed.beta.defs#availableFeedItem',
         recordState: 'available',
         view: buildFeedItemView(record, {
           sourceDid: row.actorDid,

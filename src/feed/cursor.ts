@@ -26,13 +26,13 @@ export const decodeCursor = (cursor: string | undefined): FeedCursor | undefined
   if (cursor === undefined || cursor === '') return undefined
   if (cursor.length > MAX_CURSOR_LENGTH) {
     throw new FeedError(
-      'INVALID_CURSOR',
+      'InvalidCursor',
       `cursor exceeds the maximum encoded length of ${MAX_CURSOR_LENGTH} characters; discard it and request the first page again.`,
     )
   }
   if (!BASE64URL_PATTERN.test(cursor)) {
     throw new FeedError(
-      'INVALID_CURSOR',
+      'InvalidCursor',
       'cursor is not valid unpadded base64url; use the cursor exactly as returned by the previous page.',
     )
   }
@@ -42,7 +42,7 @@ export const decodeCursor = (cursor: string | undefined): FeedCursor | undefined
     value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
   } catch (cause) {
     throw new FeedError(
-      'INVALID_CURSOR',
+      'InvalidCursor',
       'cursor does not contain valid JSON; discard it and request the first page again.',
       400,
       { cause },
@@ -56,7 +56,7 @@ export const decodeCursor = (cursor: string | undefined): FeedCursor | undefined
     Object.keys(value).length !== 3
   ) {
     throw new FeedError(
-      'INVALID_CURSOR',
+      'InvalidCursor',
       'cursor payload has the wrong shape; use the cursor exactly as returned by the previous page.',
     )
   }
@@ -64,19 +64,19 @@ export const decodeCursor = (cursor: string | undefined): FeedCursor | undefined
   const payload = value as Record<string, unknown>
   if (payload.version !== CURSOR_VERSION) {
     throw new FeedError(
-      'INVALID_CURSOR',
+      'InvalidCursor',
       `cursor version must be ${CURSOR_VERSION}; discard this unsupported cursor and request the first page again.`,
     )
   }
   if (typeof payload.value !== 'string' || !isDatetimeString(payload.value)) {
     throw new FeedError(
-      'INVALID_CURSOR',
+      'InvalidCursor',
       'cursor value must be a valid RFC3339 timestamp; use the cursor exactly as returned by the previous page.',
     )
   }
   if (typeof payload.uri !== 'string' || !isValidAtUri(payload.uri)) {
     throw new FeedError(
-      'INVALID_CURSOR',
+      'InvalidCursor',
       'cursor uri must be a valid AT-URI; use the cursor exactly as returned by the previous page.',
     )
   }

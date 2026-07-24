@@ -6,7 +6,7 @@ The service exposes an exact-reference skeleton and a view-only hydrated feed. I
 
 ## Endpoints
 
-Both endpoints are unauthenticated POST procedures with the same request fields, limits, cursor contract, and stable public errors:
+Both endpoints are unauthenticated POST procedures with the same request fields, limits, cursor contract, and stable public errors. The request's `viewerDid` selects the viewer scope and is not verified against an authenticated caller:
 
 ```text
 POST /xrpc/app.certified.feed.beta.getFeedSkeleton
@@ -60,6 +60,7 @@ Use the same body with `getFeedSkeleton` when a downstream data plane only needs
 {
   "items": [
     {
+      "$type": "app.certified.feed.beta.defs#availableFeedItem",
       "id": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.context.evaluation/3kpn",
       "kind": "evaluation.create",
       "subject": {
@@ -87,10 +88,11 @@ Use the same body with `getFeedSkeleton` when a downstream data plane only needs
 }
 ```
 
-Hydrated items are view-only:
+Hydrated items are view-only and use an open item union so clients can tolerate future variants:
 
-- `available` means the selected source validated and the item has a kind-specific `view`.
-- `invalid` retains page metadata and the event-author summary but omits `view`.
+- Known `available` items use `$type: app.certified.feed.beta.defs#availableFeedItem`; the selected source validated and the item has a kind-specific `view`.
+- Known `invalid` items use `$type: app.certified.feed.beta.defs#invalidFeedItem`; they retain page metadata and the event-author summary but omit `view`.
+- The nested feed-view union is also open. Clients must tolerate item and view `$type` values they do not recognize.
 - The response does not expose source JSON or identity provenance.
 - Actor summaries use a valid meaningful Certified profile first, otherwise validated stored Bluesky fields, otherwise the DID alone. A valid stored handle is preserved independently.
 - Evaluation, measurement, and update views may include an exact `{ uri, cid }` target. The source record's authoritative validator validates the strong-reference shape. The service does not query, preview, recursively hydrate, or validate the referenced target record or body.
@@ -98,7 +100,7 @@ Hydrated items are view-only:
 
 ## Request behavior
 
-- Malformed JSON returns HTTP 400 with `INVALID_REQUEST`; it never becomes an internal server error.
+- Malformed JSON or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`; it never becomes an internal server error.
 - Omitted `authors` resolves the viewer's current `app.certified.graph.follow` records; malformed follow subjects are ignored.
 - `authors: []` selects an empty base. It never means every indexed author.
 - Explicit `authors` replaces only the direct-follow base.
@@ -245,14 +247,13 @@ Metrics use bounded route, status, operation, event-kind, and error labels. DIDs
 Stable public feed errors:
 
 ```text
-INVALID_REQUEST
-INVALID_VIEWER
-AUTHORS_FILTER_TOO_LARGE
-TRUSTED_EVALUATORS_TOO_LARGE
-FEED_SCOPE_TOO_LARGE
-INVALID_KIND
-INVALID_CURSOR
-INTERNAL_ERROR
+InvalidRequest
+AuthorsFilterTooLarge
+TrustedEvaluatorsTooLarge
+FeedScopeTooLarge
+InvalidKind
+InvalidCursor
+InternalError
 ```
 
 Public errors never include SQL, database credentials, table contents, internal causes, or stack traces.

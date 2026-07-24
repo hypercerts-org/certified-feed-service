@@ -133,7 +133,7 @@ Cursor v2 is unpadded base64url JSON with exactly:
 
 It stores the last emitted timestamp and URI. Timestamp derivation, UTC formatting, descending URI tie-break, trimming point, and cursor bytes must move together. Incompatible changes require a cursor-version bump.
 
-Scope is counted after base authors, evaluator unions, viewer removal, actor membership, and quality policy. A scope over 500 returns its count without expanding project or eligible-event scans and then fails with `FEED_SCOPE_TOO_LARGE`; it is never truncated.
+Scope is counted after base authors, evaluator unions, viewer removal, actor membership, and quality policy. A scope over 500 returns its count without expanding project or eligible-event scans and then fails with `FeedScopeTooLarge`; it is never truncated.
 
 Project/activity pairing happens before kind filtering and pagination. It requires the same author, exact activity URI and CID, and a `sort_at` gap strictly below 60 seconds. The collection becomes `project.created_with_cert`; the paired activity remains suppressed across page boundaries.
 
@@ -203,16 +203,18 @@ interface HydratedFeedItemBase {
 
 type HydratedFeedItem =
   | (HydratedFeedItemBase & {
+      $type: 'app.certified.feed.beta.defs#availableFeedItem'
       recordState: 'available'
       view: FeedItemView
     })
   | (HydratedFeedItemBase & {
+      $type: 'app.certified.feed.beta.defs#invalidFeedItem'
       recordState: 'invalid'
       view?: never
     })
 ```
 
-The public Lexicon represents `view` as optional because it cannot express the conditional relationship. Internal TypeScript and tests enforce it.
+The public Lexicon exposes an open union of known available and invalid item variants. The available variant requires `view`; the invalid variant does not declare it. Lexicon v1 still ignores or warns about unexpected object fields, so internal TypeScript and tests ensure the service never emits a view on invalid items.
 
 An invalid source retains exact page metadata and the event-author summary but has no view. Source JSON stays internal. `actor.did` already carries the event author, so hydrated items do not duplicate it in another field.
 
@@ -273,7 +275,7 @@ Committed JSON under `lexicons/` defines the wire contract. Both procedures:
 
 `@atproto/lex@0.3.0` needs the narrow ignored-output workaround documented in `AGENTS.md`. It changes generated TypeScript inference only; it does not change Lexicon JSON or runtime validation.
 
-Unknown handler, query, validation-invariant, or output-validation failures become redacted `INTERNAL_ERROR` responses. Public errors never expose SQL, credentials, data, causes, or stacks.
+Unknown handler, query, validation-invariant, or output-validation failures become redacted `InternalError` responses. Public errors never expose SQL, credentials, data, causes, or stacks.
 
 ## Metrics
 

@@ -36,7 +36,7 @@ describe('feed request validation', () => {
     expect(() =>
       normalizeFeedRequest({ viewerDid: viewer, kinds: ['cert.creat'] }),
     ).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'INVALID_KIND' }),
+      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidKind' }),
     )
   })
 
@@ -50,18 +50,18 @@ describe('feed request validation', () => {
         },
       }),
     ).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'INVALID_REQUEST' }),
+      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidRequest' }),
     )
   })
 
   it('rejects malformed viewers and page sizes', () => {
     expect(() => normalizeFeedRequest({ viewerDid: 'alice.test' })).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'INVALID_VIEWER' }),
+      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidRequest' }),
     )
     expect(() =>
       normalizeFeedRequest({ viewerDid: viewer, limit: 51 }),
     ).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'INVALID_REQUEST' }),
+      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidRequest' }),
     )
   })
 })

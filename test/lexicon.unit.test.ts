@@ -103,6 +103,7 @@ const viewsByKind = {
 const availableItem = (
   kind: keyof typeof viewsByKind = 'cert.create',
 ): Record<string, unknown> => ({
+  $type: 'app.certified.feed.beta.defs#availableFeedItem',
   id: uri,
   kind,
   subject: { uri, cid },
@@ -113,21 +114,26 @@ const availableItem = (
 })
 
 describe('feed Lexicon contract', () => {
-  it('keeps hydrated input fields, resolved quality semantics, and public errors identical to the skeleton endpoint', () => {
-    const resolvedHydratedInput = structuredClone(hydratedMain.input)
-    resolvedHydratedInput.schema.properties.organizationQuality =
-      skeletonMain.input.schema.properties.organizationQuality
-
-    expect(resolvedHydratedInput).toEqual(skeletonMain.input)
+  it('keeps shared input fields and UpperCamelCase public errors identical', () => {
+    expect(hydratedMain.input).toEqual(skeletonMain.input)
     expect(
       hydratedMain.input.schema.properties.organizationQuality.ref,
-    ).toBe(
-      'app.certified.feed.beta.getFeedSkeleton#organizationQualityPolicy',
-    )
+    ).toBe('app.certified.feed.beta.defs#organizationQualityPolicy')
     expect(hydratedMain.errors).toEqual(skeletonMain.errors)
+    expect(
+      hydratedMain.errors.map((error: { name: string }) => error.name),
+    ).toEqual([
+      'InvalidRequest',
+      'AuthorsFilterTooLarge',
+      'TrustedEvaluatorsTooLarge',
+      'FeedScopeTooLarge',
+      'InvalidKind',
+      'InvalidCursor',
+      'InternalError',
+    ])
   })
 
-  it('keeps the original skeleton definitions and fully qualified discriminators wire-compatible', () => {
+  it('keeps the original exact-reference skeleton wire shape', () => {
     expect(skeletonMain.output.schema.required).toEqual(['items'])
     expect(skeletonMain.output.schema.properties.cursor).toMatchObject({
       type: 'string',
@@ -147,15 +153,16 @@ describe('feed Lexicon contract', () => {
       'actorDid',
       'sortAt',
     ])
-    expect(defs).not.toHaveProperty('organizationQualityPolicy')
+    expect(defs).toHaveProperty('organizationQualityPolicy')
+    expect(skeletonLexicon.defs).not.toHaveProperty(
+      'organizationQualityPolicy',
+    )
     expect(defs).not.toHaveProperty('feedSkeletonItem')
 
     expect(() =>
       skeletonInput.schema.$parse({
         viewerDid,
         organizationQuality: {
-          $type:
-            'app.certified.feed.beta.getFeedSkeleton#organizationQualityPolicy',
           allowed: ['high-quality'],
           includeUnrated: false,
         },
@@ -165,7 +172,6 @@ describe('feed Lexicon contract', () => {
       skeletonOutput.schema.$parse({
         items: [
           {
-            $type: 'app.certified.feed.beta.getFeedSkeleton#feedSkeletonItem',
             id: uri,
             kind: 'cert.create',
             subject: { uri, cid },
@@ -177,20 +183,28 @@ describe('feed Lexicon contract', () => {
     ).not.toThrow()
   })
 
-  it('defines a view-only hydrated item with only available and invalid states', () => {
-    expect(defs.hydratedFeedItem.required).toEqual([
+  it('defines open available and invalid hydrated item variants', () => {
+    expect(hydratedMain.output.schema.properties.items.items).toEqual({
+      type: 'union',
+      refs: [
+        'app.certified.feed.beta.defs#availableFeedItem',
+        'app.certified.feed.beta.defs#invalidFeedItem',
+      ],
+    })
+    expect(defs.availableFeedItem.required).toEqual([
       'id',
       'kind',
       'subject',
       'sortAt',
       'actor',
       'recordState',
+      'view',
     ])
-    expect(defs.hydratedFeedItem.properties.recordState.enum).toEqual([
+    expect(defs.availableFeedItem.properties.recordState.const).toBe(
       'available',
-      'invalid',
-    ])
-    expect(defs.hydratedFeedItem.properties.view.refs).toEqual([
+    )
+    expect(defs.availableFeedItem.properties.view).not.toHaveProperty('closed')
+    expect(defs.availableFeedItem.properties.view.refs).toEqual([
       '#activityView',
       '#collectionView',
       '#endorsementView',
@@ -199,8 +213,22 @@ describe('feed Lexicon contract', () => {
       '#hyperboardView',
       '#updateView',
     ])
+    expect(defs.invalidFeedItem.required).toEqual([
+      'id',
+      'kind',
+      'subject',
+      'sortAt',
+      'actor',
+      'recordState',
+    ])
+    expect(defs.invalidFeedItem.properties.recordState.const).toBe('invalid')
+    expect(defs.invalidFeedItem.properties).not.toHaveProperty('view')
+    expect(defs).not.toHaveProperty('hydratedFeedItem')
 
-    const serialized = JSON.stringify(defs.hydratedFeedItem)
+    const serialized = JSON.stringify({
+      available: defs.availableFeedItem,
+      invalid: defs.invalidFeedItem,
+    })
     for (const forbidden of [
       'record',
       'profileSource',
@@ -227,6 +255,7 @@ describe('feed Lexicon contract', () => {
       availableItem(kind as keyof typeof viewsByKind),
     )
     items.push({
+      $type: 'app.certified.feed.beta.defs#invalidFeedItem',
       id: uri,
       kind: 'collection.create',
       subject: { uri, cid },
@@ -240,14 +269,40 @@ describe('feed Lexicon contract', () => {
     ).not.toThrow()
   })
 
+  it('accepts unknown future item and view variants through open unions', () => {
+    expect(() =>
+      hydratedOutput.schema.$parse({
+        items: [
+          {
+            ...availableItem(),
+            view: { $type: 'example.feed#unknownView' },
+          },
+          { $type: 'example.feed#unknownItem' },
+        ],
+      }),
+    ).not.toThrow()
+  })
+
   it.each([
     [
       'missing view discriminator',
       { ...availableItem(), view: { title: 'Missing type', locationCount: 0 } },
     ],
     [
-      'unknown view discriminator',
-      { ...availableItem(), view: { $type: 'example.feed#unknown' } },
+      'missing required available view',
+      (() => {
+        const item = availableItem()
+        delete item.view
+        return item
+      })(),
+    ],
+    [
+      'missing item discriminator',
+      (() => {
+        const item = availableItem()
+        delete item.$type
+        return item
+      })(),
     ],
     [
       'missing image discriminator',

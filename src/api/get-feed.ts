@@ -33,12 +33,12 @@ export const registerGetFeed = (
         )
       }
 
-      metrics.observeError('INTERNAL_ERROR')
+      metrics.observeError('InternalError')
       logger.error({ err: cause }, 'hydrated feed generation failed')
       throw new LexServerError(
         500,
         {
-          error: 'INTERNAL_ERROR',
+          error: 'InternalError',
           message:
             'Feed generation failed because of an internal service error; retry the request, then contact the operator if it continues.',
         },

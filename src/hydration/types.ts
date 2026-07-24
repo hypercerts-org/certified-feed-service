@@ -139,10 +139,12 @@ export interface HydratedFeedItemBase {
 /** View-only hydrated item; valid sources always carry a view. */
 export type HydratedFeedItem =
   | (HydratedFeedItemBase & {
+      readonly $type: 'app.certified.feed.beta.defs#availableFeedItem'
       readonly recordState: 'available'
       readonly view: FeedItemView
     })
   | (HydratedFeedItemBase & {
+      readonly $type: 'app.certified.feed.beta.defs#invalidFeedItem'
       readonly recordState: 'invalid'
       readonly view?: never
     })
