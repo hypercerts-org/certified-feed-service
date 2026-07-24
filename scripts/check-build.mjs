@@ -1,3 +1,5 @@
+await import(new URL('../dist/api/get-feed-skeleton.js', import.meta.url))
+await import(new URL('../dist/api/get-feed.js', import.meta.url))
 await import(new URL('../dist/feed/page-loader.js', import.meta.url))
 await import(new URL('../dist/feed/query.js', import.meta.url))
 await import(new URL('../dist/hydration/identity.js', import.meta.url))

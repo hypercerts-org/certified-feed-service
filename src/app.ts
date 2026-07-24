@@ -4,14 +4,32 @@ import { LexRouter, LexServerError } from '@atproto/lex-server'
 import type { Logger } from 'pino'
 
 import { registerGetFeedSkeleton } from './api/get-feed-skeleton.js'
+import { registerGetFeed } from './api/get-feed.js'
 import type { DatabaseCompatibilityChecker } from './database.js'
 import type { FeedSkeletonReader } from './feed/service.js'
+import type { HydratedFeedReader } from './hydration/service.js'
 import type { Metrics } from './metrics.js'
 
 const MAX_REQUEST_BODY_BYTES = 64 * 1024
-const XRPC_PATH = '/xrpc/app.certified.feed.beta.getFeedSkeleton'
 
+const FEED_ROUTES = [
+  {
+    path: '/xrpc/app.certified.feed.beta.getFeedSkeleton',
+    nsid: 'app.certified.feed.beta.getFeedSkeleton',
+    label: 'feed_skeleton',
+  },
+  {
+    path: '/xrpc/app.certified.feed.beta.getFeed',
+    nsid: 'app.certified.feed.beta.getFeed',
+    label: 'feed_hydrated',
+  },
+] as const
+
+type FeedRoute = (typeof FEED_ROUTES)[number]
 type FetchHandler = (request: Request) => Promise<Response>
+
+const feedRoute = (pathname: string): FeedRoute | undefined =>
+  FEED_ROUTES.find((route) => route.path === pathname)
 
 const jsonResponse = (body: unknown, status = 200): Response =>
   Response.json(body, {
@@ -41,8 +59,7 @@ const routeLabel = (pathname: string): string => {
   if (pathname === '/health') return 'health'
   if (pathname === '/ready') return 'ready'
   if (pathname === '/metrics') return 'metrics'
-  if (pathname === XRPC_PATH) return 'feed_skeleton'
-  return 'other'
+  return feedRoute(pathname)?.label ?? 'other'
 }
 
 const readBoundedRequest = async (
@@ -105,7 +122,9 @@ const rejectMalformedJson = async (
 const normalizeLexiconValidationError = async (
   response: Response,
   metrics: Metrics,
+  nsid: string | undefined,
 ): Promise<Response> => {
+  if (nsid === undefined) return response
   if (response.status !== 400) return response
   const contentType = response.headers.get('content-type') ?? ''
   if (!contentType.includes('application/json')) return response
@@ -132,16 +151,22 @@ const normalizeLexiconValidationError = async (
   return jsonResponse(
     {
       error: 'INVALID_REQUEST',
-      message: `Request body does not match app.certified.feed.beta.getFeedSkeleton; correct the missing or invalid field and retry.${detail}`,
+      message: `Request body does not match ${nsid}; correct the missing or invalid field and retry.${detail}`,
     },
     400,
   )
 }
 
+/** Public feed services registered at the HTTP composition boundary. */
+export interface AppFeedServices {
+  readonly skeleton: FeedSkeletonReader
+  readonly hydrated: HydratedFeedReader
+}
+
 /** Builds the fetch-style HTTP application containing XRPC and operational endpoints. */
 export const createApp = (
   database: DatabaseCompatibilityChecker,
-  feedService: FeedSkeletonReader,
+  services: AppFeedServices,
   metrics: Metrics,
   logger: Logger,
 ): { fetch: FetchHandler } => {
@@ -151,12 +176,14 @@ export const createApp = (
       logger.error({ err: error, nsid: method.nsid }, 'unexpected XRPC handler error')
     },
   })
-  registerGetFeedSkeleton(router, feedService, metrics, logger)
+  registerGetFeedSkeleton(router, services.skeleton, metrics, logger)
+  registerGetFeed(router, services.hydrated, metrics, logger)
 
   return {
     fetch: async (originalRequest: Request): Promise<Response> => {
       const startedAt = performance.now()
       const url = new URL(originalRequest.url)
+      const matchedFeedRoute = feedRoute(url.pathname)
       const route = routeLabel(url.pathname)
       let status = 500
       try {
@@ -190,12 +217,12 @@ export const createApp = (
                   headers: { 'content-type': metrics.registry.contentType },
                 })
               : methodNotAllowed('GET')
-        } else if (url.pathname === XRPC_PATH && originalRequest.method !== 'POST') {
+        } else if (matchedFeedRoute && originalRequest.method !== 'POST') {
           metrics.observeError('INVALID_REQUEST')
           response = methodNotAllowed('POST')
         } else {
           let request = originalRequest
-          if (url.pathname === XRPC_PATH && originalRequest.method === 'POST') {
+          if (matchedFeedRoute && originalRequest.method === 'POST') {
             const bounded = await readBoundedRequest(originalRequest)
             if (bounded instanceof Response) {
               metrics.observeError('INVALID_REQUEST')
@@ -213,7 +240,11 @@ export const createApp = (
             }
           }
           response = await router.fetch(request)
-          response = await normalizeLexiconValidationError(response, metrics)
+          response = await normalizeLexiconValidationError(
+            response,
+            metrics,
+            matchedFeedRoute?.nsid,
+          )
         }
         status = response.status
         return response

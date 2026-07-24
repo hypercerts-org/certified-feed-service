@@ -1,0 +1,157 @@
+{
+  "lexicon": 1,
+  "id": "app.certified.feed.beta.defs",
+  "description": "Shared wire definitions for Certified feed procedures.",
+  "defs": {
+    "uriImage": {
+      "type": "object",
+      "required": ["uri"],
+      "description": "An externally hosted image reference; the feed service does not fetch it.",
+      "properties": {
+        "uri": { "type": "string", "format": "uri" }
+      }
+    },
+    "blobImage": {
+      "type": "object",
+      "required": ["did", "cid"],
+      "description": "An AT Protocol blob descriptor; the feed service does not fetch blob bytes.",
+      "properties": {
+        "did": { "type": "string", "format": "did" },
+        "cid": { "type": "string", "format": "cid" },
+        "mimeType": { "type": "string", "maxLength": 256 },
+        "size": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "actorSummary": {
+      "type": "object",
+      "required": ["did"],
+      "description": "Validated current identity fields for one feed actor.",
+      "properties": {
+        "did": { "type": "string", "format": "did" },
+        "handle": { "type": "string", "format": "handle", "maxLength": 253 },
+        "displayName": { "type": "string", "maxLength": 640, "maxGraphemes": 64 },
+        "avatar": {
+          "type": "union",
+          "closed": true,
+          "refs": ["#uriImage", "#blobImage"]
+        }
+      }
+    },
+    "activityView": {
+      "type": "object",
+      "required": ["title", "locationCount"],
+      "properties": {
+        "title": { "type": "string" },
+        "shortDescription": { "type": "string" },
+        "image": {
+          "type": "union",
+          "closed": true,
+          "refs": ["#uriImage", "#blobImage"]
+        },
+        "createdAt": { "type": "string", "format": "datetime" },
+        "startDate": { "type": "string", "format": "datetime" },
+        "endDate": { "type": "string", "format": "datetime" },
+        "locationCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "collectionView": {
+      "type": "object",
+      "required": ["title", "itemCount"],
+      "properties": {
+        "collectionType": { "type": "string" },
+        "title": { "type": "string" },
+        "shortDescription": { "type": "string" },
+        "image": {
+          "type": "union",
+          "closed": true,
+          "refs": ["#uriImage", "#blobImage"]
+        },
+        "createdAt": { "type": "string", "format": "datetime" },
+        "itemCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "endorsementView": {
+      "type": "object",
+      "required": ["subject"],
+      "properties": {
+        "subject": { "type": "ref", "ref": "#actorSummary" },
+        "createdAt": { "type": "string", "format": "datetime" }
+      }
+    },
+    "evaluationView": {
+      "type": "object",
+      "properties": {
+        "summary": { "type": "string" },
+        "createdAt": { "type": "string", "format": "datetime" },
+        "target": { "type": "ref", "ref": "com.atproto.repo.strongRef" }
+      }
+    },
+    "measurementView": {
+      "type": "object",
+      "properties": {
+        "metric": { "type": "string" },
+        "createdAt": { "type": "string", "format": "datetime" },
+        "target": { "type": "ref", "ref": "com.atproto.repo.strongRef" }
+      }
+    },
+    "hyperboardView": {
+      "type": "object",
+      "properties": {
+        "createdAt": { "type": "string", "format": "datetime" }
+      }
+    },
+    "updateView": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "shortDescription": { "type": "string" },
+        "image": {
+          "type": "union",
+          "closed": true,
+          "refs": ["#uriImage", "#blobImage"]
+        },
+        "createdAt": { "type": "string", "format": "datetime" },
+        "target": { "type": "ref", "ref": "com.atproto.repo.strongRef" }
+      }
+    },
+    "hydratedFeedItem": {
+      "type": "object",
+      "required": ["id", "kind", "subject", "sortAt", "actor", "recordState"],
+      "description": "One view-only hydrated feed event. Available records carry a view; invalid records omit it.",
+      "properties": {
+        "id": { "type": "string", "format": "at-uri" },
+        "kind": {
+          "type": "string",
+          "maxLength": 64,
+          "knownValues": [
+            "cert.create",
+            "collection.create",
+            "project.created_with_cert",
+            "evaluation.create",
+            "measurement.create",
+            "hyperboard.create",
+            "update.create",
+            "endorsement.award"
+          ]
+        },
+        "subject": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
+        "sortAt": { "type": "string", "format": "datetime" },
+        "actor": { "type": "ref", "ref": "#actorSummary" },
+        "recordState": { "type": "string", "enum": ["available", "invalid"] },
+        "view": {
+          "type": "union",
+          "closed": true,
+          "refs": [
+            "#activityView",
+            "#collectionView",
+            "#endorsementView",
+            "#evaluationView",
+            "#measurementView",
+            "#hyperboardView",
+            "#updateView"
+          ]
+        }
+      }
+    }
+  }
+}

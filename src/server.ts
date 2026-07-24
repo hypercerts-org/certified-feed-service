@@ -8,6 +8,8 @@ import { PostgresFeedPageLoader } from './feed/page-loader.js'
 import { FeedRepository } from './feed/query.js'
 import { FeedService } from './feed/service.js'
 import { loadLocalEnvironment } from './environment.js'
+import { PostgresIdentityReader } from './hydration/identity.js'
+import { HydratedFeedService } from './hydration/service.js'
 import { Metrics } from './metrics.js'
 
 loadLocalEnvironment()
@@ -22,7 +24,14 @@ const pages = new PostgresFeedPageLoader(
   metrics,
 )
 const feedService = new FeedService(pages)
-const app = createApp(database, feedService, metrics, logger)
+const identities = new PostgresIdentityReader(database)
+const hydratedFeed = new HydratedFeedService(pages, identities)
+const app = createApp(
+  database,
+  { skeleton: feedService, hydrated: hydratedFeed },
+  metrics,
+  logger,
+)
 
 metrics.setReady(false)
 
