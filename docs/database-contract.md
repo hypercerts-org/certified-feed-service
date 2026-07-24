@@ -74,7 +74,9 @@ Missing source-event rows produce a smaller feed. Missing actor or Certified pro
 
 Only fixed collection and event-kind constants appear in SQL text. Every request-controlled value is a bind parameter. Source JSON is not carried through candidate classification or sorting; the conditional exact join happens only after `paged_events` has applied ordering and `LIMIT`. Metadata pages use the same statement with source retrieval disabled and do not expose source bodies to Node.
 
-Feed selection and exact source retrieval share one PostgreSQL statement snapshot. A selected source row that does not match the final URI, CID, and collection is an internal query invariant failure rather than a public missing-record or CID-mismatch state.
+Source-aware pages count-bound selected rows to `limit + 1` (at most 51), but they do not byte-bound source JSON. Large indexed records can increase PostgreSQL transfer, process memory, validation work, and latency. Source JSON remains internal and is never serialized in the view-only hydrated response.
+
+Feed selection and exact source retrieval share one PostgreSQL statement snapshot. A selected source row that does not match the final URI, CID, and collection is an internal query invariant failure rather than a degradable public data state.
 
 `src/hydration/identity.ts` resolves actor and Certified-profile identity data in one parameterized current-state batch through the same bounded, read-only pool. It starts from the deduplicated requested DIDs, left-joins `actor` for only `did`, `handle`, `display_name`, and `avatar_cid`, and left-joins `record` at each deterministic `at://<did>/app.certified.actor.profile/self` URI with the exact `app.certified.actor.profile` collection. It does not read or re-check `actor.is_active`, select profiles by `record.did`, or require a feed CID.
 
@@ -131,11 +133,15 @@ Before production traffic, run `src/feed/feed-query.sql` through:
 EXPLAIN (ANALYZE, BUFFERS)
 ```
 
-Use production-shaped counts and the worst allowed 500-account scope. In particular, inspect:
+`ANALYZE` executes the SELECT. Use a controlled production-shaped environment and a read-only role; do not casually run load-bearing cases against a live primary.
+
+Use production-shaped counts and the worst allowed 500-account scope. Capture both metadata mode and source-aware mode for the feed statement, plus the combined identity query. In particular, inspect:
 
 - project/activity JSON array traversal;
 - the computed createdAt timestamp expression;
 - evaluator award and response probes;
-- active quality-label lookups.
+- active quality-label lookups;
+- whether the source JSON join remains after pagination instead of widening candidate sorting;
+- deterministic profile-URI and actor joins for a full identity batch.
 
 Do not add an index from this repository. Query-plan evidence should result in a Magic Indexer migration because Magic Indexer owns this schema.

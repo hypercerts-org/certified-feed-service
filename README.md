@@ -1,20 +1,25 @@
 # Certified Feed Service
 
-Standalone TypeScript sidecar that reads Magic Indexer's current Postgres state and returns an ordered, paginated Hypercerts feed skeleton.
+Standalone, read-only TypeScript service that reads Magic Indexer's current PostgreSQL state and serves ordered Hypercerts feeds over XRPC.
 
-The service does not ingest, copy, hydrate, or mutate indexed data. Magic Indexer is a behavioral and database-contract reference only. This repository does not import Magic Indexer code or call its GraphQL API.
+The service exposes an exact-reference skeleton and a view-only hydrated feed. It does not ingest or mutate indexed data, call Magic Indexer's API, authenticate callers, fetch blob bytes, or provide immutable event history.
 
-## Endpoint
+## Endpoints
+
+Both endpoints are unauthenticated POST procedures with the same request fields, limits, cursor contract, and stable public errors:
 
 ```text
 POST /xrpc/app.certified.feed.beta.getFeedSkeleton
+POST /xrpc/app.certified.feed.beta.getFeed
 Content-Type: application/json
 ```
 
-This is an app-specific XRPC procedure, not the Bluesky `app.bsky.feed.getFeedSkeleton` query. `certified.app` or the Hypercerts data plane calls it directly, then hydrates each returned URI and CID.
+They are app-specific XRPC procedures, not Bluesky's `app.bsky.feed.getFeedSkeleton` query.
+
+### Request
 
 ```bash
-curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeedSkeleton \
+curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeed \
   -H 'content-type: application/json' \
   --data '{
     "viewerDid": "did:plc:ar7c4by46qjdydhdevvrndac",
@@ -27,7 +32,9 @@ curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeedSkeleton \
   }'
 ```
 
-Example response:
+Use the same body with `getFeedSkeleton` when a downstream data plane only needs exact source references.
+
+### Skeleton response
 
 ```json
 {
@@ -47,7 +54,47 @@ Example response:
 }
 ```
 
-The cursor is opaque to callers and is valid only for descending `createdAt` pagination. Cursors from the previous multi-mode contract return `INVALID_CURSOR`.
+### Hydrated response
+
+```json
+{
+  "items": [
+    {
+      "id": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.context.evaluation/3kpn",
+      "kind": "evaluation.create",
+      "subject": {
+        "uri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.context.evaluation/3kpn",
+        "cid": "bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u"
+      },
+      "sortAt": "2026-07-21T10:00:00.000000Z",
+      "actor": {
+        "did": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
+        "handle": "evaluator.example",
+        "displayName": "Evaluator"
+      },
+      "recordState": "available",
+      "view": {
+        "$type": "app.certified.feed.beta.defs#evaluationView",
+        "summary": "Strong evidence",
+        "createdAt": "2026-07-21T10:00:00.000Z",
+        "target": {
+          "uri": "at://did:plc:ar7c4by46qjdydhdevvrndac/org.hypercerts.claim.activity/target",
+          "cid": "bafyreifxcn6ts5hr6oequ5w5jyrpwrdl6p5lq46jasnxmcw3h3sme6asru"
+        }
+      }
+    }
+  ]
+}
+```
+
+Hydrated items are view-only:
+
+- `available` means the selected source validated and the item has a kind-specific `view`.
+- `invalid` retains page metadata and the event-author summary but omits `view`.
+- The response does not expose source JSON or identity provenance.
+- Actor summaries use a valid meaningful Certified profile first, otherwise validated stored Bluesky fields, otherwise the DID alone. A valid stored handle is preserved independently.
+- Evaluation, measurement, and update views may include an exact `{ uri, cid }` target. The source record's authoritative validator validates the strong-reference shape. The service does not query, preview, recursively hydrate, or validate the referenced target record or body.
+- Image values are URI or blob descriptors. The service never fetches or proxies bytes.
 
 ## Request behavior
 
@@ -56,11 +103,11 @@ The cursor is opaque to callers and is valid only for descending `createdAt` pag
 - `authors: []` selects an empty base. It never means every indexed author.
 - Explicit `authors` replaces only the direct-follow base.
 - `trustedEvaluators` adds subjects of each evaluator's current active endorsement awards.
-- Endorsement definitions without `allowedIssuers` permit any issuer. When present, only listed issuer DIDs qualify; an empty list permits none, and malformed values are ignored safely.
+- Endorsement definitions without `allowedIssuers` permit any issuer. When present, only listed issuer DIDs qualify; an empty or malformed value permits none.
 - The viewer and known inactive actors are removed.
 - Organization-quality policy runs against the final author union before selecting events.
-- Omitted or empty `kinds` includes all supported kinds.
-- Unknown kinds are rejected instead of silently ignored.
+- Trusted quality labelers come only from service configuration; callers cannot choose label sources.
+- Omitted or empty `kinds` includes all supported kinds. Unknown kinds are rejected.
 
 Supported event kinds:
 
@@ -75,11 +122,9 @@ update.create
 endorsement.award
 ```
 
-Project and activity records fold before kind filtering and pagination. A paired activity therefore cannot leak onto a later page after its collection was returned as `project.created_with_cert`.
+Project and activity records fold before kind filtering and pagination. A paired activity cannot leak onto a later page after its collection is returned as `project.created_with_cert`.
 
-## Ordering
-
-The feed always validates and parses a top-level string `json.createdAt` as a timestamp and orders descending. Missing, malformed, or non-string values fall back to `record.sort_at`.
+## Ordering and current-state behavior
 
 Ordering is:
 
@@ -87,11 +132,19 @@ Ordering is:
 effective timestamp DESC, record URI DESC
 ```
 
-The SQL pipeline classifies and folds all eligible records before kind filtering, keyset filtering, ordering, and `LIMIT`. It fetches `limit + 1` matching events to decide whether a next cursor should be returned.
+A valid top-level string `json.createdAt` supplies the effective timestamp. Missing, malformed, non-string, or PostgreSQL-invalid values fall back to `record.sort_at`. The query fetches `limit + 1` events to decide whether to return a next cursor.
+
+The opaque cursor stores the last emitted timestamp and URI. Both endpoints use the same page loader, so ordering and cursor bytes are identical for the same request. Cursor traversal is deterministic for each query but does not provide snapshot isolation across requests.
+
+For a skeleton request, the service performs one feed query. For a non-empty hydrated request, it performs one feed/source statement plus one identity batch. An empty hydrated page skips identity retrieval. Query count does not grow with page size.
+
+Feed selection and hydrated source retrieval share one PostgreSQL statement snapshot. Identity data is a later current-state read, so actor/profile changes may be reflected after page selection without dropping or reordering the selected event.
+
+A source-aware query count-bounds selected rows to `limit + 1` (at most 51), but it does not byte-bound their source JSON. Large indexed records can increase PostgreSQL transfer, process memory, validation work, and latency. Source JSON remains internal and is never serialized in the view-only hydrated response.
 
 ## Runtime configuration
 
-Copy `.env.example` to `.env` for local development, or copy its values into your deployment's variable configuration. The process loads an optional local `.env` file at startup without overriding variables already provided by the environment.
+Copy `.env.example` to `.env` for local development, or copy its values into the deployment's variable configuration. The process loads an optional local `.env` without overriding variables already provided by the environment.
 
 | Variable | Required | Default | Purpose |
 |---|---:|---:|---|
@@ -102,18 +155,18 @@ Copy `.env.example` to `.env` for local development, or copy its values into you
 | `DATABASE_MAX_CONNECTIONS` | no | `5` | Maximum pool size, capped at 20; the pool keeps one connection warm |
 | `DATABASE_IDLE_TIMEOUT_MS` | no | `60000` | Time before idle connections above the one-connection minimum are closed |
 | `DATABASE_CONNECTION_TIMEOUT_MS` | no | `2000` | Pool acquisition timeout |
-| `DATABASE_STATEMENT_TIMEOUT_MS` | no | `5000` | Postgres statement timeout |
+| `DATABASE_STATEMENT_TIMEOUT_MS` | no | `5000` | PostgreSQL statement timeout |
 | `REQUEST_TIMEOUT_MS` | no | `10000` | Maximum time allowed to receive an HTTP request; not a handler or database deadline |
 | `GRACEFUL_SHUTDOWN_MS` | no | `10000` | Shutdown drain timeout |
 | `TRUSTED_QUALITY_LABELER_DIDS` | no | empty | Comma-separated Orglabeler trust roots |
 
-Trusted quality labelers are service configuration. Callers cannot choose label sources. If no labelers are configured, known organizations are unrated whenever an organization-quality policy is supplied.
+If no trusted labelers are configured, known organizations are unrated whenever an organization-quality policy is supplied.
 
 ## Database access
 
 Use a dedicated login with only `SELECT` access. The service also sets `default_transaction_read_only=on` on every pool session, but grants remain the primary boundary.
 
-Each service replica maintains its own bounded in-process pool. The initial readiness check opens a connection, the pool retains one warm connection to avoid reconnect churn, and idle connections above that minimum close after `DATABASE_IDLE_TIMEOUT_MS`. Account for `replica count × DATABASE_MAX_CONNECTIONS` when budgeting database connections; use an external pooler when many independently scaling replicas share a constrained Postgres server.
+Each replica owns a bounded in-process pool. Account for `replica count × DATABASE_MAX_CONNECTIONS` when budgeting database connections; use an external pooler when many replicas share a constrained PostgreSQL server.
 
 Example operator setup:
 
@@ -126,11 +179,11 @@ GRANT SELECT ON TABLE public.record, public.actor, public.label
 ALTER ROLE certified_feed_reader SET default_transaction_read_only = on;
 ```
 
-The service owns no migrations or feed tables. `/ready` checks database reachability, PostgreSQL 16 timestamp validation, and read-only session state; it does not inspect Magic Indexer tables or columns. The feed still requires the documented runtime schema. See [`docs/database-contract.md`](docs/database-contract.md).
+The service owns no migrations or feed tables. `/ready` checks database reachability, PostgreSQL 16 timestamp validation, and read-only session state; it does not inspect Magic Indexer tables or columns. See [`docs/database-contract.md`](docs/database-contract.md) for the runtime schema contract.
 
 ## Development
 
-Requires Node.js 22+ and Postgres 16+.
+Requires Node.js 22+ and PostgreSQL 16+.
 
 ```bash
 npm install
@@ -140,33 +193,31 @@ npm run test:unit
 npm run build
 ```
 
-Generated Lexicon TypeScript lives under `src/lexicons/` and is intentionally ignored. The canonical `com.atproto.repo.strongRef` schema is vendored under `lexicons/com/atproto/repo/strongRef.json`. `codegen`, `build`, `check`, and test scripts regenerate ignored output from the committed JSON Lexicons; run `npm run codegen` after changing them.
+Committed Lexicon JSON under `lexicons/` is the public wire contract. Generated TypeScript under `src/lexicons/` is ignored and must not be edited or committed. `codegen`, `check`, tests, and build regenerate it. A narrow post-codegen workaround for `@atproto/lex@0.3.0` is documented in `AGENTS.md`.
 
-The canonical feed statement lives in `src/feed/feed-query.sql`. `npm run dev` watches it alongside the TypeScript sources, and the build copies it beside `dist/feed/query.js` before smoke-testing that the production adapter loads.
+The canonical feed statement is `src/feed/feed-query.sql`. Development watches it with the TypeScript sources, and build copies it beside `dist/feed/query.js` before smoke-loading production adapters.
 
-### Postgres integration tests
+### PostgreSQL integration tests
 
-Integration tests never connect to a deployment automatically. Point them at an empty disposable Postgres 16+ database:
+Integration tests require an explicitly selected empty disposable PostgreSQL 16+ database:
 
 ```bash
 TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/certified_feed_test' \
   npm run test:integration
 ```
 
-The test creates the minimal contractual tables in that disposable database. It does not drop or truncate existing tables, so do not point it at a shared or production database. `npm run test:integration` fails when `TEST_DATABASE_URL` is missing, and the committed CI workflow runs it against Postgres 16.
+The suite creates minimal contractual tables and test rows but does not drop or truncate existing tables. Never point it at a shared, staging, or production database.
 
-To verify against Magic Indexer's real migration set, first apply those migrations to an empty disposable database, then run:
+To verify against Magic Indexer's migrated schema:
 
 ```bash
 TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/magic_feed_test' \
   npm run test:integration:magic
 ```
 
-This compatibility command verifies the required Magic Indexer migration versions before executing the same feed behavior suite. It does not import Magic Indexer code or apply its migrations from this repository.
+This command verifies required migration versions and runs the same behavior suite. It does not apply Magic Indexer migrations.
 
 ## Deployment
-
-Build and run the included image:
 
 ```bash
 docker build -t certified-feed-service .
@@ -176,9 +227,11 @@ docker run --rm -p 3000:3000 \
   certified-feed-service
 ```
 
-Deploy it beside Magic Indexer or Hyperindex with private database networking. It is a separate process and repository, even when both services share a deployment environment.
+Deploy beside Magic Indexer or Hyperindex with private database networking.
 
-Apply per-IP rate limiting at the gateway. The initial public policy is 60 feed requests per minute per client IP with a burst of 20, returning HTTP 429 and `Retry-After` when exceeded. Health, readiness, and metrics should stay on private operator routes and outside that public bucket. Tune the threshold from measured query latency and pool saturation before increasing it. The process bounds request bodies, HTTP request receive time, pool size, connection acquisition, and SQL statement duration. `REQUEST_TIMEOUT_MS` is not an end-to-end handler or database deadline. The process intentionally does not maintain inconsistent per-replica rate-limit state in process.
+Apply per-IP rate limiting at the gateway. The initial public policy is 60 feed requests per minute per client IP with a burst of 20, returning HTTP 429 and `Retry-After` when exceeded. Keep health, readiness, and metrics private and outside that public bucket. Tune limits from measured query latency and pool saturation.
+
+The process bounds request bodies, HTTP receive time, pool size, connection acquisition, and SQL statement duration. `REQUEST_TIMEOUT_MS` is not an end-to-end handler or query deadline. Do not add inconsistent per-replica rate-limit state to this service.
 
 ## Operations
 
@@ -187,7 +240,7 @@ Apply per-IP rate limiting at the gateway. The initial public policy is 60 feed 
 - `GET /metrics`: Prometheus metrics.
 - `SIGTERM` and `SIGINT`: stop accepting requests, drain, then close the database pool.
 
-Metrics use only bounded route, status, operation, event-kind, and error labels. Viewer DIDs, author DIDs, evaluator DIDs, URIs, and cursors are never metric labels.
+Metrics use bounded route, status, operation, event-kind, and error labels. DIDs, AT-URIs, CIDs, cursors, and record values are never labels.
 
 Stable public feed errors:
 
@@ -202,8 +255,8 @@ INVALID_CURSOR
 INTERNAL_ERROR
 ```
 
-Public errors do not include SQL, database credentials, table contents, or internal stack traces.
+Public errors never include SQL, database credentials, table contents, internal causes, or stack traces.
 
 ## MVP boundaries
 
-This service does not provide record hydration, blobs, actor profiles, rendered feed sentences, preference persistence, authentication, writes, ingestion, network-wide discovery, or an immutable event history. Results reflect the indexer's current mutable state and freshness.
+The service does not ingest, authenticate, write records, own migrations, cache across requests, call Magic Indexer APIs, call PDS/AppView profile APIs, download blobs, hydrate target records, build target previews, recursively hydrate linked records, persist preferences, discover the network, or provide immutable event history. Results reflect Magic Indexer's mutable current state and freshness.

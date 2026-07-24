@@ -2,15 +2,23 @@
 
 ## Read this first
 
-This repository is a standalone, read-only TypeScript service that exposes `app.certified.feed.beta.getFeedSkeleton` over XRPC. It reads Magic Indexer's current PostgreSQL state and returns exact AT Protocol strong references. It does not ingest, hydrate, authenticate, write records, own migrations, or provide immutable event history.
+This repository is a standalone, read-only TypeScript service exposing two unauthenticated POST procedures:
 
-Use **npm**, not pnpm. `package-lock.json` is authoritative. The package supports Node.js 22+, while CI and Docker use Node.js 24. PostgreSQL 16+ is required.
+```text
+app.certified.feed.beta.getFeedSkeleton
+app.certified.feed.beta.getFeed
+```
 
-Before changing feed behavior, read these together:
+The skeleton returns exact AT Protocol strong references. The hydrated endpoint returns validated, view-only feed items and actor summaries. The service reads Magic Indexer's current PostgreSQL state; it does not ingest, authenticate, write records, own migrations, cache across requests, call Magic Indexer/PDS/AppView APIs, download blobs, hydrate target records, or provide immutable history.
 
-- `src/feed/feed-query.sql` — primary behavioral contract
-- `src/feed/query.ts` — SQL bind order and row mapping
-- `test/feed.integration.test.ts` — cross-table and pagination invariants
+Use **npm**, not pnpm. `package-lock.json` is authoritative. Node.js 22+ is supported; CI and Docker use Node.js 24. PostgreSQL 16+ is required.
+
+Before changing feed behavior, read together:
+
+- `src/feed/feed-query.sql` — primary selection, classification, ordering, pagination, and same-statement source contract
+- `src/feed/query.ts` — fixed SQL bind order, row mapping, and source invariants
+- `src/feed/page-loader.ts` — shared request, cursor, scope, pagination, and metrics policy
+- `test/feed.integration.test.ts` — cross-table, source-mode, and pagination invariants
 - `docs/database-contract.md` — external Magic Indexer schema contract
 
 ## Commands
@@ -21,10 +29,10 @@ npm run dev                    # watch TypeScript and src/feed/feed-query.sql
 npm run codegen                # regenerate ignored Lexicon TypeScript
 npm run check                  # strict TypeScript check
 npm test                       # unit tests; equivalent to npm run test:unit
-npm run build                  # codegen, compile, copy SQL, smoke-load production adapter
+npm run build                  # codegen, compile, copy SQL, smoke-load production adapters
 ```
 
-Integration tests require an explicitly chosen, empty, disposable PostgreSQL 16+ database:
+Integration tests require an explicitly chosen empty disposable PostgreSQL 16+ database:
 
 ```bash
 TEST_DATABASE_URL='postgresql://...' npm run test:integration
@@ -36,7 +44,7 @@ To test an externally migrated Magic Indexer schema:
 TEST_DATABASE_URL='postgresql://...' npm run test:integration:magic
 ```
 
-Never point either integration command at a shared, staging, or production database. The suite creates contractual tables and test rows but does not drop or truncate existing tables. `test:integration:magic` requires `psql`, verifies the migration versions listed in `scripts/test-magic-schema.sh`, and does not apply migrations.
+Never target a shared, staging, or production database. The suite creates contractual tables and rows but does not drop or truncate existing tables. `test:integration:magic` requires `psql`, verifies the migration versions listed in `scripts/test-magic-schema.sh`, and does not apply migrations.
 
 CI runs:
 
@@ -44,95 +52,131 @@ CI runs:
 npm ci -> npm run check -> npm test -> npm run test:integration -> npm run build
 ```
 
-There is no configured lint or formatting command. Follow the existing style: ESM, NodeNext `.js` import suffixes, single quotes, no semicolons, narrow interfaces, and no unrelated reformatting.
+There is no lint or formatting command. Follow existing style: ESM, NodeNext `.js` import suffixes, single quotes, no semicolons, narrow interfaces, and no unrelated reformatting.
 
 ## Architecture and ownership
 
-The runtime call stack is:
+Skeleton call stack:
 
 ```text
 src/server.ts
   -> src/app.ts
   -> src/api/get-feed-skeleton.ts
-  -> src/feed/service.ts
-  -> src/feed/page-loader.ts
-  -> src/feed/query.ts
-  -> src/feed/feed-query.sql
-  -> src/database.ts
+  -> FeedService
+  -> FeedPageLoader.loadPage(metadata)
+  -> FeedRepository
+  -> src/feed/feed-query.sql, includeSource=false
+  -> Database
 ```
 
-- `src/server.ts` is the composition root. It owns configuration loading, listener settings, initial readiness, and graceful shutdown.
-- `src/app.ts` is the fetch-compatible HTTP boundary. It owns operational routes, method checks, the 64 KiB body limit, malformed-JSON handling, and request metrics.
-- `src/api/get-feed-skeleton.ts` registers the Lexicon procedure and translates expected `FeedError` values into stable public responses.
-- `src/feed/service.ts` projects shared metadata page rows into the public skeleton response.
-- `src/feed/page-loader.ts` owns semantic validation, cursor decoding, repository coordination and timing, scope-cap enforcement, `limit + 1` trimming, result metrics, and next-cursor creation.
-- `src/feed/query.ts` owns the fixed SQL parameter order, execution, source-mode invariants, and database-row mapping.
-- `src/feed/feed-query.sql` owns scope resolution, quality and endorsement policy, event folding/classification, ordering, and keyset pagination.
-- `src/database.ts` is the only PostgreSQL pool owner. Keep database access behind the existing seams.
+Hydrated call stack:
+
+```text
+src/server.ts
+  -> src/app.ts
+  -> src/api/get-feed.ts
+  -> HydratedFeedService
+  -> FeedPageLoader.loadPage(with-source)
+  -> FeedRepository
+  -> src/feed/feed-query.sql, includeSource=true
+  -> validateFeedRecord()
+  -> IdentityReader.getByDids()
+  -> validateCertifiedProfile() / sanitizeActorRow()
+  -> buildActorSummary() / buildFeedItemView()
+```
+
+Ownership:
+
+- `src/server.ts` is the composition root. It creates one repository, one shared page loader, separate endpoint services, and one identity adapter; it also owns listener settings, initial readiness, and graceful shutdown.
+- `src/app.ts` is the fetch-compatible boundary. It owns fixed route metadata, POST enforcement, the 64 KiB body limit, malformed JSON, routed validation messages, and bounded request metrics.
+- `src/api/get-feed-skeleton.ts` and `src/api/get-feed.ts` register the procedures, run generated output validation inside the error boundary, and translate expected `FeedError` values.
+- `src/feed/service.ts` projects metadata rows into the public skeleton. It does not own cursor or pagination policy.
+- `src/feed/page-loader.ts` owns request normalization, cursor decoding, repository execution/timing, scope-cap enforcement, `limit + 1` trimming, result metrics, and next-cursor creation for both endpoints.
+- `src/feed/query.ts` owns SQL bind order, execution, metadata/source result mapping, and explicit query invariants.
+- `src/feed/feed-query.sql` owns scope resolution, quality and endorsement rules, project pairing, classification, ordering, keyset pagination, and the conditional post-pagination source join.
+- `src/hydration/service.ts` directly coordinates source validation, DID discovery, one identity batch, identity projection, total view construction, and output ordering. It must not call the public skeleton service.
+- `src/hydration/identity.ts` owns the combined actor/Certified-profile query and returns one context per requested DID.
+- `src/hydration/validation.ts` owns strict source/profile validation and stored-actor sanitization. `src/hydration/views.ts` owns pure identity precedence and kind-specific view construction. Neither performs I/O.
+- `src/database.ts` is the only PostgreSQL pool owner.
 - `src/metrics.ts` owns an isolated Prometheus registry with bounded labels.
 
-Prefer tests at the seam being changed: app tests fake `FeedSkeletonReader`, service tests fake `FeedPageLoader`, page-loader tests fake `FeedQueryReader`, pure rules have unit tests, and SQL/cross-table behavior belongs in the PostgreSQL integration suite.
+## Test seams
+
+Test at the narrowest owner:
+
+- app tests fake `FeedSkeletonReader` and `HydratedFeedReader`;
+- skeleton-service tests fake `FeedPageLoader`;
+- hydrated-service tests fake `FeedPageLoader` and `IdentityReader`;
+- page-loader tests fake `FeedQueryReader`;
+- repository unit tests fake the query executor and assert bind/source invariants;
+- identity tests fake its query executor;
+- validation and views use pure fixture tests;
+- Lexicon tests inspect committed JSON and generated parsers;
+- PostgreSQL integration tests own SQL, schema, cross-table, source-mode, and pagination behavior.
 
 ## Canonical and generated files
 
 - `lexicons/**/*.json` is the committed public wire contract.
-- `src/lexicons/` is generated and gitignored. Never hand-edit or commit it.
-- `src/feed/feed-query.sql` is the canonical SQL statement.
-- `dist/` and `coverage/` are generated and gitignored.
-- `npm run build` must continue to copy the SQL beside `dist/feed/query.js` and smoke-test that the production adapter can load it.
+- `src/lexicons/` is generated and ignored. Never hand-edit or commit it.
+- `src/feed/feed-query.sql` is the canonical feed statement.
+- `dist/` and `coverage/` are generated and ignored.
+- `npm run build` must copy the feed SQL beside `dist/feed/query.js` and smoke-load every production adapter without starting the server.
 
-A request, response, event-kind, or public-error change usually requires coordinated updates to the Lexicon JSON, domain types, validation/service behavior, tests, and README. Run codegen rather than editing generated output. A schema-dependent change usually requires coordinated updates to SQL, its bind mapping, integration tests, and `docs/database-contract.md`.
+`@atproto/lex@0.3.0` currently emits explicit `l.typedObject<T>` calls whose optional named-definition fields are incompatible with this repository's `exactOptionalPropertyTypes: true`. `npm run codegen` therefore runs `scripts/fix-generated-feed-defs.mjs`, which removes only those explicit generics from the ignored generated Certified feed definitions. It does not change Lexicon JSON or runtime validators. Keep the workaround narrow. Remove the script and package-script hook only after an upstream generator version supports exact optional properties and `npm run check`, parser contract tests, and `npm run build` pass without it.
 
-## Feed invariants
+A request, response, event kind, view, or public-error change normally requires coordinated updates to Lexicon JSON, domain types, service behavior, tests, and README. A schema-dependent change normally requires SQL, bind mapping, integration-test, and database-contract updates.
+
+## Feed and hydration invariants
 
 Preserve these unless the public contract is intentionally revised and documented:
 
-- Omitted `authors` resolves the viewer's current `app.certified.graph.follow` records. Explicit `authors` replaces only that base, and `authors: []` means an empty base. Preserve `hasExplicitAuthors` through validation and SQL.
-- Evaluator endorsement subjects are unioned after base-author resolution. The viewer is removed, candidates are deduplicated, known inactive actors are removed, and actors missing from `actor` remain eligible.
-- Deduplicate request lists before enforcing semantic limits. Current limits are 500 explicit authors, 64 evaluators, 16 kinds, 500 resolved authors, and 1–50 page items.
+- Omitted `authors` uses the viewer's current Certified follows. Explicit `authors` replaces only that base; `authors: []` means an empty base. Preserve `hasExplicitAuthors` through validation and SQL.
+- Deduplicate request lists before enforcing semantic limits: 500 explicit authors, 64 evaluators, 16 kinds, 500 resolved authors, and 1–50 page items.
+- Evaluator endorsement subjects are unioned after base-author resolution. Remove the viewer, deduplicate candidates, remove known inactive actors, and keep actors absent from `actor` eligible.
 - Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with `INVALID_KIND`.
-- Organization-quality policy applies to known certified organizations using only service-configured `TRUSTED_QUALITY_LABELER_DIDS`. Callers never choose label sources.
-- `includeUnrated` applies only when no active trusted quality label exists. An active disallowed label is not unrated.
-- Active quality assertions and negations use source, URI, value, `neg`, `cts`, and `exp` as documented in `docs/database-contract.md`.
-- Scope is capped after all unions and membership filtering. Oversized scopes return their count without expanding project or eligible-event record scans, then fail with `FEED_SCOPE_TOO_LARGE`; do not silently truncate them.
-- Evaluator expansion and visible endorsement events share the same rules. Require an account subject, no self-endorsement, exact definition URI and CID, `badgeType: endorsement`, allowed-issuer compliance, and the latest subject-authored response targeting the exact award URI and CID. Do not replace this with `endorsement_edge`.
-- Missing `allowedIssuers` permits any issuer. An empty or malformed value permits none.
-- Project/activity pairing happens before kind filtering and pagination. It requires the same actor, an exact activity URI and CID, and a `sort_at` gap strictly below 60 seconds. The collection becomes `project.created_with_cert`; the paired activity stays suppressed across page boundaries.
-- Output `subject` is the exact current `{ uri, cid }` strong reference. `id` currently equals the source URI. Hydration remains downstream.
-- The feed is mutable current state, not a snapshot or event log. Cursor traversal is deterministic for each query but does not provide snapshot isolation across requests.
-
-## Ordering and cursor contract
-
-Ordering and cursor handling are one coupled contract:
-
-```text
-effective timestamp DESC, record URI DESC
-```
-
-A valid string `json.createdAt` is parsed as `timestamptz`; missing, malformed, non-string, or PostgreSQL-invalid values fall back to `record.sort_at`. Keep `pg_input_is_valid` before casting untrusted JSON.
-
-Pagination must use the matching descending predicate and fetch `limit + 1`. The opaque cursor is unpadded base64url JSON with exactly `{ version: 2, value, uri }`. It stores the last emitted timestamp and URI. If timestamp derivation, formatting, tie-break direction, or payload shape changes, treat that as a cursor-contract change and bump the version; old incompatible cursors must fail rather than paginate incorrectly.
+- Organization-quality policy uses only service-configured `TRUSTED_QUALITY_LABELER_DIDS`. `includeUnrated` applies only when no active trusted label exists; an active disallowed label is not unrated.
+- Cap scope after all unions and membership filtering. Oversized scope returns its count without project/event scans, then fails with `FEED_SCOPE_TOO_LARGE`; never truncate silently.
+- Evaluator expansion and visible endorsement events use the same account-subject, self-endorsement, exact definition URI/CID, badge type, allowed-issuer, and latest exact response rules. Do not use `endorsement_edge`.
+- Project/activity pairing happens before kind filtering and pagination. It requires the same actor, exact activity URI/CID, and a `sort_at` gap strictly below 60 seconds. Paired activities remain suppressed across pages.
+- Ordering is effective timestamp descending, URI descending. Keep `pg_input_is_valid` before casting untrusted `createdAt` text.
+- Cursor v2 is unpadded base64url JSON with exactly `{ version: 2, value, uri }`. It stores the last emitted row. Ordering, formatting, tie-break, and cursor payload are one contract.
+- Metadata and source-aware pages execute the repository once. Source JSON is joined only after `paged_events`; never carry it through candidate sorting.
+- Feed selection and exact source retrieval share one PostgreSQL statement snapshot. A missing/mismatched final join is an internal invariant failure.
+- Skeleton pages execute one feed query and expose no source value. Non-empty hydrated pages execute one feed/source statement plus one identity query. Empty hydrated pages skip identity retrieval. Query count never grows with page size.
+- Identity retrieval is a later current-state read. It selects only actor DID, handle, display name, avatar CID, and deterministic Certified profile JSON; it never rechecks `actor.is_active`.
+- Every requested identity DID receives a context. Missing storage rows degrade to a DID-only summary; query rejection fails the request.
+- A valid meaningful Certified profile supplies display/avatar fields wholesale while preserving an independently valid stored handle. Otherwise use sanitized stored Bluesky fields, then DID-only fallback. Do not expose provenance.
+- Known source records validate against `@hypercerts-org/lexicon` exactly `1.0.0`, selected by trusted collection plus feed kind. Keep the compatible direct `@atproto/lexicon` pin and supplemental MIME, integer-size, nonnegative-size, and maximum-size checks.
+- Public hydrated output is view-only. `available` always has a view; `invalid` never has one but keeps page metadata and event-author identity. Do not expose source JSON or redundant event-author DID fields.
+- All eight feed kinds map exhaustively to seven view variants; both collection kinds use `collectionView`.
+- Endorsement views are total and use the exact account-subject summary.
+- Evaluation, measurement, and update targets are exact strong references only. Do not query target records, discover target identities, build previews, or recurse. Hyperboard has no target in this version.
+- Results are mutable current state, not snapshots across requests or an event log.
 
 ## Database and operational safety
 
-Magic Indexer owns the `record`, `actor`, and `label` schema. This repository must not apply migrations, create indexes, refresh materialized views, or write cursor state. Keep every caller-controlled SQL value parameterized. Schema or index changes belong in Magic Indexer and should be justified with production-shaped `EXPLAIN (ANALYZE, BUFFERS)` evidence.
+Magic Indexer owns `record`, `actor`, and `label`. This repository must not apply migrations, create indexes, refresh materialized views, or write cursor state. Parameterize every caller-controlled SQL value. Index changes belong in Magic Indexer and require production-shaped `EXPLAIN (ANALYZE, BUFFERS)` evidence.
 
-Use a deployment role with `SELECT` only. `default_transaction_read_only=on` is defense in depth, not a replacement for grants.
+Use a deployment role with `SELECT` only. `default_transaction_read_only=on` is defense in depth, not a grant replacement.
 
-`GET /ready` checks reachability, PostgreSQL 16 timestamp support, and read-only session state. It intentionally does not verify Magic Indexer tables, migration completeness, or ingestion freshness. `GET /health` remains process liveness only.
+`GET /ready` checks reachability, PostgreSQL 16 timestamp support, and read-only session state. It intentionally does not verify Magic Indexer tables, migrations, or freshness. `GET /health` is process liveness only.
 
-`REQUEST_TIMEOUT_MS` bounds receiving the HTTP request, not total handler or query duration. Pool acquisition and PostgreSQL statement timeouts are separate controls.
+`REQUEST_TIMEOUT_MS` bounds receiving a request, not total handler/query duration. Pool acquisition and statement timeouts are separate.
 
-Keep public errors actionable and stable. Never expose SQL, credentials, table contents, internal causes, or stack traces. Keep Prometheus labels bounded; never label metrics with DIDs, AT-URIs, CIDs, cursors, or other caller-controlled values.
+Keep errors actionable and stable without exposing SQL, credentials, contents, internal causes, or stacks. Never use DIDs, AT-URIs, CIDs, cursors, or record values as metric labels.
 
-Rate limiting belongs at the gateway. Keep `/health`, `/ready`, and `/metrics` private in deployment rather than adding per-replica public rate-limit state here.
+Rate limiting belongs at the gateway. Keep `/health`, `/ready`, and `/metrics` private.
+
+## MVP exclusions
+
+Do not add ingestion, writes, authentication, cross-request caching, immutable history, Magic Indexer API calls, PDS/AppView profile calls, blob downloads/proxying, target-record reads, target previews, recursive/detail hydration, activity-label hydration, preference persistence, or migrations/indexes.
 
 ## Change checklist
 
-1. Inspect the current branch and working tree; preserve unrelated or in-flight changes.
-2. Change only the owning layer and directly coupled contracts.
-3. Add or update focused tests. SQL behavior requires integration coverage.
-4. Update the Lexicon and public/domain documentation when behavior changes.
-5. Run `npm run check`, `npm test`, and `npm run build`.
+1. Inspect branch and working tree; preserve unrelated or in-flight changes.
+2. Change only the owning layer and coupled contracts.
+3. Add focused tests. SQL behavior requires PostgreSQL integration coverage.
+4. Update Lexicons and documentation for public behavior changes.
+5. Run `npm run check`, `npm test`, `npm run build`, and `git diff --check`.
 6. Run integration tests only with an explicitly selected disposable PostgreSQL database.
-7. Report commands run, failures, and any validation not performed.
+7. Report commands, failures, and unavailable validation.
