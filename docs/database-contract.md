@@ -70,16 +70,15 @@ Missing source-event rows produce a smaller feed. Missing actor or Certified pro
 7. Select and classify eligible source records.
 8. Apply final kind and keyset filters.
 9. Order by valid `createdAt` (falling back to `sort_at`) descending with URI descending as the tie-breaker, then fetch `limit + 1`.
+10. For source-aware pages only, join the final URI/CID page rows back to `record` and return their exact collection and JSON values.
 
-Only fixed collection and event-kind constants appear in SQL text. Every request-controlled value is a bind parameter.
+Only fixed collection and event-kind constants appear in SQL text. Every request-controlled value is a bind parameter. Source JSON is not carried through candidate classification or sorting; the conditional exact join happens only after `paged_events` has applied ordering and `LIMIT`. Metadata pages use the same statement with source retrieval disabled and do not expose source bodies to Node.
 
-Hydration uses separate parameterized current-state reads through the same bounded, read-only pool:
+Feed selection and exact source retrieval share one PostgreSQL statement snapshot. A selected source row that does not match the final URI, CID, and collection is an internal query invariant failure rather than a public missing-record or CID-mismatch state.
 
-- `src/hydration/query.ts` deduplicates combined URI/CID references, joins the requested pairs to `record` by URI, and returns `record.json` only when the current CID exactly matches. Missing URIs and CID mismatches never expose another record body.
-- `src/hydration/actors.ts` batches requested DIDs and reads only `actor.did`, `actor.handle`, `actor.display_name`, and `actor.avatar_cid`. It does not re-check `actor.is_active`; skeleton scope resolution owns actor-liveness filtering.
-- `src/hydration/profiles.ts` reads the current `record.json` only at each deterministic `at://<did>/app.certified.actor.profile/self` URI with the matching collection. It does not select profiles by `record.did` or accept a stale feed CID.
+`src/hydration/identity.ts` resolves actor and Certified-profile identity data in one parameterized current-state batch through the same bounded, read-only pool. It starts from the deduplicated requested DIDs, left-joins `actor` for only `did`, `handle`, `display_name`, and `avatar_cid`, and left-joins `record` at each deterministic `at://<did>/app.certified.actor.profile/self` URI with the exact `app.certified.actor.profile` collection. It does not read or re-check `actor.is_active`, select profiles by `record.did`, or require a feed CID.
 
-Missing individual actor or profile rows are degradable data. A rejected hydration query still fails the request. These are separate current-state reads rather than one page-wide snapshot, so a source row can change between skeleton selection and hydration; exact top-level CID matching prevents substitution of a newer body.
+The identity batch returns one context for every requested DID. Missing actor rows, Certified profiles, or both are degradable data; raw profile JSON remains untrusted until TypeScript validation succeeds. A rejected identity query still fails the request rather than returning partial contexts. Identity retrieval is a later current-state read and is not part of the feed selection/source statement snapshot.
 
 ## Active label semantics
 

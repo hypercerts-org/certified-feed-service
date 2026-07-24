@@ -6,12 +6,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { loadConfig } from '../src/config.js'
 import { Database } from '../src/database.js'
+import { PostgresFeedPageLoader } from '../src/feed/page-loader.js'
 import { FeedRepository } from '../src/feed/query.js'
 import { FeedService } from '../src/feed/service.js'
-import { PostgresActorReader } from '../src/hydration/actors.js'
-import { PostgresCertifiedProfileReader } from '../src/hydration/profiles.js'
-import { PostgresExactRecordReader } from '../src/hydration/query.js'
-import { strongRefKey } from '../src/hydration/types.js'
+import { PostgresIdentityReader } from '../src/hydration/identity.js'
 import { Metrics } from '../src/metrics.js'
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL
@@ -35,9 +33,8 @@ describe('FeedRepository against Postgres', () => {
   const logger = pino({ enabled: false })
   let admin: Pool
   let database: Database
-  let actors: PostgresActorReader
-  let profiles: PostgresCertifiedProfileReader
-  let exactRecords: PostgresExactRecordReader
+  let identities: PostgresIdentityReader
+  let pages: PostgresFeedPageLoader
   let service: FeedService
 
   beforeAll(async () => {
@@ -95,14 +92,13 @@ describe('FeedRepository against Postgres', () => {
       DATABASE_STATEMENT_TIMEOUT_MS: '10000',
     })
     database = new Database(config, logger)
-    actors = new PostgresActorReader(database)
-    profiles = new PostgresCertifiedProfileReader(database)
-    exactRecords = new PostgresExactRecordReader(database)
-    service = new FeedService(
+    identities = new PostgresIdentityReader(database)
+    pages = new PostgresFeedPageLoader(
       new FeedRepository(database),
       [],
       new Metrics(),
     )
+    service = new FeedService(pages)
   })
 
   afterAll(async () => {
@@ -172,156 +168,97 @@ describe('FeedRepository against Postgres', () => {
     ).rejects.toThrow(/read-only/i)
   })
 
-  it('resolves exact URI and CID pairs without crossing or substituting versions', async () => {
-    const actorA = randomDid()
-    const actorB = randomDid()
-    const bodyA = { marker: 'body-a' }
-    const bodyB = { marker: 'body-b' }
-    const uriA = await seedRecord(
-      actorA,
+  it('loads metadata and exact source pages from the same statement contract', async () => {
+    const viewer = randomDid()
+    const author = randomDid()
+    const selectedBody = {
+      $type: 'org.hypercerts.claim.activity',
+      marker: 'selected-source-body',
+      createdAt: '2026-07-20T00:00:02Z',
+    }
+    await Promise.all([seedActor(viewer), seedActor(author)])
+    const selectedUri = await seedRecord(
+      author,
       'org.hypercerts.claim.activity',
-      'exact-a',
-      bodyA,
-      '2026-07-20T00:00:00Z',
-      cid,
+      'source-page-selected',
+      selectedBody,
+      '2026-07-20T00:00:02Z',
     )
-    const uriB = await seedRecord(
-      actorB,
+    await seedRecord(
+      author,
       'org.hypercerts.collection',
-      'exact-b',
-      bodyB,
+      'source-page-sentinel',
+      {
+        $type: 'org.hypercerts.collection',
+        marker: 'limit-plus-one-sentinel',
+        createdAt: '2026-07-20T00:00:01Z',
+      },
       '2026-07-20T00:00:01Z',
       staleCid,
     )
-    const missingUri = `at://${randomDid()}/org.hypercerts.claim.activity/missing`
-    const exactA = { uri: uriA, cid }
-    const mismatchA = { uri: uriA, cid: staleCid }
-    const mismatchB = { uri: uriB, cid }
-    const exactB = { uri: uriB, cid: staleCid }
-    const missing = { uri: missingUri, cid }
+    const request = { viewerDid: viewer, authors: [author], limit: 1 }
 
-    const results = await exactRecords.getByStrongRefs([
-      exactA,
-      exactA,
-      mismatchA,
-      mismatchB,
-      exactB,
-      missing,
+    const metadata = await pages.loadPage(request, 'metadata')
+    const withSource = await pages.loadPage(request, 'with-source')
+
+    expect(metadata.rows).toEqual([
+      {
+        uri: selectedUri,
+        cid,
+        actorDid: author,
+        collection: 'org.hypercerts.claim.activity',
+        kind: 'cert.create',
+        sortValue: '2026-07-20T00:00:02.000000Z',
+      },
     ])
-
-    expect(results).toHaveLength(5)
-    expect(results.get(strongRefKey(exactA))).toEqual({
-      state: 'available',
-      subject: exactA,
-      collection: 'org.hypercerts.claim.activity',
-      did: actorA,
-      value: bodyA,
-    })
-    expect(results.get(strongRefKey(exactB))).toEqual({
-      state: 'available',
-      subject: exactB,
-      collection: 'org.hypercerts.collection',
-      did: actorB,
-      value: bodyB,
-    })
-    expect(results.get(strongRefKey(mismatchA))).toEqual({
-      state: 'cidMismatch',
-      subject: mismatchA,
-    })
-    expect(results.get(strongRefKey(mismatchB))).toEqual({
-      state: 'cidMismatch',
-      subject: mismatchB,
-    })
-    expect(results.get(strongRefKey(missing))).toEqual({
-      state: 'notFound',
-      subject: missing,
-    })
-
-    const crossedOnlyResults = await exactRecords.getByStrongRefs([
-      mismatchA,
-      mismatchB,
+    expect(metadata.rows[0]).not.toHaveProperty('sourceValue')
+    expect(withSource.rows).toEqual([
+      {
+        ...metadata.rows[0],
+        sourceValue: selectedBody,
+      },
     ])
-
-    expect(crossedOnlyResults).toEqual(
-      new Map([
-        [
-          strongRefKey(mismatchA),
-          { state: 'cidMismatch', subject: mismatchA },
-        ],
-        [
-          strongRefKey(mismatchB),
-          { state: 'cidMismatch', subject: mismatchB },
-        ],
-      ]),
-    )
+    expect(withSource.cursor).toBe(metadata.cursor)
+    expect(metadata.cursor).toBeDefined()
   })
 
-  it('batches current stored actor summary fields and omits missing rows', async () => {
-    const actorA = randomDid()
-    const actorB = randomDid()
-    const missingActor = randomDid()
-    await seedActor(actorA, {
+  it('batches complete actor and deterministic Certified-profile contexts', async () => {
+    const actorWithProfile = randomDid()
+    const actorOnly = randomDid()
+    const profileOnly = randomDid()
+    const missingIdentity = randomDid()
+    const wrongCollection = randomDid()
+    const sourceDidMismatch = randomDid()
+    const staleBody = { marker: 'stale-self-body' }
+    const currentBody = { marker: 'current-self-body' }
+    const profileOnlyBody = { marker: 'profile-only-body' }
+    const selfUri = `at://${actorWithProfile}/app.certified.actor.profile/self`
+
+    await seedActor(actorWithProfile, {
       handle: 'alice.example',
       displayName: 'Alice',
       avatarCid: cid,
     })
-    await seedActor(actorB, { active: false, displayName: 'Bob' })
-
-    await expect(
-      actors.getByDids([actorA, actorB, missingActor, actorA]),
-    ).resolves.toEqual(
-      new Map([
-        [
-          actorA,
-          {
-            did: actorA,
-            handle: 'alice.example',
-            displayName: 'Alice',
-            avatarCid: cid,
-          },
-        ],
-        [
-          actorB,
-          {
-            did: actorB,
-            handle: null,
-            displayName: 'Bob',
-            avatarCid: null,
-          },
-        ],
-      ]),
-    )
-  })
-
-  it('reads only current deterministic Certified profile self records by URI', async () => {
-    const profileDid = randomDid()
-    const sourceDidMismatch = randomDid()
-    const missingDid = randomDid()
-    const wrongCollectionDid = randomDid()
-    const staleBody = { marker: 'stale-self-body' }
-    const currentBody = { marker: 'current-self-body' }
-    const unrelatedBody = { marker: 'matching-did-wrong-rkey' }
-    const selfUri = `at://${profileDid}/app.certified.actor.profile/self`
-
+    await seedActor(actorOnly, { active: false, displayName: 'Bob' })
     await admin.query(
       `INSERT INTO record (uri, cid, did, collection, json, sort_at)
        VALUES ($1, $2, $3, 'app.certified.actor.profile', $4::jsonb, NOW())`,
       [selfUri, cid, sourceDidMismatch, JSON.stringify(staleBody)],
     )
     await seedRecord(
-      profileDid,
+      profileOnly,
       'app.certified.actor.profile',
-      'not-self',
-      unrelatedBody,
+      'self',
+      profileOnlyBody,
       '2026-07-20T00:00:00Z',
     )
     await admin.query(
       `INSERT INTO record (uri, cid, did, collection, json, sort_at)
        VALUES ($1, $2, $3, 'org.hypercerts.collection', $4::jsonb, NOW())`,
       [
-        `at://${wrongCollectionDid}/app.certified.actor.profile/self`,
+        `at://${wrongCollection}/app.certified.actor.profile/self`,
         cid,
-        wrongCollectionDid,
+        wrongCollection,
         JSON.stringify({ marker: 'wrong-collection' }),
       ],
     )
@@ -333,15 +270,44 @@ describe('FeedRepository against Postgres', () => {
     )
 
     await expect(
-      profiles.getByDids([
-        profileDid,
-        missingDid,
-        wrongCollectionDid,
-        profileDid,
+      identities.getByDids([
+        actorWithProfile,
+        actorOnly,
+        profileOnly,
+        missingIdentity,
+        wrongCollection,
+        actorWithProfile,
       ]),
     ).resolves.toEqual(
       new Map([
-        [profileDid, { did: profileDid, value: currentBody }],
+        [
+          actorWithProfile,
+          {
+            did: actorWithProfile,
+            actor: {
+              did: actorWithProfile,
+              handle: 'alice.example',
+              displayName: 'Alice',
+              avatarCid: cid,
+            },
+            certifiedProfile: currentBody,
+          },
+        ],
+        [
+          actorOnly,
+          {
+            did: actorOnly,
+            actor: {
+              did: actorOnly,
+              handle: null,
+              displayName: 'Bob',
+              avatarCid: null,
+            },
+          },
+        ],
+        [profileOnly, { did: profileOnly, certifiedProfile: profileOnlyBody }],
+        [missingIdentity, { did: missingIdentity }],
+        [wrongCollection, { did: wrongCollection }],
       ]),
     )
   })
@@ -558,11 +524,12 @@ describe('FeedRepository against Postgres', () => {
       '2026-07-21T05:01:00Z',
     )
 
-    service = new FeedService(
+    pages = new PostgresFeedPageLoader(
       new FeedRepository(database),
       [trustedLabeler],
       new Metrics(),
     )
+    service = new FeedService(pages)
     const output = await service.getFeedSkeleton({
       viewerDid: viewer,
       trustedEvaluators: [evaluator],

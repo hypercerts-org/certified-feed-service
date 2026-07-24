@@ -1,5 +1,7 @@
 # Hydrated Feed Implementation Plan
 
+> **Status and authority:** [`hydrated-feed-rearchitecture-plan.md`](hydrated-feed-rearchitecture-plan.md) supersedes this document's exact source-refetch pipeline, separate actor/profile reads, and old hydration coordinator design. Retain this document only for behavioral requirements that the rearchitecture handoff does not replace; a complete rewrite will follow the implementation.
+
 ## Scope
 
 Implement this plan in **Certified Feed Service only**.
@@ -590,13 +592,15 @@ Required first-render fields:
 | Kind | View fields |
 |---|---|
 | `cert.create` | title, short description, image descriptor, authored timestamp, start/end dates, location count |
-| `collection.create` | collection type, title/name fallback, short description, image descriptor, authored timestamp, item count |
+| `collection.create` | collection type, required title, short description, image descriptor from avatar then banner, authored timestamp, item count |
 | `project.created_with_cert` | same collection view; distinct item kind remains |
 | `endorsement.award` | endorsed actor summary and authored timestamp |
 | `evaluation.create` | summary and authored timestamp |
 | `measurement.create` | metric and authored timestamp |
 | `hyperboard.create` | authored timestamp and verb-only view |
 | `update.create` | title, short description, authored timestamp, and first `image/*` blob descriptor |
+
+Collection views follow the strict v1.0.0 schema: use the required `title`, select `avatar` before `banner`, and do not read legacy `name` or `image` fields.
 
 Test that:
 

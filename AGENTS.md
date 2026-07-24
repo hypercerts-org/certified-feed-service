@@ -55,6 +55,7 @@ src/server.ts
   -> src/app.ts
   -> src/api/get-feed-skeleton.ts
   -> src/feed/service.ts
+  -> src/feed/page-loader.ts
   -> src/feed/query.ts
   -> src/feed/feed-query.sql
   -> src/database.ts
@@ -63,13 +64,14 @@ src/server.ts
 - `src/server.ts` is the composition root. It owns configuration loading, listener settings, initial readiness, and graceful shutdown.
 - `src/app.ts` is the fetch-compatible HTTP boundary. It owns operational routes, method checks, the 64 KiB body limit, malformed-JSON handling, and request metrics.
 - `src/api/get-feed-skeleton.ts` registers the Lexicon procedure and translates expected `FeedError` values into stable public responses.
-- `src/feed/service.ts` owns semantic validation, cursor decoding, repository coordination, scope-cap enforcement, `limit + 1` trimming, output shaping, and next-cursor creation.
-- `src/feed/query.ts` owns the fixed SQL parameter order, execution, and database-row mapping.
+- `src/feed/service.ts` projects shared metadata page rows into the public skeleton response.
+- `src/feed/page-loader.ts` owns semantic validation, cursor decoding, repository coordination and timing, scope-cap enforcement, `limit + 1` trimming, result metrics, and next-cursor creation.
+- `src/feed/query.ts` owns the fixed SQL parameter order, execution, source-mode invariants, and database-row mapping.
 - `src/feed/feed-query.sql` owns scope resolution, quality and endorsement policy, event folding/classification, ordering, and keyset pagination.
 - `src/database.ts` is the only PostgreSQL pool owner. Keep database access behind the existing seams.
 - `src/metrics.ts` owns an isolated Prometheus registry with bounded labels.
 
-Prefer tests at the seam being changed: app tests fake `FeedSkeletonReader`, service tests fake `FeedQueryReader`, pure rules have unit tests, and SQL/cross-table behavior belongs in the PostgreSQL integration suite.
+Prefer tests at the seam being changed: app tests fake `FeedSkeletonReader`, service tests fake `FeedPageLoader`, page-loader tests fake `FeedQueryReader`, pure rules have unit tests, and SQL/cross-table behavior belongs in the PostgreSQL integration suite.
 
 ## Canonical and generated files
 

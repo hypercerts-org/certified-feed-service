@@ -4,6 +4,7 @@ import pino from 'pino'
 import { createApp } from './app.js'
 import { loadConfig } from './config.js'
 import { Database } from './database.js'
+import { PostgresFeedPageLoader } from './feed/page-loader.js'
 import { FeedRepository } from './feed/query.js'
 import { FeedService } from './feed/service.js'
 import { loadLocalEnvironment } from './environment.js'
@@ -15,11 +16,12 @@ const logger = pino({ level: config.logLevel })
 const metrics = new Metrics()
 const database = new Database(config, logger)
 const repository = new FeedRepository(database)
-const feedService = new FeedService(
+const pages = new PostgresFeedPageLoader(
   repository,
   config.trustedQualityLabelerDids,
   metrics,
 )
+const feedService = new FeedService(pages)
 const app = createApp(database, feedService, metrics, logger)
 
 metrics.setReady(false)
