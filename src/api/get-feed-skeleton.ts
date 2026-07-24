@@ -1,7 +1,7 @@
 import { LexRouter, LexServerError } from '@atproto/lex-server'
 import type { Logger } from 'pino'
 
-import { FeedError } from '../feed/errors.js'
+import { FeedError, FeedErrorCode } from '../feed/errors.js'
 import type { FeedSkeletonReader } from '../feed/service.js'
 import type { GetFeedSkeletonInput } from '../feed/types.js'
 import getFeedSkeleton, {
@@ -33,12 +33,12 @@ export const registerGetFeedSkeleton = (
         )
       }
 
-      metrics.observeError('InternalError')
+      metrics.observeError(FeedErrorCode.InternalError)
       logger.error({ err: cause }, 'feed skeleton generation failed')
       throw new LexServerError(
         500,
         {
-          error: 'InternalError',
+          error: FeedErrorCode.InternalError,
           message:
             'Feed generation failed because of an internal service error; retry the request, then contact the operator if it continues.',
         },

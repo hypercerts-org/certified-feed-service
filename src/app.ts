@@ -5,6 +5,7 @@ import type { Logger } from 'pino'
 
 import { registerGetFeedSkeleton } from './api/get-feed-skeleton.js'
 import type { DatabaseCompatibilityChecker } from './database.js'
+import { FeedErrorCode } from './feed/errors.js'
 import type { FeedSkeletonReader } from './feed/service.js'
 import type { Metrics } from './metrics.js'
 
@@ -22,7 +23,7 @@ const jsonResponse = (body: unknown, status = 200): Response =>
 const requestTooLargeResponse = (): Response =>
   jsonResponse(
     {
-      error: 'InvalidRequest',
+      error: FeedErrorCode.InvalidRequest,
       message: `Request body exceeds the ${MAX_REQUEST_BODY_BYTES}-byte limit; remove unnecessary authors, evaluators, or other fields before retrying.`,
     },
     413,
@@ -31,7 +32,7 @@ const requestTooLargeResponse = (): Response =>
 const methodNotAllowed = (expected: 'GET' | 'POST'): Response =>
   jsonResponse(
     {
-      error: 'InvalidRequest',
+      error: FeedErrorCode.InvalidRequest,
       message: `This endpoint requires ${expected}; change the HTTP method and retry.`,
     },
     405,
@@ -93,7 +94,7 @@ const rejectMalformedJson = async (
   } catch {
     return jsonResponse(
       {
-        error: 'InvalidRequest',
+        error: FeedErrorCode.InvalidRequest,
         message:
           'Request body is not valid JSON; correct the JSON syntax and retry.',
       },
@@ -120,7 +121,7 @@ const normalizeLexiconValidationError = async (
     typeof body !== 'object' ||
     body === null ||
     !('error' in body) ||
-    body.error !== 'InvalidRequest'
+    body.error !== FeedErrorCode.InvalidRequest
   ) {
     return response
   }
@@ -128,10 +129,10 @@ const normalizeLexiconValidationError = async (
     'message' in body && typeof body.message === 'string'
       ? ` Details: ${body.message}`
       : ''
-  metrics.observeError('InvalidRequest')
+  metrics.observeError(FeedErrorCode.InvalidRequest)
   return jsonResponse(
     {
-      error: 'InvalidRequest',
+      error: FeedErrorCode.InvalidRequest,
       message: `Request body does not match app.certified.feed.beta.getFeedSkeleton; correct the missing or invalid field and retry.${detail}`,
     },
     400,
@@ -191,14 +192,14 @@ export const createApp = (
                 })
               : methodNotAllowed('GET')
         } else if (url.pathname === XRPC_PATH && originalRequest.method !== 'POST') {
-          metrics.observeError('InvalidRequest')
+          metrics.observeError(FeedErrorCode.InvalidRequest)
           response = methodNotAllowed('POST')
         } else {
           let request = originalRequest
           if (url.pathname === XRPC_PATH && originalRequest.method === 'POST') {
             const bounded = await readBoundedRequest(originalRequest)
             if (bounded instanceof Response) {
-              metrics.observeError('InvalidRequest')
+              metrics.observeError(FeedErrorCode.InvalidRequest)
               response = bounded
               status = response.status
               return response
@@ -206,7 +207,7 @@ export const createApp = (
             request = bounded
             const malformedJson = await rejectMalformedJson(request)
             if (malformedJson) {
-              metrics.observeError('InvalidRequest')
+              metrics.observeError(FeedErrorCode.InvalidRequest)
               response = malformedJson
               status = response.status
               return response

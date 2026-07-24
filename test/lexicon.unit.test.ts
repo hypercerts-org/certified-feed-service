@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { describe, expect, it } from 'vitest'
 
+import { FeedErrorCode } from '../src/feed/errors.js'
 import {
   $input,
   $output,
@@ -34,7 +35,10 @@ describe('feed skeleton Lexicon contract', () => {
     expect(skeletonLexicon.defs).not.toHaveProperty(
       'organizationQualityPolicy',
     )
-    expect(main.errors.map((error: { name: string }) => error.name)).toEqual([
+    const errorNames = main.errors.map(
+      (error: { name: string }) => error.name,
+    )
+    expect(errorNames).toEqual([
       'InvalidRequest',
       'AuthorsFilterTooLarge',
       'TrustedEvaluatorsTooLarge',
@@ -43,6 +47,7 @@ describe('feed skeleton Lexicon contract', () => {
       'InvalidCursor',
       'InternalError',
     ])
+    expect(errorNames).toEqual(Object.values(FeedErrorCode))
   })
 
   it('accepts the shared request object without an object discriminator', () => {

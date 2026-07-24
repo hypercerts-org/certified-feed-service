@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { decodeCursor } from '../src/feed/cursor.js'
-import { FeedError } from '../src/feed/errors.js'
+import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 import type {
   FeedQueryInput,
   FeedQueryReader,
@@ -89,7 +89,9 @@ describe('FeedService', () => {
     await expect(
       service.getFeedSkeleton({ viewerDid: viewer, authors: [] }),
     ).rejects.toEqual(
-      expect.objectContaining<Partial<FeedError>>({ code: 'FeedScopeTooLarge' }),
+      expect.objectContaining<Partial<FeedError>>({
+        code: FeedErrorCode.FeedScopeTooLarge,
+      }),
     )
   })
 })

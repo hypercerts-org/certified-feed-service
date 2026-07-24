@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { FeedError } from '../src/feed/errors.js'
+import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 import { normalizeFeedRequest } from '../src/feed/validation.js'
 
 const viewer = 'did:plc:ar7c4by46qjdydhdevvrndac'
@@ -36,7 +36,9 @@ describe('feed request validation', () => {
     expect(() =>
       normalizeFeedRequest({ viewerDid: viewer, kinds: ['cert.creat'] }),
     ).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidKind' }),
+      expect.objectContaining<Partial<FeedError>>({
+        code: FeedErrorCode.InvalidKind,
+      }),
     )
   })
 
@@ -50,18 +52,24 @@ describe('feed request validation', () => {
         },
       }),
     ).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidRequest' }),
+      expect.objectContaining<Partial<FeedError>>({
+        code: FeedErrorCode.InvalidRequest,
+      }),
     )
   })
 
   it('rejects malformed viewers and page sizes', () => {
     expect(() => normalizeFeedRequest({ viewerDid: 'alice.test' })).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidRequest' }),
+      expect.objectContaining<Partial<FeedError>>({
+        code: FeedErrorCode.InvalidRequest,
+      }),
     )
     expect(() =>
       normalizeFeedRequest({ viewerDid: viewer, limit: 51 }),
     ).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidRequest' }),
+      expect.objectContaining<Partial<FeedError>>({
+        code: FeedErrorCode.InvalidRequest,
+      }),
     )
   })
 })

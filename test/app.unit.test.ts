@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { createApp } from '../src/app.js'
 import type { DatabaseCompatibilityChecker } from '../src/database.js'
-import { FeedError } from '../src/feed/errors.js'
+import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 import type { FeedSkeletonReader } from '../src/feed/service.js'
 import type { GetFeedSkeletonInput } from '../src/feed/types.js'
 import { Metrics } from '../src/metrics.js'
@@ -246,7 +246,7 @@ describe('HTTP application', () => {
     const internalCause = new Error('secret database detail')
     const getFeedSkeleton = vi.fn(async () => {
       throw new FeedError(
-        'FeedScopeTooLarge',
+        FeedErrorCode.FeedScopeTooLarge,
         'Reduce authors or trustedEvaluators before retrying.',
         422,
         { cause: internalCause },
