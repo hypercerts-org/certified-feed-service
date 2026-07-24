@@ -2,7 +2,7 @@ import { performance } from 'node:perf_hooks'
 
 import type { Metrics } from '../metrics.js'
 import { decodeCursor, encodeCursor } from './cursor.js'
-import { FeedError } from './errors.js'
+import { FeedError, FeedErrorCode } from './errors.js'
 import {
   MAX_RESOLVED_AUTHOR_COUNT,
   type FeedQueryReader,
@@ -96,7 +96,7 @@ export class PostgresFeedPageLoader implements FeedPageLoader {
 
     if (result.scopeCount > MAX_RESOLVED_AUTHOR_COUNT) {
       throw new FeedError(
-        'FeedScopeTooLarge',
+        FeedErrorCode.FeedScopeTooLarge,
         `resolved feed scope contains ${result.scopeCount} unique DIDs, exceeding the maximum of ${MAX_RESOLVED_AUTHOR_COUNT}; reduce authors or trustedEvaluators before retrying.`,
       )
     }

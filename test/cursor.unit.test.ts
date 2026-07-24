@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { decodeCursor, encodeCursor } from '../src/feed/cursor.js'
-import { FeedError } from '../src/feed/errors.js'
+import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 
 const uri =
   'at://did:plc:ar7c4by46qjdydhdevvrndac/org.hypercerts.claim.activity/3kpn'
@@ -28,7 +28,9 @@ describe('feed cursor', () => {
     ).toString('base64url')
 
     expect(() => decodeCursor(encoded)).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidCursor' }),
+      expect.objectContaining<Partial<FeedError>>({
+        code: FeedErrorCode.InvalidCursor,
+      }),
     )
   })
 
@@ -43,7 +45,9 @@ describe('feed cursor', () => {
     ).toString('base64url'),
   ])('rejects malformed cursor %s', (cursor) => {
     expect(() => decodeCursor(cursor)).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({ code: 'InvalidCursor' }),
+      expect.objectContaining<Partial<FeedError>>({
+        code: FeedErrorCode.InvalidCursor,
+      }),
     )
   })
 })

@@ -1,6 +1,6 @@
 import { isValidDid } from '@atproto/syntax'
 
-import { FeedError } from './errors.js'
+import { FeedError, FeedErrorCode } from './errors.js'
 import {
   FEED_KINDS,
   ORGANIZATION_QUALITIES,
@@ -29,7 +29,7 @@ const validateDids = (
   const invalidIndex = values.findIndex((did) => !isValidDid(did))
   if (invalidIndex !== -1) {
     throw new FeedError(
-      'InvalidRequest',
+      FeedErrorCode.InvalidRequest,
       `${field}[${invalidIndex}] is not a valid DID; replace it with a valid did:plc, did:web, or other syntactically valid DID.`,
     )
   }
@@ -41,7 +41,7 @@ export const normalizeFeedRequest = (
 ): NormalizedFeedRequest => {
   if (!isValidDid(input.viewerDid)) {
     throw new FeedError(
-      'InvalidRequest',
+      FeedErrorCode.InvalidRequest,
       'viewerDid is not a valid DID; provide the viewer account as a syntactically valid DID.',
     )
   }
@@ -50,7 +50,7 @@ export const normalizeFeedRequest = (
   validateDids(authors, 'authors')
   if (authors.length > MAX_AUTHORS) {
     throw new FeedError(
-      'AuthorsFilterTooLarge',
+      FeedErrorCode.AuthorsFilterTooLarge,
       `authors contains ${authors.length} unique DIDs, exceeding the maximum of ${MAX_AUTHORS}; remove authors before retrying.`,
     )
   }
@@ -59,7 +59,7 @@ export const normalizeFeedRequest = (
   validateDids(trustedEvaluators, 'trustedEvaluators')
   if (trustedEvaluators.length > MAX_EVALUATORS) {
     throw new FeedError(
-      'TrustedEvaluatorsTooLarge',
+      FeedErrorCode.TrustedEvaluatorsTooLarge,
       `trustedEvaluators contains ${trustedEvaluators.length} unique DIDs, exceeding the maximum of ${MAX_EVALUATORS}; remove evaluators before retrying.`,
     )
   }
@@ -67,14 +67,14 @@ export const normalizeFeedRequest = (
   const rawKinds = dedupe(input.kinds)
   if (rawKinds.length > MAX_KINDS) {
     throw new FeedError(
-      'InvalidKind',
+      FeedErrorCode.InvalidKind,
       `kinds contains ${rawKinds.length} unique values, exceeding the maximum of ${MAX_KINDS}; request at most ${MAX_KINDS} supported kinds.`,
     )
   }
   const unknownKind = rawKinds.find((kind) => !FEED_KIND_SET.has(kind))
   if (unknownKind) {
     throw new FeedError(
-      'InvalidKind',
+      FeedErrorCode.InvalidKind,
       `kinds contains unsupported value ${JSON.stringify(unknownKind)}; use one of: ${FEED_KINDS.join(', ')}.`,
     )
   }
@@ -86,7 +86,7 @@ export const normalizeFeedRequest = (
     const invalidQuality = allowed.find((quality) => !QUALITY_SET.has(quality))
     if (invalidQuality) {
       throw new FeedError(
-        'InvalidRequest',
+        FeedErrorCode.InvalidRequest,
         `organizationQuality.allowed contains unsupported value ${JSON.stringify(invalidQuality)}; use one of: ${ORGANIZATION_QUALITIES.join(', ')}.`,
       )
     }
@@ -99,7 +99,7 @@ export const normalizeFeedRequest = (
   const limit = input.limit ?? DEFAULT_LIMIT
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
     throw new FeedError(
-      'InvalidRequest',
+      FeedErrorCode.InvalidRequest,
       `limit must be an integer from 1 through ${MAX_LIMIT}; change limit to a value in that range.`,
     )
   }

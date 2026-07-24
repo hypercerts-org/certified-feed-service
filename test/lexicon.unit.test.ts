@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { describe, expect, it } from 'vitest'
 
+import { FeedErrorCode } from '../src/feed/errors.js'
 import { $output as hydratedOutput } from '../src/lexicons/app/certified/feed/beta/getFeed.js'
 import {
   $input as skeletonInput,
@@ -120,9 +121,10 @@ describe('feed Lexicon contract', () => {
       hydratedMain.input.schema.properties.organizationQuality.ref,
     ).toBe('app.certified.feed.beta.defs#organizationQualityPolicy')
     expect(hydratedMain.errors).toEqual(skeletonMain.errors)
-    expect(
-      hydratedMain.errors.map((error: { name: string }) => error.name),
-    ).toEqual([
+    const errorNames = hydratedMain.errors.map(
+      (error: { name: string }) => error.name,
+    )
+    expect(errorNames).toEqual([
       'InvalidRequest',
       'AuthorsFilterTooLarge',
       'TrustedEvaluatorsTooLarge',
@@ -131,6 +133,7 @@ describe('feed Lexicon contract', () => {
       'InvalidCursor',
       'InternalError',
     ])
+    expect(errorNames).toEqual(Object.values(FeedErrorCode))
   })
 
   it('keeps the original exact-reference skeleton wire shape', () => {

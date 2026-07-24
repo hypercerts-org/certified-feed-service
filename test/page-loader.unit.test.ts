@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { FeedError } from '../src/feed/errors.js'
+import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 import {
   PostgresFeedPageLoader,
 } from '../src/feed/page-loader.js'
@@ -122,7 +122,9 @@ describe('PostgresFeedPageLoader', () => {
     await expect(
       loader.loadPage({ viewerDid: viewer, authors: [] }, 'metadata'),
     ).rejects.toEqual(
-      expect.objectContaining<Partial<FeedError>>({ code: 'FeedScopeTooLarge' }),
+      expect.objectContaining<Partial<FeedError>>({
+        code: FeedErrorCode.FeedScopeTooLarge,
+      }),
     )
   })
 
