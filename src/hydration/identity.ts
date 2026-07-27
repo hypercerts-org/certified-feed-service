@@ -12,14 +12,17 @@ const IDENTITY_QUERY = `
     actor.did AS actor_did,
     actor.handle,
     actor.display_name,
-    actor.avatar_cid,
-    profile.json AS certified_profile_json
+    certified_profile.json AS certified_profile_json,
+    bluesky_profile.json AS bluesky_profile_json
   FROM requested
   LEFT JOIN actor
     ON actor.did = requested.did
-  LEFT JOIN record AS profile
-    ON profile.uri = 'at://' || requested.did || '/app.certified.actor.profile/self'
-   AND profile.collection = 'app.certified.actor.profile'
+  LEFT JOIN record AS certified_profile
+    ON certified_profile.uri = 'at://' || requested.did || '/app.certified.actor.profile/self'
+   AND certified_profile.collection = 'app.certified.actor.profile'
+  LEFT JOIN record AS bluesky_profile
+    ON bluesky_profile.uri = 'at://' || requested.did || '/app.bsky.actor.profile/self'
+   AND bluesky_profile.collection = 'app.bsky.actor.profile'
 `
 
 interface IdentityQueryRow extends QueryResultRow {
@@ -27,8 +30,8 @@ interface IdentityQueryRow extends QueryResultRow {
   actor_did: string | null
   handle: string | null
   display_name: string | null
-  avatar_cid: string | null
   certified_profile_json: unknown
+  bluesky_profile_json: unknown
 }
 
 /** Narrow structural query capability used by the identity adapter. */
@@ -39,7 +42,7 @@ export interface IdentityQueryExecutor {
   ): Promise<{ readonly rows: readonly T[] }>
 }
 
-/** Read-only PostgreSQL adapter for current actor and Certified-profile identity data. */
+/** Read-only PostgreSQL adapter for current actor, Certified, and Bluesky identity data. */
 export class PostgresIdentityReader implements IdentityReader {
   constructor(private readonly database: IdentityQueryExecutor) {}
 
@@ -84,12 +87,14 @@ export class PostgresIdentityReader implements IdentityReader {
                 did: row.actor_did,
                 handle: row.handle,
                 displayName: row.display_name,
-                avatarCid: row.avatar_cid,
               },
             }),
         ...(row.certified_profile_json === null
           ? {}
           : { certifiedProfile: row.certified_profile_json }),
+        ...(row.bluesky_profile_json === null
+          ? {}
+          : { blueskyProfile: row.bluesky_profile_json }),
       })
     }
 

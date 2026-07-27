@@ -2,6 +2,8 @@
 
 Standalone, read-only TypeScript service that reads Magic Indexer's current PostgreSQL state and serves ordered Hypercerts feeds over XRPC.
 
+> **Pre-release:** This service and its Lexicons have not had their first public release. Wire contracts may change without backward compatibility.
+
 The service exposes an exact-reference skeleton and a view-only hydrated feed. It does not ingest or mutate indexed data, call Magic Indexer's API, authenticate callers, fetch blob bytes, or provide immutable event history.
 
 ## Endpoints
@@ -92,9 +94,9 @@ Hydrated items are view-only:
 - Selected source records that fail validation are omitted. The service does not refill the page, so a hydrated page may contain fewer than `limit` items, or no items, while still returning a cursor that advances over the selected source page.
 - The nested feed-view union is open. Clients must tolerate view `$type` values they do not recognize.
 - The response does not expose source JSON or identity provenance.
-- Actor summaries use a valid meaningful Certified profile first, otherwise validated stored Bluesky fields, otherwise the DID alone. A valid stored handle is preserved independently.
+- Actor summaries use a valid meaningful Certified profile first, then the current validated `app.bsky.actor.profile`, then validated stored actor handle/display fields, then the DID alone. A valid stored handle is preserved independently. Bluesky profile blobs come from the deterministic indexed profile record; the service does not call a PDS or AppView.
 - Evaluation, measurement, and update views may include an exact `{ uri, cid }` target. The source record's authoritative validator validates the strong-reference shape. The service does not query, preview, recursively hydrate, or validate the referenced target record or body.
-- Image values use open unions so clients can tolerate future variants. Known URI images use `org.hypercerts.defs#uri`; known blob images carry the repository DID, CID, and optional MIME/size metadata. The service never fetches or proxies bytes.
+- Image values use open unions so clients can tolerate future variants. Known values preserve protocol-native `org.hypercerts.defs#uri`, `#smallImage`, `#largeImage`, or `#smallBlob` wrappers and their nested AT Protocol blob refs. The containing actor supplies the repository DID; the service never fetches or proxies bytes.
 
 ## Request behavior
 
@@ -193,7 +195,15 @@ npm run test:unit
 npm run build
 ```
 
-Committed Lexicon JSON under `lexicons/` is the public wire contract. Generated TypeScript under `src/lexicons/` is ignored and must not be edited or committed. `codegen`, `check`, tests, and build regenerate it. Codegen stages the canonical `org.hypercerts.defs#uri` fragment from the pinned `@hypercerts-org/lexicon` package so the feed does not commit a duplicate definition. A narrow post-codegen workaround for `@atproto/lex@0.3.0` is documented in `AGENTS.md`.
+Committed Lexicon JSON under `lexicons/` is the public wire contract plus installed external dependencies. `lexicons.json` pins installed network Lexicons by AT-URI and CID. Generated TypeScript under `src/lexicons/` is ignored and must not be edited or committed. `codegen`, `check`, tests, and build regenerate it. Codegen stages only the canonical `org.hypercerts.defs#uri`, `#smallBlob`, `#smallImage`, and `#largeImage` fragments from the pinned `@hypercerts-org/lexicon` package so the feed does not commit duplicate definitions. A narrow post-codegen workaround for `@atproto/lex@0.3.0` is documented in `AGENTS.md`.
+
+Verify committed network Lexicons against the manifest with:
+
+```bash
+npx --no-install lex install --ci --lexicons ./lexicons --manifest ./lexicons.json
+```
+
+Use `lex install --update` only when intentionally refreshing those pinned dependencies.
 
 The canonical feed statement is `src/feed/feed-query.sql`. Development watches it with the TypeScript sources, and build copies it beside `dist/feed/query.js` before smoke-loading production adapters.
 

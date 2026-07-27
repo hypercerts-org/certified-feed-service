@@ -1,3 +1,5 @@
+import type { BlobRef } from '@atproto/lex'
+
 import type { FeedKind, FeedSubject } from '../feed/types.js'
 
 /** Stored actor fields used to build a feed-card identity summary. */
@@ -5,7 +7,6 @@ export interface ActorRow {
   readonly did: string
   readonly handle: string | null
   readonly displayName: string | null
-  readonly avatarCid: string | null
 }
 
 /** Current stored identity data for one requested DID. */
@@ -13,35 +14,54 @@ export interface ActorContext {
   readonly did: string
   readonly actor?: ActorRow
   readonly certifiedProfile?: unknown
+  readonly blueskyProfile?: unknown
 }
 
-/** Batch seam for reading current actor and Certified-profile identity data. */
+/** Batch seam for reading current actor, Certified-profile, and Bluesky-profile identity data. */
 export interface IdentityReader {
   getByDids(
     dids: readonly string[],
   ): Promise<ReadonlyMap<string, ActorContext>>
 }
 
-/** Public-safe image metadata; hydration never fetches or proxies blob bytes. */
-export type ImageReference =
-  | {
-      readonly $type: 'org.hypercerts.defs#uri'
-      readonly uri: string
-    }
-  | {
-      readonly $type: 'app.certified.feed.beta.defs#blobImage'
-      readonly did: string
-      readonly cid: string
-      readonly mimeType?: string
-      readonly size?: number
-    }
+/** Protocol-native external image URI. */
+export interface UriImageReference {
+  readonly $type: 'org.hypercerts.defs#uri'
+  readonly uri: string
+}
+
+/** Protocol-native Hypercerts small-image wrapper. */
+export interface SmallImageReference {
+  readonly $type: 'org.hypercerts.defs#smallImage'
+  readonly image: BlobRef
+}
+
+/** Protocol-native Hypercerts large-image wrapper. */
+export interface LargeImageReference {
+  readonly $type: 'org.hypercerts.defs#largeImage'
+  readonly image: BlobRef
+}
+
+/** Protocol-native Hypercerts attachment wrapper containing an image blob. */
+export interface SmallBlobImageReference {
+  readonly $type: 'org.hypercerts.defs#smallBlob'
+  readonly blob: BlobRef
+}
+
+export type ActorImageReference = UriImageReference | SmallImageReference
+export type CollectionImageReference =
+  | ActorImageReference
+  | LargeImageReference
+export type UpdateImageReference =
+  | UriImageReference
+  | SmallBlobImageReference
 
 /** Stable actor identity projected into hydrated feed items. */
 export interface ActorSummary {
   readonly did: string
   readonly handle?: string
   readonly displayName?: string
-  readonly avatar?: ImageReference
+  readonly avatar?: ActorImageReference
 }
 
 /** Independently validated optional fields from one stored actor row. */
@@ -49,7 +69,6 @@ export interface SanitizedActorRow {
   readonly did: string
   readonly handle?: string
   readonly displayName?: string
-  readonly avatarCid?: string
 }
 
 /** First-render fields for an activity feed card. */
@@ -57,7 +76,7 @@ export interface ActivityFeedView {
   readonly $type: 'app.certified.feed.beta.defs#activityView'
   readonly title: string
   readonly shortDescription?: string
-  readonly image?: ImageReference
+  readonly image?: ActorImageReference
   readonly createdAt?: string
   readonly startDate?: string
   readonly endDate?: string
@@ -70,7 +89,7 @@ export interface CollectionFeedView {
   readonly collectionType?: string
   readonly title: string
   readonly shortDescription?: string
-  readonly image?: ImageReference
+  readonly image?: CollectionImageReference
   readonly createdAt?: string
   readonly itemCount: number
 }
@@ -109,7 +128,7 @@ export interface UpdateFeedView {
   readonly $type: 'app.certified.feed.beta.defs#updateView'
   readonly title?: string
   readonly shortDescription?: string
-  readonly image?: ImageReference
+  readonly image?: UpdateImageReference
   readonly createdAt?: string
   readonly target?: FeedSubject
 }

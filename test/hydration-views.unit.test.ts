@@ -7,6 +7,7 @@ import {
   OrgHypercertsContextEvaluation,
   OrgHypercertsContextMeasurement,
 } from '@hypercerts-org/lexicon'
+import { jsonToLex } from '@atproto/lex'
 import { describe, expect, it } from 'vitest'
 
 import { FEED_KINDS, type FeedKind } from '../src/feed/types.js'
@@ -22,6 +23,9 @@ const actorDid = 'did:plc:abcdefghijklmnopqrstuvwx'
 const subjectDid = 'did:plc:zyxwvutsrqponmlkjihgfedc'
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 const secondCid = 'bafyreifxcn6ts5hr6oequ5w5jyrpwrdl6p5lq46jasnxmcw3h3sme6asru'
+const blobCid = 'bafkreiehxpuhtr5f6v4eu4byjo2j7kkrhjvd7psmfu4imnpdzb3bdqb7vy'
+const secondBlobCid =
+  'bafkreiemp3jntpsz4ioppt6h3j24nqglpxlvd5fiodypsi3pb424xl2yjy'
 const createdAt = '2026-07-20T00:00:00.000Z'
 const targetUri = `at://${subjectDid}/org.hypercerts.claim.activity/target`
 
@@ -47,7 +51,7 @@ const smallImage = (
   $type: 'org.hypercerts.defs#smallImage',
   image: {
     $type: 'blob',
-    ref: { $link: cid },
+    ref: { $link: blobCid },
     mimeType: 'image/png',
     size: 128,
     ...overrides,
@@ -60,7 +64,7 @@ const largeImage = (
   $type: 'org.hypercerts.defs#largeImage',
   image: {
     $type: 'blob',
-    ref: { $link: secondCid },
+    ref: { $link: secondBlobCid },
     mimeType: 'image/webp',
     size: 256,
     ...overrides,
@@ -69,7 +73,7 @@ const largeImage = (
 
 const smallBlob = (
   mimeType: string,
-  valueCid = cid,
+  valueCid = blobCid,
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> => ({
   $type: 'org.hypercerts.defs#smallBlob',
@@ -89,12 +93,15 @@ const smallVideo = (
   $type: 'org.hypercerts.defs#smallVideo',
   video: {
     $type: 'blob',
-    ref: { $link: cid },
+    ref: { $link: blobCid },
     mimeType,
     size: 1_024,
     ...overrides,
   },
 })
+
+const protocolValue = (value: unknown): unknown =>
+  jsonToLex(value as Parameters<typeof jsonToLex>[0], { strict: true })
 
 const records = {
   activity: {
@@ -334,7 +341,7 @@ describe('top-level record validation', () => {
         'org.hypercerts.context.attachment',
         {
           ...records.update,
-          content: [smallBlob('image/png', cid, { size: 10_485_761 })],
+          content: [smallBlob('image/png', blobCid, { size: 10_485_761 })],
         },
       ],
     ]
@@ -363,7 +370,7 @@ describe('top-level record validation', () => {
         {
           ...records.evaluation,
           content: [
-            smallBlob('application/octet-stream', cid, { size: 10_485_761 }),
+            smallBlob('application/octet-stream', blobCid, { size: 10_485_761 }),
           ],
         },
       ],
@@ -431,7 +438,7 @@ describe('top-level record validation', () => {
           content: [
             uriImage('https://example.com/evaluation'),
             { $type: 'example.future#attachment', value: 'future' },
-            smallBlob('application/octet-stream', cid, { size: 10_485_760 }),
+            smallBlob('application/octet-stream', blobCid, { size: 10_485_760 }),
           ],
         },
       ),
@@ -464,23 +471,17 @@ describe('top-level record validation', () => {
     expect(result.rawValue).toBe(raw)
     expect(result.value).not.toBe(raw)
     expect(result.value.image).not.toBe(raw.image)
-    expect(raw.image.image.ref).toEqual({ $link: cid })
+    expect(raw.image.image.ref).toEqual({ $link: blobCid })
 
     raw.title = 'Mutated after validation'
     raw.shortDescription = 'Mutated after validation'
     raw.image = uriImage('https://example.com/mutated.png')
 
-    expect(buildFeedItemView(result, { sourceDid: actorDid })).toEqual({
+    expect(buildFeedItemView(result)).toEqual({
       $type: 'app.certified.feed.beta.defs#activityView',
       title: 'Restore the watershed',
       shortDescription: 'Native forest restoration',
-      image: {
-        $type: 'app.certified.feed.beta.defs#blobImage',
-        did: actorDid,
-        cid,
-        mimeType: 'image/png',
-        size: 128,
-      },
+      image: protocolValue(smallImage()),
       createdAt,
       locationCount: 0,
     })
@@ -497,17 +498,11 @@ describe('feed-card view builders', () => {
       locations: [strongRef(), strongRef(`${targetUri}-2`, secondCid)],
     })
 
-    expect(buildFeedItemView(record, { sourceDid: actorDid })).toEqual({
+    expect(buildFeedItemView(record)).toEqual({
       $type: 'app.certified.feed.beta.defs#activityView',
       title: 'Restore the watershed',
       shortDescription: 'Native forest restoration',
-      image: {
-        $type: 'app.certified.feed.beta.defs#blobImage',
-        did: actorDid,
-        cid,
-        mimeType: 'image/png',
-        size: 128,
-      },
+      image: protocolValue(smallImage()),
       createdAt,
       startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-06-01T00:00:00.000Z',
@@ -549,7 +544,6 @@ describe('feed-card view builders', () => {
       expect(
         buildFeedItemView(
           validated(kind, 'org.hypercerts.collection', raw),
-          { sourceDid: actorDid },
         ),
       ).toEqual(expected)
     }
@@ -561,7 +555,7 @@ describe('feed-card view builders', () => {
       'org.hypercerts.collection',
       {
         ...records.collection,
-        avatar: largeImage({ ref: { $link: cid } }),
+        avatar: largeImage({ ref: { $link: blobCid } }),
         banner: largeImage(),
       },
     )
@@ -575,15 +569,11 @@ describe('feed-card view builders', () => {
       },
     )
 
-    expect(buildFeedItemView(bannerRecord, { sourceDid: actorDid })).toMatchObject({
+    expect(buildFeedItemView(bannerRecord)).toMatchObject({
       title: 'Watershed projects',
-      image: {
-        $type: 'app.certified.feed.beta.defs#blobImage',
-        did: actorDid,
-        cid: secondCid,
-      },
+      image: protocolValue(largeImage()),
     })
-    expect(buildFeedItemView(legacyRecord, { sourceDid: actorDid })).toEqual({
+    expect(buildFeedItemView(legacyRecord)).toEqual({
       $type: 'app.certified.feed.beta.defs#collectionView',
       title: 'Watershed projects',
       createdAt,
@@ -599,18 +589,17 @@ describe('feed-card view builders', () => {
     )
 
     expect(
-      buildFeedItemView(record, { sourceDid: actorDid, endorsedActor }),
+      buildFeedItemView(record, { endorsedActor }),
     ).toEqual({
       $type: 'app.certified.feed.beta.defs#endorsementView',
       subject: endorsedActor,
       createdAt,
     })
     expect(() =>
-      buildFeedItemView(record, { sourceDid: actorDid }),
+      buildFeedItemView(record),
     ).toThrow(/endorsement view invariant failed.*subject summary/i)
     expect(() =>
       buildFeedItemView(record, {
-        sourceDid: actorDid,
         endorsedActor: { ...endorsedActor, did: actorDid },
       }),
     ).toThrow(/endorsement view invariant failed.*subject summary/i)
@@ -643,35 +632,33 @@ describe('feed-card view builders', () => {
       records.hyperboard,
     )
 
-    expect(buildFeedItemView(evaluation, { sourceDid: actorDid })).toEqual({
+    expect(buildFeedItemView(evaluation)).toEqual({
       $type: 'app.certified.feed.beta.defs#evaluationView',
       summary: 'Strong evidence',
       createdAt,
       target: { uri: targetUri, cid },
     })
-    expect(buildFeedItemView(measurement, { sourceDid: actorDid })).toEqual({
+    expect(buildFeedItemView(measurement)).toEqual({
       $type: 'app.certified.feed.beta.defs#measurementView',
       metric: 'hectares restored',
       createdAt,
       target: { uri: targetUri, cid },
     })
-    expect(buildFeedItemView(hyperboard, { sourceDid: actorDid })).toEqual({
+    expect(buildFeedItemView(hyperboard)).toEqual({
       $type: 'app.certified.feed.beta.defs#hyperboardView',
       createdAt,
     })
 
     for (const view of [
-      buildFeedItemView(evaluation, { sourceDid: actorDid }),
-      buildFeedItemView(measurement, { sourceDid: actorDid }),
-      buildFeedItemView(hyperboard, { sourceDid: actorDid }),
+      buildFeedItemView(evaluation),
+      buildFeedItemView(measurement),
+      buildFeedItemView(hyperboard),
     ]) {
       expect(view).not.toHaveProperty('subject')
       expect(view).not.toHaveProperty('subjects')
       expect(view).not.toHaveProperty('measurements')
     }
-    expect(buildFeedItemView(hyperboard, { sourceDid: actorDid })).not.toHaveProperty(
-      'target',
-    )
+    expect(buildFeedItemView(hyperboard)).not.toHaveProperty('target')
   })
 
   it('selects the first image blob for updates and ignores URIs and non-images', () => {
@@ -689,23 +676,17 @@ describe('feed-card view builders', () => {
           smallBlob('application/pdf'),
           uriImage('https://example.com/arbitrary.png'),
           { $type: 'example.future#attachment', value: 'future' },
-          smallBlob('image/webp', secondCid),
-          smallBlob('image/png', cid),
+          smallBlob('image/webp', secondBlobCid),
+          smallBlob('image/png', blobCid),
         ],
       },
     )
 
-    expect(buildFeedItemView(record, { sourceDid: actorDid })).toEqual({
+    expect(buildFeedItemView(record)).toEqual({
       $type: 'app.certified.feed.beta.defs#updateView',
       title: 'Field report',
       shortDescription: 'Photos and supporting documents',
-      image: {
-        $type: 'app.certified.feed.beta.defs#blobImage',
-        did: actorDid,
-        cid: secondCid,
-        mimeType: 'image/webp',
-        size: 512,
-      },
+      image: protocolValue(smallBlob('image/webp', secondBlobCid)),
       createdAt,
       target: { uri: targetUri, cid },
     })
@@ -774,7 +755,6 @@ describe('feed-card view builders', () => {
           viewType: buildFeedItemView(
             validated(kind, testCase.collection, testCase.value),
             {
-              sourceDid: actorDid,
               ...(subjectActor === undefined
                 ? {}
                 : { endorsedActor: subjectActor }),
@@ -796,7 +776,7 @@ describe('feed-card view builders', () => {
       image: { $type: 'example.future#image', value: 'future' },
     })
 
-    expect(buildFeedItemView(record, { sourceDid: actorDid })).toEqual({
+    expect(buildFeedItemView(record)).toEqual({
       $type: 'app.certified.feed.beta.defs#activityView',
       title: 'Restore the watershed',
       shortDescription: 'Native forest restoration',

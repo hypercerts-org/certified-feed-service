@@ -24,21 +24,29 @@ const stagedLexicons = join(stagingRoot, 'lexicons')
 try {
   await cp(join(repositoryRoot, 'lexicons'), stagedLexicons, { recursive: true })
 
-  // lex build resolves refs from one directory. Stage the exact published URI
-  // fragment without generating unrelated definitions from the dependency.
+  // lex build resolves refs from one directory. Stage only the exact published
+  // Hypercerts definitions referenced by the feed wire contract.
   const hypercertsDefs = JSON.parse(
     await readFile(
       join(hypercertsPackageRoot, 'lexicons/org/hypercerts/defs.json'),
       'utf8',
     ),
   )
+  const requiredHypercertDefs = [
+    'uri',
+    'smallBlob',
+    'smallImage',
+    'largeImage',
+  ]
   if (
     hypercertsDefs.lexicon !== 1 ||
     hypercertsDefs.id !== 'org.hypercerts.defs' ||
-    hypercertsDefs.defs?.uri === undefined
+    requiredHypercertDefs.some(
+      (name) => hypercertsDefs.defs?.[name] === undefined,
+    )
   ) {
     throw new Error(
-      'The installed @hypercerts-org/lexicon package does not expose org.hypercerts.defs#uri in the expected Lexicon v1 document; verify the pinned package version before regenerating feed schemas.',
+      'The installed @hypercerts-org/lexicon package does not expose the org.hypercerts.defs image and blob definitions required by the feed contract; verify the pinned package version before regenerating feed schemas.',
     )
   }
   const destination = join(stagedLexicons, 'org/hypercerts/defs.json')
@@ -49,7 +57,9 @@ try {
       {
         lexicon: hypercertsDefs.lexicon,
         id: hypercertsDefs.id,
-        defs: { uri: hypercertsDefs.defs.uri },
+        defs: Object.fromEntries(
+          requiredHypercertDefs.map((name) => [name, hypercertsDefs.defs[name]]),
+        ),
       },
       null,
       2,

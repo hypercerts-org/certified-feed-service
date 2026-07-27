@@ -24,17 +24,6 @@
         }
       }
     },
-    "blobImage": {
-      "type": "object",
-      "required": ["did", "cid"],
-      "description": "A resolvable image blob reference containing its AT Protocol repository DID and CID; the feed service does not fetch blob bytes.",
-      "properties": {
-        "did": { "type": "string", "format": "did" },
-        "cid": { "type": "string", "format": "cid" },
-        "mimeType": { "type": "string", "maxLength": 256 },
-        "size": { "type": "integer", "minimum": 0 }
-      }
-    },
     "actorSummary": {
       "type": "object",
       "required": ["did"],
@@ -45,7 +34,10 @@
         "displayName": { "type": "string", "maxLength": 640, "maxGraphemes": 64 },
         "avatar": {
           "type": "union",
-          "refs": ["org.hypercerts.defs#uri", "#blobImage"]
+          "refs": [
+            "org.hypercerts.defs#uri",
+            "org.hypercerts.defs#smallImage"
+          ]
         }
       }
     },
@@ -57,7 +49,10 @@
         "shortDescription": { "type": "string" },
         "image": {
           "type": "union",
-          "refs": ["org.hypercerts.defs#uri", "#blobImage"]
+          "refs": [
+            "org.hypercerts.defs#uri",
+            "org.hypercerts.defs#smallImage"
+          ]
         },
         "createdAt": { "type": "string", "format": "datetime" },
         "startDate": { "type": "string", "format": "datetime" },
@@ -74,7 +69,11 @@
         "shortDescription": { "type": "string" },
         "image": {
           "type": "union",
-          "refs": ["org.hypercerts.defs#uri", "#blobImage"]
+          "refs": [
+            "org.hypercerts.defs#uri",
+            "org.hypercerts.defs#smallImage",
+            "org.hypercerts.defs#largeImage"
+          ]
         },
         "createdAt": { "type": "string", "format": "datetime" },
         "itemCount": { "type": "integer", "minimum": 0 }
@@ -117,7 +116,10 @@
         "shortDescription": { "type": "string" },
         "image": {
           "type": "union",
-          "refs": ["org.hypercerts.defs#uri", "#blobImage"]
+          "refs": [
+            "org.hypercerts.defs#uri",
+            "org.hypercerts.defs#smallBlob"
+          ]
         },
         "createdAt": { "type": "string", "format": "datetime" },
         "target": { "type": "ref", "ref": "com.atproto.repo.strongRef" }

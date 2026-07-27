@@ -113,7 +113,6 @@ describe('FeedRepository against Postgres', () => {
       organization?: boolean
       handle?: string
       displayName?: string
-      avatarCid?: string
     } = {},
   ): Promise<void> => {
     await admin.query(
@@ -121,17 +120,15 @@ describe('FeedRepository against Postgres', () => {
          did,
          handle,
          display_name,
-         avatar_cid,
          indexed_at,
          is_active,
          is_certified_organization
        )
-       VALUES ($1, $2, $3, $4, NOW(), $5, $6)`,
+       VALUES ($1, $2, $3, NOW(), $4, $5)`,
       [
         did,
         options.handle ?? null,
         options.displayName ?? null,
-        options.avatarCid ?? null,
         options.active ?? true,
         options.organization ?? false,
       ],
@@ -222,41 +219,63 @@ describe('FeedRepository against Postgres', () => {
     expect(metadata.cursor).toBeDefined()
   })
 
-  it('batches complete actor and deterministic Certified-profile contexts', async () => {
-    const actorWithProfile = randomDid()
+  it('batches actor and both deterministic profile contexts', async () => {
+    const actorWithProfiles = randomDid()
     const actorOnly = randomDid()
-    const profileOnly = randomDid()
+    const certifiedOnly = randomDid()
+    const blueskyOnly = randomDid()
     const missingIdentity = randomDid()
     const wrongCollection = randomDid()
     const sourceDidMismatch = randomDid()
-    const staleBody = { marker: 'stale-self-body' }
-    const currentBody = { marker: 'current-self-body' }
-    const profileOnlyBody = { marker: 'profile-only-body' }
-    const selfUri = `at://${actorWithProfile}/app.certified.actor.profile/self`
+    const staleCertified = { marker: 'stale-certified-self' }
+    const currentCertified = { marker: 'current-certified-self' }
+    const blueskyBody = { marker: 'bluesky-self' }
+    const certifiedOnlyBody = { marker: 'certified-only' }
+    const blueskyOnlyBody = { marker: 'bluesky-only' }
+    const certifiedUri =
+      `at://${actorWithProfiles}/app.certified.actor.profile/self`
 
-    await seedActor(actorWithProfile, {
+    await seedActor(actorWithProfiles, {
       handle: 'alice.example',
       displayName: 'Alice',
-      avatarCid: cid,
     })
     await seedActor(actorOnly, { active: false, displayName: 'Bob' })
     await admin.query(
       `INSERT INTO record (uri, cid, did, collection, json, sort_at)
        VALUES ($1, $2, $3, 'app.certified.actor.profile', $4::jsonb, NOW())`,
-      [selfUri, cid, sourceDidMismatch, JSON.stringify(staleBody)],
+      [
+        certifiedUri,
+        cid,
+        sourceDidMismatch,
+        JSON.stringify(staleCertified),
+      ],
     )
     await seedRecord(
-      profileOnly,
+      actorWithProfiles,
+      'app.bsky.actor.profile',
+      'self',
+      blueskyBody,
+      '2026-07-20T00:00:00Z',
+    )
+    await seedRecord(
+      certifiedOnly,
       'app.certified.actor.profile',
       'self',
-      profileOnlyBody,
+      certifiedOnlyBody,
+      '2026-07-20T00:00:00Z',
+    )
+    await seedRecord(
+      blueskyOnly,
+      'app.bsky.actor.profile',
+      'self',
+      blueskyOnlyBody,
       '2026-07-20T00:00:00Z',
     )
     await admin.query(
       `INSERT INTO record (uri, cid, did, collection, json, sort_at)
        VALUES ($1, $2, $3, 'org.hypercerts.collection', $4::jsonb, NOW())`,
       [
-        `at://${wrongCollection}/app.certified.actor.profile/self`,
+        `at://${wrongCollection}/app.bsky.actor.profile/self`,
         cid,
         wrongCollection,
         JSON.stringify({ marker: 'wrong-collection' }),
@@ -266,31 +285,32 @@ describe('FeedRepository against Postgres', () => {
       `UPDATE record
        SET cid = $2, json = $3::jsonb
        WHERE uri = $1`,
-      [selfUri, staleCid, JSON.stringify(currentBody)],
+      [certifiedUri, staleCid, JSON.stringify(currentCertified)],
     )
 
     await expect(
       identities.getByDids([
-        actorWithProfile,
+        actorWithProfiles,
         actorOnly,
-        profileOnly,
+        certifiedOnly,
+        blueskyOnly,
         missingIdentity,
         wrongCollection,
-        actorWithProfile,
+        actorWithProfiles,
       ]),
     ).resolves.toEqual(
       new Map([
         [
-          actorWithProfile,
+          actorWithProfiles,
           {
-            did: actorWithProfile,
+            did: actorWithProfiles,
             actor: {
-              did: actorWithProfile,
+              did: actorWithProfiles,
               handle: 'alice.example',
               displayName: 'Alice',
-              avatarCid: cid,
             },
-            certifiedProfile: currentBody,
+            certifiedProfile: currentCertified,
+            blueskyProfile: blueskyBody,
           },
         ],
         [
@@ -301,11 +321,14 @@ describe('FeedRepository against Postgres', () => {
               did: actorOnly,
               handle: null,
               displayName: 'Bob',
-              avatarCid: null,
             },
           },
         ],
-        [profileOnly, { did: profileOnly, certifiedProfile: profileOnlyBody }],
+        [
+          certifiedOnly,
+          { did: certifiedOnly, certifiedProfile: certifiedOnlyBody },
+        ],
+        [blueskyOnly, { did: blueskyOnly, blueskyProfile: blueskyOnlyBody }],
         [missingIdentity, { did: missingIdentity }],
         [wrongCollection, { did: wrongCollection }],
       ]),

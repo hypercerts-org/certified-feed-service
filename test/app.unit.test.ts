@@ -1,3 +1,4 @@
+import { jsonToLex, type BlobRef } from '@atproto/lex'
 import pino from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -13,6 +14,16 @@ const viewer = 'did:plc:ar7c4by46qjdydhdevvrndac'
 const actor = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 const uri = `at://${actor}/org.hypercerts.claim.activity/3kpn`
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
+const blobCid = 'bafkreiehxpuhtr5f6v4eu4byjo2j7kkrhjvd7psmfu4imnpdzb3bdqb7vy'
+const avatarBlob = jsonToLex(
+  {
+    $type: 'blob',
+    ref: { $link: blobCid },
+    mimeType: 'image/png',
+    size: 128,
+  },
+  { strict: true },
+) as BlobRef
 const sortAt = '2026-07-21T10:00:00.000000Z'
 const logger = pino({ enabled: false })
 
@@ -93,7 +104,14 @@ describe('HTTP application', () => {
               kind: 'cert.create' as const,
               subject: { uri, cid },
               sortAt,
-              actor: { did: actor, handle: 'actor.example' },
+              actor: {
+                did: actor,
+                handle: 'actor.example',
+                avatar: {
+                  $type: 'org.hypercerts.defs#smallImage' as const,
+                  image: avatarBlob,
+                },
+              },
               view: {
                 $type: 'app.certified.feed.beta.defs#activityView' as const,
                 title: 'Restore the watershed',
@@ -121,7 +139,18 @@ describe('HTTP application', () => {
       items: [
         {
           id: uri,
-          actor: { did: actor },
+          actor: {
+            did: actor,
+            avatar: {
+              $type: 'org.hypercerts.defs#smallImage',
+              image: {
+                $type: 'blob',
+                ref: { $link: blobCid },
+                mimeType: 'image/png',
+                size: 128,
+              },
+            },
+          },
           view: { $type: 'app.certified.feed.beta.defs#activityView' },
         },
       ],

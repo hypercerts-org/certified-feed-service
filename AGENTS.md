@@ -1,5 +1,9 @@
 # Certified Feed Service agent guide
 
+## Release status
+
+This service and its `app.certified.feed.beta.*` Lexicons have not had their first public release. Until then, contract changes are pre-release revisions, not breaking changes, and do not require backward compatibility. Update this section when the first public release occurs.
+
 ## Read this first
 
 This repository is a standalone, read-only TypeScript service exposing two unauthenticated POST procedures:
@@ -95,7 +99,7 @@ Ownership:
 - `src/feed/query.ts` owns SQL bind order, execution, metadata/source result mapping, and explicit query invariants.
 - `src/feed/feed-query.sql` owns scope resolution, quality and endorsement rules, project pairing, classification, ordering, keyset pagination, and the conditional post-pagination source join.
 - `src/hydration/service.ts` directly coordinates source validation, omission of invalid selected sources, DID discovery, at most one identity batch, identity projection, total view construction, and output ordering. It must not call the public skeleton service.
-- `src/hydration/identity.ts` owns the combined actor/Certified-profile query and returns one context per requested DID.
+- `src/hydration/identity.ts` owns the combined actor, Certified-profile, and Bluesky-profile query and returns one context per requested DID.
 - `src/hydration/validation.ts` owns strict source/profile validation and stored-actor sanitization. `src/hydration/views.ts` owns pure identity precedence and kind-specific view construction. Neither performs I/O.
 - `src/database.ts` is the only PostgreSQL pool owner.
 - `src/metrics.ts` owns an isolated Prometheus registry with bounded labels.
@@ -116,13 +120,13 @@ Test at the narrowest owner:
 
 ## Canonical and generated files
 
-- `lexicons/**/*.json` is the committed public wire contract.
+- Project-owned `lexicons/app/certified/feed/**/*.json` is the public wire contract. Other committed Lexicons may be external dependencies pinned by `lexicons.json`; refresh them only through `lex install`.
 - `src/lexicons/` is generated and ignored. Never hand-edit or commit it.
 - `src/feed/feed-query.sql` is the canonical feed statement.
 - `dist/` and `coverage/` are generated and ignored.
 - `npm run build` must copy the feed SQL beside `dist/feed/query.js` and smoke-load every production adapter without starting the server.
 
-`@atproto/lex@0.3.0` currently emits explicit `l.typedObject<T>` calls whose optional named-definition fields are incompatible with this repository's `exactOptionalPropertyTypes: true`. `npm run codegen` therefore runs `scripts/fix-generated-feed-defs.mjs`, which removes only those explicit generics from the ignored generated Certified feed definitions. It does not change Lexicon JSON or runtime validators. Keep the workaround narrow. Remove the script and package-script hook only after an upstream generator version supports exact optional properties and `npm run check`, parser contract tests, and `npm run build` pass without it.
+`@atproto/lex@0.3.0` currently emits explicit `l.typedObject<T>` and `l.record<Key, T>` calls whose optional fields are incompatible with this repository's `exactOptionalPropertyTypes: true`. `npm run codegen` therefore runs `scripts/fix-generated-feed-defs.mjs`, which removes only those explicit schema generics from ignored generated definitions. It does not change Lexicon JSON or runtime validators. Keep the workaround narrow. Remove the script and package-script hook only after an upstream generator version supports exact optional properties and `npm run check`, parser contract tests, and `npm run build` pass without it.
 
 A request, response, event kind, view, or public-error change normally requires coordinated updates to Lexicon JSON, domain types, service behavior, tests, and README. A schema-dependent change normally requires SQL, bind mapping, integration-test, and database-contract updates.
 
@@ -143,12 +147,12 @@ Preserve these unless the public contract is intentionally revised and documente
 - Metadata and source-aware pages execute the repository once. Source JSON is joined only after `paged_events`; never carry it through candidate sorting.
 - Feed selection and exact source retrieval share one PostgreSQL statement snapshot. A missing/mismatched final join is an internal invariant failure.
 - Skeleton pages execute one feed query and expose no source value. Hydrated pages with at least one validated source execute one feed/source statement plus one identity query. Empty or entirely invalid selected pages skip identity retrieval. Do not issue extra queries to refill dropped items; query count never grows with page size.
-- Identity retrieval is a later current-state read. It selects only actor DID, handle, display name, avatar CID, and deterministic Certified profile JSON; it never rechecks `actor.is_active`.
+- Identity retrieval is a later current-state read. One batch selects only actor DID, handle, and display name plus deterministic current Certified and Bluesky profile JSON; it never rechecks `actor.is_active`.
 - Every requested identity DID receives a context. Missing storage rows degrade to a DID-only summary; query rejection fails the request.
-- A valid meaningful Certified profile supplies display/avatar fields wholesale while preserving an independently valid stored handle. Otherwise use sanitized stored Bluesky fields, then DID-only fallback. Do not expose provenance.
+- A valid meaningful Certified profile supplies display/avatar fields wholesale while preserving an independently valid stored handle. Otherwise a valid `app.bsky.actor.profile` supplies display/avatar fields wholesale, then sanitized stored actor handle/display fields apply, then DID-only fallback. Do not expose provenance.
 - Known source records validate against `@hypercerts-org/lexicon` exactly `1.0.0`, selected by trusted collection plus feed kind. Keep the compatible direct `@atproto/lexicon` pin and supplemental MIME, integer-size, nonnegative-size, and maximum-size checks.
 - Public hydrated output is view-only. Every returned `app.certified.feed.beta.defs#feedItem` has a validated source and a required view. Drop invalid selected sources without backfilling; a hydrated page may be shorter than `limit`, or empty, while retaining the selected-page cursor. Do not expose source JSON or redundant event-author DID fields.
-- Hydrated items use a direct `feedItem` reference. Feed views and image values remain open unions; preserve their `$type` discriminators and require clients to tolerate unknown future variants.
+- Hydrated items use a direct `feedItem` reference. Feed views and image values remain open unions. Preserve protocol-native `org.hypercerts.defs#uri`, `#smallImage`, `#largeImage`, and `#smallBlob` discriminators and nested AT Protocol blob refs; never add a feed-specific flattened blob descriptor. Require clients to tolerate unknown future variants.
 - All eight current feed kinds map exhaustively to seven known view variants; both collection kinds use `collectionView`. The service owns this kind/view mapping.
 - Endorsement views are total and use the exact account-subject summary.
 - Evaluation, measurement, and update targets are exact strong references only. Do not query target records, discover target identities, build previews, or recurse. Hyperboard has no target in this version.

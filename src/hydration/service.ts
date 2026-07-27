@@ -13,6 +13,7 @@ import type {
 import {
   getEndorsedActorDid,
   sanitizeActorRow,
+  validateBlueskyProfile,
   validateCertifiedProfile,
   validateFeedRecord,
   type ValidatedFeedRecord,
@@ -40,6 +41,7 @@ const requireActorSummary = (
   return buildActorSummary(
     sanitizeActorRow(did, context.actor),
     validateCertifiedProfile(context.certifiedProfile),
+    validateBlueskyProfile(context.blueskyProfile),
   )
 }
 
@@ -109,7 +111,6 @@ export class HydratedFeedService implements HydratedFeedReader {
         sortAt: row.sortValue,
         actor,
         view: buildFeedItemView(record, {
-          sourceDid: row.actorDid,
           ...(endorsedActor === undefined ? {} : { endorsedActor }),
         }),
       }

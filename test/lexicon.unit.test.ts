@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 
+import { jsonToLex } from '@atproto/lex'
 import { describe, expect, it } from 'vitest'
 
 import { FeedErrorCode } from '../src/feed/errors.js'
@@ -29,24 +30,45 @@ const actorDid = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 const uri = `at://${actorDid}/org.hypercerts.claim.activity/3kpn`
 const targetUri = `at://${viewerDid}/org.hypercerts.claim.activity/target`
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
+const blobCid = 'bafkreiehxpuhtr5f6v4eu4byjo2j7kkrhjvd7psmfu4imnpdzb3bdqb7vy'
 const createdAt = '2026-07-21T10:00:00.000Z'
 
 const uriImage = {
   $type: 'org.hypercerts.defs#uri',
   uri: 'https://example.com/image.png',
 }
-const blobImage = {
-  $type: 'app.certified.feed.beta.defs#blobImage',
-  did: actorDid,
-  cid,
-  mimeType: 'image/png',
-  size: 128,
+const blob = jsonToLex(
+  {
+    $type: 'blob',
+    ref: { $link: blobCid },
+    mimeType: 'image/png',
+    size: 128,
+  },
+  { strict: true },
+)
+const blobWith = (
+  overrides: Record<string, unknown>,
+): Record<string, unknown> => ({
+  ...(blob as Record<string, unknown>),
+  ...overrides,
+})
+const smallImage = {
+  $type: 'org.hypercerts.defs#smallImage',
+  image: blob,
+}
+const largeImage = {
+  $type: 'org.hypercerts.defs#largeImage',
+  image: blob,
+}
+const smallBlob = {
+  $type: 'org.hypercerts.defs#smallBlob',
+  blob,
 }
 const actor = {
   did: actorDid,
   handle: 'actor.example',
   displayName: 'Actor',
-  avatar: blobImage,
+  avatar: smallImage,
 }
 const target = { uri: targetUri, cid }
 
@@ -61,7 +83,7 @@ const viewsByKind = {
   'collection.create': {
     $type: 'app.certified.feed.beta.defs#collectionView',
     title: 'Watershed projects',
-    image: blobImage,
+    image: largeImage,
     createdAt,
     itemCount: 3,
   },
@@ -95,7 +117,7 @@ const viewsByKind = {
   'update.create': {
     $type: 'app.certified.feed.beta.defs#updateView',
     title: 'Field report',
-    image: blobImage,
+    image: smallBlob,
     createdAt,
     target,
   },
@@ -230,19 +252,34 @@ describe('feed Lexicon contract', () => {
     }
   })
 
-  it('reuses the shared URI definition through open image unions', () => {
+  it('uses protocol-native Hypercerts variants through open image unions', () => {
     expect(defs).not.toHaveProperty('uriImage')
-    for (const [definition, property] of [
-      ['actorSummary', 'avatar'],
-      ['activityView', 'image'],
-      ['collectionView', 'image'],
-      ['updateView', 'image'],
-    ] as const) {
-      expect(defs[definition].properties[property]).toEqual({
-        type: 'union',
-        refs: ['org.hypercerts.defs#uri', '#blobImage'],
-      })
-    }
+    expect(defs).not.toHaveProperty('blobImage')
+    expect(defs.actorSummary.properties.avatar).toEqual({
+      type: 'union',
+      refs: [
+        'org.hypercerts.defs#uri',
+        'org.hypercerts.defs#smallImage',
+      ],
+    })
+    expect(defs.activityView.properties.image).toEqual(
+      defs.actorSummary.properties.avatar,
+    )
+    expect(defs.collectionView.properties.image).toEqual({
+      type: 'union',
+      refs: [
+        'org.hypercerts.defs#uri',
+        'org.hypercerts.defs#smallImage',
+        'org.hypercerts.defs#largeImage',
+      ],
+    })
+    expect(defs.updateView.properties.image).toEqual({
+      type: 'union',
+      refs: [
+        'org.hypercerts.defs#uri',
+        'org.hypercerts.defs#smallBlob',
+      ],
+    })
   })
 
   it('uses strong-reference targets only on evaluation, measurement, and update views', () => {
@@ -323,7 +360,10 @@ describe('feed Lexicon contract', () => {
         ...feedItem(),
         actor: {
           did: actorDid,
-          avatar: { ...blobImage, cid: 'not-a-cid' },
+          avatar: {
+            $type: 'org.hypercerts.defs#smallImage',
+            image: blobWith({ ref: 'not-a-cid' }),
+          },
         },
       },
     ],
@@ -341,7 +381,13 @@ describe('feed Lexicon contract', () => {
       'negative image size',
       {
         ...feedItem(),
-        actor: { did: actorDid, avatar: { ...blobImage, size: -1 } },
+        actor: {
+          did: actorDid,
+          avatar: {
+            $type: 'org.hypercerts.defs#smallImage',
+            image: blobWith({ size: -1 }),
+          },
+        },
       },
     ],
     [

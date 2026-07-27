@@ -1,5 +1,11 @@
-import { graphemeLen, isCidString, utf8Len } from '@atproto/lex'
-import { jsonToLex } from '@atproto/lexicon'
+import {
+  graphemeLen,
+  isBlobRef,
+  jsonToLex as jsonToProtocolLex,
+  utf8Len,
+  type BlobRef,
+} from '@atproto/lex'
+import { jsonToLex as jsonToLegacyLex } from '@atproto/lexicon'
 import { isValidHandle } from '@atproto/syntax'
 import {
   AppCertifiedActorProfile,
@@ -13,6 +19,7 @@ import {
 } from '@hypercerts-org/lexicon'
 
 import type { FeedKind } from '../feed/types.js'
+import * as AppBskyActorProfile from '../lexicons/app/bsky/actor/profile.js'
 import type { ActorRow, SanitizedActorRow } from './types.js'
 
 const DISPLAY_NAME_MAX_GRAPHEMES = 64
@@ -32,8 +39,25 @@ const SMALL_VIDEO_MAX_BYTES = 20_971_520
 /** Certified profile shape accepted by the authoritative v1.0.0 validator. */
 export type ValidatedCertifiedProfile = AppCertifiedActorProfile.Record
 
+/** Bluesky profile shape accepted by the installed published Lexicon. */
+export type ValidatedBlueskyProfile = AppBskyActorProfile.Main
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
+
+/** Bridges validated legacy BlobRef values into the protocol representation used by generated feed schemas. */
+export const toProtocolBlobRef = (blob: unknown): BlobRef | undefined => {
+  try {
+    if (isBlobRef(blob)) return blob
+    const json = JSON.parse(JSON.stringify(blob)) as Parameters<
+      typeof jsonToProtocolLex
+    >[0]
+    const parsed = jsonToProtocolLex(json, { strict: true })
+    return isBlobRef(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
 
 const hasValidBlobRef = (
   blob: unknown,
@@ -46,7 +70,8 @@ const hasValidBlobRef = (
   typeof blob.size === 'number' &&
   Number.isInteger(blob.size) &&
   blob.size >= 0 &&
-  blob.size <= maxSize
+  blob.size <= maxSize &&
+  toProtocolBlobRef(blob) !== undefined
 
 const hasValidKnownBlob = (
   value: unknown,
@@ -119,12 +144,31 @@ export const validateCertifiedProfile = (
   try {
     // The generated validator requires its own BlobRef class, so the parser and
     // @hypercerts-org/lexicon must resolve the same @atproto/lexicon version.
-    const indexedJson = value as Parameters<typeof jsonToLex>[0]
-    const result = AppCertifiedActorProfile.validateRecord(jsonToLex(indexedJson))
+    const indexedJson = value as Parameters<typeof jsonToLegacyLex>[0]
+    const result = AppCertifiedActorProfile.validateRecord(
+      jsonToLegacyLex(indexedJson),
+    )
     if (!result.success || !hasValidKnownProfileBlobs(result.value)) {
       return undefined
     }
     return result.value
+  } catch {
+    return undefined
+  }
+}
+
+/** Validates an indexed Bluesky profile before any field reaches a public summary. */
+export const validateBlueskyProfile = (
+  value: unknown,
+): ValidatedBlueskyProfile | undefined => {
+  try {
+    const indexedJson = value as Parameters<typeof jsonToProtocolLex>[0]
+    const result = AppBskyActorProfile.$safeParse(
+      jsonToProtocolLex(indexedJson, { strict: true }),
+    )
+    return result.success
+      ? (result.value as unknown as ValidatedBlueskyProfile)
+      : undefined
   } catch {
     return undefined
   }
@@ -158,16 +202,10 @@ export const sanitizeActorRow = (
     utf8Len(row.displayName) <= DISPLAY_NAME_MAX_BYTES
       ? row.displayName
       : undefined
-  const avatarCid =
-    row.avatarCid !== null && isCidString(row.avatarCid)
-      ? row.avatarCid
-      : undefined
-
   return {
     did,
     ...(handle === undefined ? {} : { handle }),
     ...(displayName === undefined ? {} : { displayName }),
-    ...(avatarCid === undefined ? {} : { avatarCid }),
   }
 }
 
@@ -232,7 +270,9 @@ export const validateFeedRecord = (
   if (!hasRecordType(value, collection)) return undefined
 
   try {
-    const parsed = jsonToLex(value as Parameters<typeof jsonToLex>[0])
+    const parsed = jsonToLegacyLex(
+      value as Parameters<typeof jsonToLegacyLex>[0],
+    )
     switch (collection) {
       case 'org.hypercerts.claim.activity': {
         if (kind !== 'cert.create') return undefined

@@ -23,7 +23,6 @@ record.subject_did         text
 actor.did                  text
 actor.handle               text
 actor.display_name         text
-actor.avatar_cid           text
 actor.is_active            boolean
 actor.is_certified_organization boolean
 
@@ -44,6 +43,7 @@ Postgres 16+ is required because createdAt ordering uses `pg_input_is_valid` bef
 ```text
 app.certified.graph.follow
 app.certified.actor.profile
+app.bsky.actor.profile
 org.hypercerts.claim.activity
 org.hypercerts.collection
 org.hypercerts.context.evaluation
@@ -55,7 +55,7 @@ app.certified.badge.definition
 app.certified.badge.response
 ```
 
-Missing source-event rows produce a smaller feed. Missing actor or Certified profile rows do not remove selected items; hydration falls back to stored actor fields or a DID-only summary. Missing rows do not make readiness fail, and readiness does not verify schema shape or ingestion completeness.
+Missing source-event rows produce a smaller feed. Missing identity rows do not remove selected items: hydration prefers a meaningful valid Certified profile, then a valid Bluesky profile, then stored actor handle/display fields, then a DID-only summary. Missing rows do not make readiness fail, and readiness does not verify schema shape or ingestion completeness.
 
 ## Query ownership
 
@@ -80,9 +80,11 @@ Hydration validates each selected source against the trusted collection and feed
 
 Feed selection and exact source retrieval share one PostgreSQL statement snapshot. A selected source row that does not match the final URI, CID, and collection is an internal query invariant failure rather than a degradable public data state.
 
-`src/hydration/identity.ts` resolves actor and Certified-profile identity data in one parameterized current-state batch through the same bounded, read-only pool. It starts from the deduplicated requested DIDs, left-joins `actor` for only `did`, `handle`, `display_name`, and `avatar_cid`, and left-joins `record` at each deterministic `at://<did>/app.certified.actor.profile/self` URI with the exact `app.certified.actor.profile` collection. It does not read or re-check `actor.is_active`, select profiles by `record.did`, or require a feed CID.
+`src/hydration/identity.ts` resolves actor, Certified-profile, and Bluesky-profile identity data in one parameterized current-state batch through the same bounded, read-only pool. It starts from the deduplicated requested DIDs, left-joins `actor` for only `did`, `handle`, and `display_name`, then independently left-joins `record` at each deterministic `at://<did>/app.certified.actor.profile/self` and `at://<did>/app.bsky.actor.profile/self` URI with the exact corresponding collection. It does not read or re-check `actor.is_active`, select profiles by `record.did`, or require a feed CID.
 
-Only event actors and endorsement subjects from validated selected sources enter the identity batch. A page with no validated sources skips identity retrieval. The identity batch returns one context for every requested DID. Missing actor rows, Certified profiles, or both are degradable data; raw profile JSON remains untrusted until TypeScript validation succeeds. A rejected identity query still fails the request rather than returning partial contexts. Identity retrieval is a later current-state read and is not part of the feed selection/source statement snapshot.
+Only event actors and endorsement subjects from validated selected sources enter the identity batch. A page with no validated sources skips identity retrieval. The identity batch returns one context for every requested DID. Missing actor rows or either profile are degradable data; raw profile JSON remains untrusted until its corresponding generated validator succeeds. A valid meaningful Certified profile supplies display/avatar fields wholesale, otherwise a valid Bluesky profile does, otherwise sanitized stored actor handle/display fields apply. Bluesky avatars are exposed as protocol-native `org.hypercerts.defs#smallImage` wrappers around their validated blob. A rejected identity query still fails the request rather than returning partial contexts. Identity retrieval is a later current-state read and is not part of the feed selection/source statement snapshot.
+
+The identity batch is DID-count-bounded but not byte-bounded. Reading both current profile JSON documents can increase PostgreSQL transfer, process memory, and validation work; neither source JSON body is exposed publicly.
 
 ## Active label semantics
 
@@ -144,6 +146,6 @@ Use production-shaped counts and the worst allowed 500-account scope. Capture bo
 - evaluator award and response probes;
 - active quality-label lookups;
 - whether the source JSON join remains after pagination instead of widening candidate sorting;
-- deterministic profile-URI and actor joins for a full identity batch.
+- both deterministic profile-URI joins and the actor join for a full identity batch.
 
 Do not add an index from this repository. Query-plan evidence should result in a Magic Indexer migration because Magic Indexer owns this schema.
