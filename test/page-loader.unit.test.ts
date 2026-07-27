@@ -16,7 +16,7 @@ const actor = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 const baseUri = `at://${actor}/org.hypercerts.claim.activity/`
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 const expectedCursor =
-  'eyJ2ZXJzaW9uIjoyLCJ2YWx1ZSI6IjIwMjYtMDctMjFUMTA6MDA6MDIuMDAwMDAwWiIsInVyaSI6ImF0Oi8vZGlkOnBsYzpld3ZpN254enlvdW42emh4cmhzNjRvaXovb3JnLmh5cGVyY2VydHMuY2xhaW0uYWN0aXZpdHkvMiJ9'
+  'eyJ2ZXJzaW9uIjoxLCJ2YWx1ZSI6IjIwMjYtMDctMjFUMTA6MDA6MDIuMDAwMDAwWiIsInVyaSI6ImF0Oi8vZGlkOnBsYzpld3ZpN254enlvdW42emh4cmhzNjRvaXovb3JnLmh5cGVyY2VydHMuY2xhaW0uYWN0aXZpdHkvMiJ9'
 
 const metadataRow = (suffix: string, sortValue: string) => ({
   uri: `${baseUri}${suffix}`,
