@@ -124,30 +124,15 @@ export type FeedItemView =
   | HyperboardFeedView
   | UpdateFeedView
 
-/** Availability of the validated source view for one hydrated item. */
-export type RecordState = 'available' | 'invalid'
-
-/** Metadata and event-author identity shared by every hydrated feed item. */
-export interface HydratedFeedItemBase {
+/** View-only hydrated item built from one validated source record. */
+export interface HydratedFeedItem {
   readonly id: string
   readonly kind: FeedKind
   readonly subject: FeedSubject
   readonly sortAt: string
   readonly actor: ActorSummary
+  readonly view: FeedItemView
 }
-
-/** View-only hydrated item; valid sources always carry a view. */
-export type HydratedFeedItem =
-  | (HydratedFeedItemBase & {
-      readonly $type: 'app.certified.feed.beta.defs#availableFeedItem'
-      readonly recordState: 'available'
-      readonly view: FeedItemView
-    })
-  | (HydratedFeedItemBase & {
-      readonly $type: 'app.certified.feed.beta.defs#invalidFeedItem'
-      readonly recordState: 'invalid'
-      readonly view?: never
-    })
 
 /** Public response body projected by the hydrated feed service. */
 export interface GetHydratedFeedOutput {

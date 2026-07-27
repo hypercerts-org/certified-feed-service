@@ -76,11 +76,13 @@ Only fixed collection and event-kind constants appear in SQL text. Every request
 
 Source-aware pages count-bound selected rows to `limit + 1` (at most 51), but they do not byte-bound source JSON. Large indexed records can increase PostgreSQL transfer, process memory, validation work, and latency. Source JSON remains internal and is never serialized in the view-only hydrated response.
 
+Hydration validates each selected source against the trusted collection and feed kind. A source that fails validation is omitted without a refill query. Cursor advancement remains based on the selected source page, so the hydrated response may contain fewer than `limit` items, or no items, while still returning a next-page cursor.
+
 Feed selection and exact source retrieval share one PostgreSQL statement snapshot. A selected source row that does not match the final URI, CID, and collection is an internal query invariant failure rather than a degradable public data state.
 
 `src/hydration/identity.ts` resolves actor and Certified-profile identity data in one parameterized current-state batch through the same bounded, read-only pool. It starts from the deduplicated requested DIDs, left-joins `actor` for only `did`, `handle`, `display_name`, and `avatar_cid`, and left-joins `record` at each deterministic `at://<did>/app.certified.actor.profile/self` URI with the exact `app.certified.actor.profile` collection. It does not read or re-check `actor.is_active`, select profiles by `record.did`, or require a feed CID.
 
-The identity batch returns one context for every requested DID. Missing actor rows, Certified profiles, or both are degradable data; raw profile JSON remains untrusted until TypeScript validation succeeds. A rejected identity query still fails the request rather than returning partial contexts. Identity retrieval is a later current-state read and is not part of the feed selection/source statement snapshot.
+Only event actors and endorsement subjects from validated selected sources enter the identity batch. A page with no validated sources skips identity retrieval. The identity batch returns one context for every requested DID. Missing actor rows, Certified profiles, or both are degradable data; raw profile JSON remains untrusted until TypeScript validation succeeds. A rejected identity query still fails the request rather than returning partial contexts. Identity retrieval is a later current-state read and is not part of the feed selection/source statement snapshot.
 
 ## Active label semantics
 

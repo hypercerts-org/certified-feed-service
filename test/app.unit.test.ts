@@ -89,14 +89,11 @@ describe('HTTP application', () => {
         return {
           items: [
             {
-              $type:
-                'app.certified.feed.beta.defs#availableFeedItem' as const,
               id: uri,
               kind: 'cert.create' as const,
               subject: { uri, cid },
               sortAt,
               actor: { did: actor, handle: 'actor.example' },
-              recordState: 'available' as const,
               view: {
                 $type: 'app.certified.feed.beta.defs#activityView' as const,
                 title: 'Restore the watershed',
@@ -123,10 +120,8 @@ describe('HTTP application', () => {
     await expect(response.json()).resolves.toMatchObject({
       items: [
         {
-          $type: 'app.certified.feed.beta.defs#availableFeedItem',
           id: uri,
           actor: { did: actor },
-          recordState: 'available',
           view: { $type: 'app.certified.feed.beta.defs#activityView' },
         },
       ],
@@ -272,13 +267,16 @@ describe('HTTP application', () => {
         getFeed: vi.fn(async () => ({
           items: [
             {
-              $type: 'app.certified.feed.beta.defs#invalidFeedItem' as const,
               id: 'not-an-at-uri',
               kind: 'cert.create' as const,
               subject: { uri: 'bad', cid: 'bad' },
               sortAt: 'not-a-date',
               actor: { did: 'not-a-did' },
-              recordState: 'invalid' as const,
+              view: {
+                $type: 'app.certified.feed.beta.defs#activityView' as const,
+                title: 'Invalid response fixture',
+                locationCount: 0,
+              },
             },
           ],
         })),

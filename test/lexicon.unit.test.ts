@@ -101,16 +101,14 @@ const viewsByKind = {
   },
 } as const
 
-const availableItem = (
+const feedItem = (
   kind: keyof typeof viewsByKind = 'cert.create',
 ): Record<string, unknown> => ({
-  $type: 'app.certified.feed.beta.defs#availableFeedItem',
   id: uri,
   kind,
   subject: { uri, cid },
   sortAt: createdAt,
   actor,
-  recordState: 'available',
   view: viewsByKind[kind],
 })
 
@@ -192,28 +190,21 @@ describe('feed Lexicon contract', () => {
     }
   })
 
-  it('defines open available and invalid hydrated item variants', () => {
+  it('defines one hydrated feed item with a required open view', () => {
     expect(hydratedMain.output.schema.properties.items.items).toEqual({
-      type: 'union',
-      refs: [
-        'app.certified.feed.beta.defs#availableFeedItem',
-        'app.certified.feed.beta.defs#invalidFeedItem',
-      ],
+      type: 'ref',
+      ref: 'app.certified.feed.beta.defs#feedItem',
     })
-    expect(defs.availableFeedItem.required).toEqual([
+    expect(defs.feedItem.required).toEqual([
       'id',
       'kind',
       'subject',
       'sortAt',
       'actor',
-      'recordState',
       'view',
     ])
-    expect(defs.availableFeedItem.properties.recordState.const).toBe(
-      'available',
-    )
-    expect(defs.availableFeedItem.properties.view).not.toHaveProperty('closed')
-    expect(defs.availableFeedItem.properties.view.refs).toEqual([
+    expect(defs.feedItem.properties.view).not.toHaveProperty('closed')
+    expect(defs.feedItem.properties.view.refs).toEqual([
       '#activityView',
       '#collectionView',
       '#endorsementView',
@@ -222,24 +213,14 @@ describe('feed Lexicon contract', () => {
       '#hyperboardView',
       '#updateView',
     ])
-    expect(defs.invalidFeedItem.required).toEqual([
-      'id',
-      'kind',
-      'subject',
-      'sortAt',
-      'actor',
-      'recordState',
-    ])
-    expect(defs.invalidFeedItem.properties.recordState.const).toBe('invalid')
-    expect(defs.invalidFeedItem.properties).not.toHaveProperty('view')
+    expect(defs).not.toHaveProperty('availableFeedItem')
+    expect(defs).not.toHaveProperty('invalidFeedItem')
     expect(defs).not.toHaveProperty('hydratedFeedItem')
 
-    const serialized = JSON.stringify({
-      available: defs.availableFeedItem,
-      invalid: defs.invalidFeedItem,
-    })
+    const serialized = JSON.stringify(defs.feedItem)
     for (const forbidden of [
       'record',
+      'recordState',
       'profileSource',
       'actorDid',
       'notFound',
@@ -274,26 +255,17 @@ describe('feed Lexicon contract', () => {
     expect(defs.hyperboardView.properties).not.toHaveProperty('target')
   })
 
-  it('accepts both image variants, all seven views across eight kinds, and invalid items', () => {
+  it('accepts both image variants and all seven views across eight kinds', () => {
     const items = Object.keys(viewsByKind).map((kind) =>
-      availableItem(kind as keyof typeof viewsByKind),
+      feedItem(kind as keyof typeof viewsByKind),
     )
-    items.push({
-      $type: 'app.certified.feed.beta.defs#invalidFeedItem',
-      id: uri,
-      kind: 'collection.create',
-      subject: { uri, cid },
-      sortAt: createdAt,
-      actor: { did: actorDid, avatar: uriImage },
-      recordState: 'invalid',
-    })
 
     expect(() =>
       hydratedOutput.schema.$parse({ items, cursor: 'opaque-cursor' }),
     ).not.toThrow()
   })
 
-  it('accepts unknown future image, view, and item variants through open unions', () => {
+  it('accepts unknown future image and view variants through open unions', () => {
     const unknownImage = {
       $type: 'example.feed#unknownImage',
       uri: 'https://example.com/future-image.png',
@@ -302,21 +274,20 @@ describe('feed Lexicon contract', () => {
       hydratedOutput.schema.$parse({
         items: [
           {
-            ...availableItem(),
+            ...feedItem(),
             actor: { did: actorDid, avatar: unknownImage },
           },
           {
-            ...availableItem(),
+            ...feedItem(),
             view: {
               ...viewsByKind['cert.create'],
               image: unknownImage,
             },
           },
           {
-            ...availableItem(),
+            ...feedItem(),
             view: { $type: 'example.feed#unknownView' },
           },
-          { $type: 'example.feed#unknownItem' },
         ],
       }),
     ).not.toThrow()
@@ -325,39 +296,31 @@ describe('feed Lexicon contract', () => {
   it.each([
     [
       'missing view discriminator',
-      { ...availableItem(), view: { title: 'Missing type', locationCount: 0 } },
+      { ...feedItem(), view: { title: 'Missing type', locationCount: 0 } },
     ],
     [
-      'missing required available view',
+      'missing required view',
       (() => {
-        const item = availableItem()
+        const item = feedItem()
         delete item.view
-        return item
-      })(),
-    ],
-    [
-      'missing item discriminator',
-      (() => {
-        const item = availableItem()
-        delete item.$type
         return item
       })(),
     ],
     [
       'missing image discriminator',
       {
-        ...availableItem(),
+        ...feedItem(),
         actor: {
           did: actorDid,
           avatar: { uri: 'https://example.com/image.png' },
         },
       },
     ],
-    ['malformed actor DID', { ...availableItem(), actor: { did: 'not-a-did' } }],
+    ['malformed actor DID', { ...feedItem(), actor: { did: 'not-a-did' } }],
     [
       'malformed blob CID',
       {
-        ...availableItem(),
+        ...feedItem(),
         actor: {
           did: actorDid,
           avatar: { ...blobImage, cid: 'not-a-cid' },
@@ -367,7 +330,7 @@ describe('feed Lexicon contract', () => {
     [
       'malformed image URI',
       {
-        ...availableItem(),
+        ...feedItem(),
         actor: {
           did: actorDid,
           avatar: { ...uriImage, uri: 'not a URI' },
@@ -377,21 +340,20 @@ describe('feed Lexicon contract', () => {
     [
       'negative image size',
       {
-        ...availableItem(),
+        ...feedItem(),
         actor: { did: actorDid, avatar: { ...blobImage, size: -1 } },
       },
     ],
     [
       'malformed target reference',
       {
-        ...availableItem('evaluation.create'),
+        ...feedItem('evaluation.create'),
         view: {
           ...viewsByKind['evaluation.create'],
           target: { uri: 'not-an-at-uri', cid: 'not-a-cid' },
         },
       },
     ],
-    ['unknown record state', { ...availableItem(), recordState: 'notFound' }],
   ])('rejects %s', (_label, item) => {
     expect(() => hydratedOutput.schema.$parse({ items: [item] })).toThrow()
   })

@@ -120,7 +120,6 @@ const allContexts = (): ReadonlyMap<string, ActorContext> =>
         },
       },
     ],
-    [invalidAuthorDid, { did: invalidAuthorDid }],
     [endorsedDid, { did: endorsedDid }],
   ])
 
@@ -162,7 +161,7 @@ const populatedPage = (): InternalFeedPage<InternalSourceFeedRow> => ({
 })
 
 describe('HydratedFeedService', () => {
-  it('loads once, batches all identities once, and preserves order and cursor', async () => {
+  it('loads once, drops invalid sources, batches valid identities once, and preserves order and cursor', async () => {
     const pages = new FakePages(populatedPage())
     const identities = new FakeIdentities(allContexts())
     const service = new HydratedFeedService(pages, identities)
@@ -171,17 +170,13 @@ describe('HydratedFeedService', () => {
     const output = await service.getFeed(input)
 
     expect(pages.calls).toEqual([{ input, mode: 'with-source' }])
-    expect(identities.calls).toEqual([
-      [authorDid, invalidAuthorDid, endorsedDid],
-    ])
+    expect(identities.calls).toEqual([[authorDid, endorsedDid]])
     expect(output.cursor).toBe(cursor)
     expect(output.items.map((item) => item.id)).toEqual([
       activityUri,
-      invalidUri,
       endorsementUri,
     ])
     expect(output.items[0]).toEqual({
-      $type: 'app.certified.feed.beta.defs#availableFeedItem',
       id: activityUri,
       kind: 'cert.create',
       subject: { uri: activityUri, cid },
@@ -191,7 +186,6 @@ describe('HydratedFeedService', () => {
         handle: 'author.example',
         displayName: 'Certified Author',
       },
-      recordState: 'available',
       view: {
         $type: 'app.certified.feed.beta.defs#activityView',
         title: 'Restore the watershed',
@@ -200,20 +194,9 @@ describe('HydratedFeedService', () => {
         locationCount: 0,
       },
     })
-    expect(output.items[1]).toEqual({
-      $type: 'app.certified.feed.beta.defs#invalidFeedItem',
-      id: invalidUri,
-      kind: 'collection.create',
-      subject: { uri: invalidUri, cid },
-      sortAt: '2026-07-20T00:00:02.000000Z',
-      actor: { did: invalidAuthorDid },
-      recordState: 'invalid',
-    })
-    expect(output.items[2]).toMatchObject({
-      $type: 'app.certified.feed.beta.defs#availableFeedItem',
+    expect(output.items[1]).toMatchObject({
       id: endorsementUri,
       actor: { did: authorDid },
-      recordState: 'available',
       view: {
         $type: 'app.certified.feed.beta.defs#endorsementView',
         subject: { did: endorsedDid },
@@ -221,11 +204,12 @@ describe('HydratedFeedService', () => {
     })
 
     for (const item of output.items) {
+      expect(item).not.toHaveProperty('$type')
       expect(item).not.toHaveProperty('record')
+      expect(item).not.toHaveProperty('recordState')
       expect(item).not.toHaveProperty('actorDid')
       expect(item.actor).not.toHaveProperty('profileSource')
     }
-    expect(output.items[1]).not.toHaveProperty('view')
   })
 
   it('returns target references without discovering or reading target identities', async () => {
@@ -263,13 +247,37 @@ describe('HydratedFeedService', () => {
 
     expect(identities.calls).toEqual([[authorDid]])
     expect(output.items[0]).toMatchObject({
-      $type: 'app.certified.feed.beta.defs#availableFeedItem',
-      recordState: 'available',
       view: {
         $type: 'app.certified.feed.beta.defs#measurementView',
         target: { uri: targetUri, cid },
       },
     })
+  })
+
+  it('drops an entirely invalid selected page, skips identities, and preserves its cursor bytes', async () => {
+    const pages = new FakePages({
+      rows: [
+        sourceRow({
+          uri: invalidUri,
+          actorDid: invalidAuthorDid,
+          collection: 'org.hypercerts.collection',
+          kind: 'collection.create',
+          sourceValue: {
+            $type: 'org.hypercerts.collection',
+            createdAt,
+          },
+        }),
+      ],
+      cursor,
+    })
+    const identities = new FakeIdentities(new Map())
+    const service = new HydratedFeedService(pages, identities)
+
+    await expect(service.getFeed({ viewerDid })).resolves.toEqual({
+      items: [],
+      cursor,
+    })
+    expect(identities.calls).toEqual([])
   })
 
   it('skips identity retrieval for an empty page and preserves its cursor bytes', async () => {

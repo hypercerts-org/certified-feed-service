@@ -79,7 +79,7 @@ src/server.ts
   -> FeedPageLoader.loadPage(with-source)
   -> FeedRepository
   -> src/feed/feed-query.sql, includeSource=true
-  -> validateFeedRecord()
+  -> validateFeedRecord(), dropping invalid selected sources
   -> IdentityReader.getByDids()
   -> validateCertifiedProfile() / sanitizeActorRow()
   -> buildActorSummary() / buildFeedItemView()
@@ -94,7 +94,7 @@ Ownership:
 - `src/feed/page-loader.ts` owns request normalization, cursor decoding, repository execution/timing, scope-cap enforcement, `limit + 1` trimming, result metrics, and next-cursor creation for both endpoints.
 - `src/feed/query.ts` owns SQL bind order, execution, metadata/source result mapping, and explicit query invariants.
 - `src/feed/feed-query.sql` owns scope resolution, quality and endorsement rules, project pairing, classification, ordering, keyset pagination, and the conditional post-pagination source join.
-- `src/hydration/service.ts` directly coordinates source validation, DID discovery, one identity batch, identity projection, total view construction, and output ordering. It must not call the public skeleton service.
+- `src/hydration/service.ts` directly coordinates source validation, omission of invalid selected sources, DID discovery, at most one identity batch, identity projection, total view construction, and output ordering. It must not call the public skeleton service.
 - `src/hydration/identity.ts` owns the combined actor/Certified-profile query and returns one context per requested DID.
 - `src/hydration/validation.ts` owns strict source/profile validation and stored-actor sanitization. `src/hydration/views.ts` owns pure identity precedence and kind-specific view construction. Neither performs I/O.
 - `src/database.ts` is the only PostgreSQL pool owner.
@@ -139,16 +139,16 @@ Preserve these unless the public contract is intentionally revised and documente
 - Evaluator expansion and visible endorsement events use the same account-subject, self-endorsement, exact definition URI/CID, badge type, allowed-issuer, and latest exact response rules. Do not use `endorsement_edge`.
 - Project/activity pairing happens before kind filtering and pagination. It requires the same actor, exact activity URI/CID, and a `sort_at` gap strictly below 60 seconds. Paired activities remain suppressed across pages.
 - Ordering is effective timestamp descending, URI descending. Keep `pg_input_is_valid` before casting untrusted `createdAt` text.
-- Cursor v2 is unpadded base64url JSON with exactly `{ version: 2, value, uri }`. It stores the last emitted row. Ordering, formatting, tie-break, and cursor payload are one contract.
+- Cursor v2 is unpadded base64url JSON with exactly `{ version: 2, value, uri }`. It stores the last selected source row before hydration. Ordering, formatting, tie-break, and cursor payload are one contract; dropping invalid hydrated sources must not change cursor advancement.
 - Metadata and source-aware pages execute the repository once. Source JSON is joined only after `paged_events`; never carry it through candidate sorting.
 - Feed selection and exact source retrieval share one PostgreSQL statement snapshot. A missing/mismatched final join is an internal invariant failure.
-- Skeleton pages execute one feed query and expose no source value. Non-empty hydrated pages execute one feed/source statement plus one identity query. Empty hydrated pages skip identity retrieval. Query count never grows with page size.
+- Skeleton pages execute one feed query and expose no source value. Hydrated pages with at least one validated source execute one feed/source statement plus one identity query. Empty or entirely invalid selected pages skip identity retrieval. Do not issue extra queries to refill dropped items; query count never grows with page size.
 - Identity retrieval is a later current-state read. It selects only actor DID, handle, display name, avatar CID, and deterministic Certified profile JSON; it never rechecks `actor.is_active`.
 - Every requested identity DID receives a context. Missing storage rows degrade to a DID-only summary; query rejection fails the request.
 - A valid meaningful Certified profile supplies display/avatar fields wholesale while preserving an independently valid stored handle. Otherwise use sanitized stored Bluesky fields, then DID-only fallback. Do not expose provenance.
 - Known source records validate against `@hypercerts-org/lexicon` exactly `1.0.0`, selected by trusted collection plus feed kind. Keep the compatible direct `@atproto/lexicon` pin and supplemental MIME, integer-size, nonnegative-size, and maximum-size checks.
-- Public hydrated output is view-only. Known available items use `app.certified.feed.beta.defs#availableFeedItem` and always have a view; known invalid items use `app.certified.feed.beta.defs#invalidFeedItem`, never have a view, and keep page metadata and event-author identity. Do not expose source JSON or redundant event-author DID fields.
-- Hydrated items and available-item views are open unions. Preserve item and view `$type` discriminators, and require clients to tolerate unknown future variants.
+- Public hydrated output is view-only. Every returned `app.certified.feed.beta.defs#feedItem` has a validated source and a required view. Drop invalid selected sources without backfilling; a hydrated page may be shorter than `limit`, or empty, while retaining the selected-page cursor. Do not expose source JSON or redundant event-author DID fields.
+- Hydrated items use a direct `feedItem` reference. Feed views and image values remain open unions; preserve their `$type` discriminators and require clients to tolerate unknown future variants.
 - All eight current feed kinds map exhaustively to seven known view variants; both collection kinds use `collectionView`. The service owns this kind/view mapping.
 - Endorsement views are total and use the exact account-subject summary.
 - Evaluation, measurement, and update targets are exact strong references only. Do not query target records, discover target identities, build previews, or recurse. Hyperboard has no target in this version.

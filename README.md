@@ -60,7 +60,6 @@ Use the same body with `getFeedSkeleton` when a downstream data plane only needs
 {
   "items": [
     {
-      "$type": "app.certified.feed.beta.defs#availableFeedItem",
       "id": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.context.evaluation/3kpn",
       "kind": "evaluation.create",
       "subject": {
@@ -73,7 +72,6 @@ Use the same body with `getFeedSkeleton` when a downstream data plane only needs
         "handle": "evaluator.example",
         "displayName": "Evaluator"
       },
-      "recordState": "available",
       "view": {
         "$type": "app.certified.feed.beta.defs#evaluationView",
         "summary": "Strong evidence",
@@ -88,11 +86,11 @@ Use the same body with `getFeedSkeleton` when a downstream data plane only needs
 }
 ```
 
-Hydrated items are view-only and use an open item union so clients can tolerate future variants:
+Hydrated items are view-only:
 
-- Known `available` items use `$type: app.certified.feed.beta.defs#availableFeedItem`; the selected source validated and the item has a kind-specific `view`.
-- Known `invalid` items use `$type: app.certified.feed.beta.defs#invalidFeedItem`; they retain page metadata and the event-author summary but omit `view`.
-- The nested feed-view union is also open. Clients must tolerate item and view `$type` values they do not recognize.
+- Every returned item has a validated source record and a required kind-specific `view`.
+- Selected source records that fail validation are omitted. The service does not refill the page, so a hydrated page may contain fewer than `limit` items, or no items, while still returning a cursor that advances over the selected source page.
+- The nested feed-view union is open. Clients must tolerate view `$type` values they do not recognize.
 - The response does not expose source JSON or identity provenance.
 - Actor summaries use a valid meaningful Certified profile first, otherwise validated stored Bluesky fields, otherwise the DID alone. A valid stored handle is preserved independently.
 - Evaluation, measurement, and update views may include an exact `{ uri, cid }` target. The source record's authoritative validator validates the strong-reference shape. The service does not query, preview, recursively hydrate, or validate the referenced target record or body.
@@ -136,11 +134,11 @@ effective timestamp DESC, record URI DESC
 
 A valid top-level string `json.createdAt` supplies the effective timestamp. Missing, malformed, non-string, or PostgreSQL-invalid values fall back to `record.sort_at`. The query fetches `limit + 1` events to decide whether to return a next cursor.
 
-The opaque cursor stores the last emitted timestamp and URI. Both endpoints use the same page loader, so ordering and cursor bytes are identical for the same request. Cursor traversal is deterministic for each query but does not provide snapshot isolation across requests.
+The opaque cursor stores the timestamp and URI of the last selected source row before hydration. Both endpoints use the same page loader, so ordering and cursor bytes are identical for the same request. Hydration may omit invalid selected sources without changing cursor advancement. Cursor traversal is deterministic for each query but does not provide snapshot isolation across requests.
 
-For a skeleton request, the service performs one feed query. For a non-empty hydrated request, it performs one feed/source statement plus one identity batch. An empty hydrated page skips identity retrieval. Query count does not grow with page size.
+For a skeleton request, the service performs one feed query. A hydrated page with at least one validated source performs one feed/source statement plus one identity batch. An empty or entirely invalid selected page skips identity retrieval. Query count does not grow with page size, and the service does not issue extra queries to refill items omitted during hydration.
 
-Feed selection and hydrated source retrieval share one PostgreSQL statement snapshot. Identity data is a later current-state read, so actor/profile changes may be reflected after page selection without dropping or reordering the selected event.
+Feed selection and hydrated source retrieval share one PostgreSQL statement snapshot. Identity data is a later current-state read, so actor/profile changes may be reflected after page selection without changing source ordering.
 
 A source-aware query count-bounds selected rows to `limit + 1` (at most 51), but it does not byte-bound their source JSON. Large indexed records can increase PostgreSQL transfer, process memory, validation work, and latency. Source JSON remains internal and is never serialized in the view-only hydrated response.
 

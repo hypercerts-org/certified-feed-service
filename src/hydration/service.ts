@@ -1,4 +1,7 @@
-import type { FeedPageLoader } from '../feed/page-loader.js'
+import type {
+  FeedPageLoader,
+  InternalSourceFeedRow,
+} from '../feed/page-loader.js'
 import type { GetFeedSkeletonInput } from '../feed/types.js'
 import type {
   ActorContext,
@@ -40,6 +43,11 @@ const requireActorSummary = (
   )
 }
 
+interface ValidatedFeedRow {
+  readonly row: InternalSourceFeedRow
+  readonly record: ValidatedFeedRecord
+}
+
 /** Application seam consumed by the hydrated XRPC transport. */
 export interface HydratedFeedReader {
   getFeed(input: GetFeedSkeletonInput): Promise<GetHydratedFeedOutput>
@@ -57,26 +65,26 @@ export class HydratedFeedService implements HydratedFeedReader {
     input: GetFeedSkeletonInput,
   ): Promise<GetHydratedFeedOutput> {
     const page = await this.pages.loadPage(input, 'with-source')
-    if (page.rows.length === 0) {
-      return {
-        items: [],
-        ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
-      }
-    }
-
-    const records: (ValidatedFeedRecord | undefined)[] = []
+    const validatedRows: ValidatedFeedRow[] = []
     const requestedDids = new Set<string>()
     for (const row of page.rows) {
-      requestedDids.add(row.actorDid)
       const record = validateFeedRecord(
         row.kind,
         row.collection,
         row.sourceValue,
       )
-      records.push(record)
-      if (record !== undefined) {
-        const endorsedDid = getEndorsedActorDid(record)
-        if (endorsedDid !== undefined) requestedDids.add(endorsedDid)
+      if (record === undefined) continue
+
+      validatedRows.push({ row, record })
+      requestedDids.add(row.actorDid)
+      const endorsedDid = getEndorsedActorDid(record)
+      if (endorsedDid !== undefined) requestedDids.add(endorsedDid)
+    }
+
+    if (validatedRows.length === 0) {
+      return {
+        items: [],
+        ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
       }
     }
 
@@ -86,34 +94,20 @@ export class HydratedFeedService implements HydratedFeedReader {
       summaries.set(did, requireActorSummary(did, contexts))
     }
 
-    const items: HydratedFeedItem[] = page.rows.map((row, index) => {
+    const items: HydratedFeedItem[] = validatedRows.map(({ row, record }) => {
       const actor = summaries.get(row.actorDid)
       if (actor === undefined || actor.did !== row.actorDid) {
         throw identityInvariantError()
       }
-      const base = {
+      const endorsedDid = getEndorsedActorDid(record)
+      const endorsedActor =
+        endorsedDid === undefined ? undefined : summaries.get(endorsedDid)
+      return {
         id: row.uri,
         kind: row.kind,
         subject: { uri: row.uri, cid: row.cid },
         sortAt: row.sortValue,
         actor,
-      }
-      const record = records[index]
-      if (record === undefined) {
-        return {
-          ...base,
-          $type: 'app.certified.feed.beta.defs#invalidFeedItem',
-          recordState: 'invalid',
-        }
-      }
-
-      const endorsedDid = getEndorsedActorDid(record)
-      const endorsedActor =
-        endorsedDid === undefined ? undefined : summaries.get(endorsedDid)
-      return {
-        ...base,
-        $type: 'app.certified.feed.beta.defs#availableFeedItem',
-        recordState: 'available',
         view: buildFeedItemView(record, {
           sourceDid: row.actorDid,
           ...(endorsedActor === undefined ? {} : { endorsedActor }),

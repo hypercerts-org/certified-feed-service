@@ -123,9 +123,9 @@
         "target": { "type": "ref", "ref": "com.atproto.repo.strongRef" }
       }
     },
-    "availableFeedItem": {
+    "feedItem": {
       "type": "object",
-      "required": ["id", "kind", "subject", "sortAt", "actor", "recordState", "view"],
+      "required": ["id", "kind", "subject", "sortAt", "actor", "view"],
       "description": "A feed event whose indexed source record was validated and projected into a view.",
       "properties": {
         "id": {
@@ -154,7 +154,6 @@
           "description": "Effective timestamp used to order this item."
         },
         "actor": { "type": "ref", "ref": "#actorSummary" },
-        "recordState": { "type": "string", "const": "available" },
         "view": {
           "type": "union",
           "refs": [
@@ -167,40 +166,6 @@
             "#updateView"
           ]
         }
-      }
-    },
-    "invalidFeedItem": {
-      "type": "object",
-      "required": ["id", "kind", "subject", "sortAt", "actor", "recordState"],
-      "description": "A feed event whose indexed source record could not be validated. No view is available.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "format": "at-uri",
-          "description": "Stable event identifier, currently the source record AT URI."
-        },
-        "kind": {
-          "type": "string",
-          "maxLength": 64,
-          "knownValues": [
-            "cert.create",
-            "collection.create",
-            "project.created_with_cert",
-            "evaluation.create",
-            "measurement.create",
-            "hyperboard.create",
-            "update.create",
-            "endorsement.award"
-          ]
-        },
-        "subject": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
-        "sortAt": {
-          "type": "string",
-          "format": "datetime",
-          "description": "Effective timestamp used to order this item."
-        },
-        "actor": { "type": "ref", "ref": "#actorSummary" },
-        "recordState": { "type": "string", "const": "invalid" }
       }
     }
   }

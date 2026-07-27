@@ -86,11 +86,8 @@
             "items": {
               "type": "array",
               "items": {
-                "type": "union",
-                "refs": [
-                  "app.certified.feed.beta.defs#availableFeedItem",
-                  "app.certified.feed.beta.defs#invalidFeedItem"
-                ]
+                "type": "ref",
+                "ref": "app.certified.feed.beta.defs#feedItem"
               }
             },
             "cursor": {
