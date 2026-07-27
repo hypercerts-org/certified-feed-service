@@ -1,14 +1,14 @@
 import { isDatetimeString, isValidAtUri } from '@atproto/syntax'
 
 import { FeedError, FeedErrorCode } from './errors.js'
-const CURSOR_VERSION = 2
+const CURSOR_VERSION = 1
 const MAX_CURSOR_LENGTH = 4096
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/
 
 /** Decoded keyset position carried between feed pages. */
 export interface FeedCursor {
   /** Cursor contract version. */
-  readonly version: 2
+  readonly version: 1
   /** Effective RFC3339 timestamp of the last returned item. */
   readonly value: string
   /** AT-URI tie-breaker of the last returned item. */

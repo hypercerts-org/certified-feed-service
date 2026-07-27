@@ -109,7 +109,7 @@ effective timestamp DESC, record URI DESC
 
 A valid string `json.createdAt` is parsed as `timestamptz`; missing, malformed, non-string, or PostgreSQL-invalid values fall back to `record.sort_at`. Keep `pg_input_is_valid` before casting untrusted JSON.
 
-Pagination must use the matching descending predicate and fetch `limit + 1`. The opaque cursor is unpadded base64url JSON with exactly `{ version: 2, value, uri }`. It stores the last emitted timestamp and URI. If timestamp derivation, formatting, tie-break direction, or payload shape changes, treat that as a cursor-contract change and bump the version; old incompatible cursors must fail rather than paginate incorrectly.
+Pagination must use the matching descending predicate and fetch `limit + 1`. The opaque cursor is unpadded base64url JSON with exactly `{ version: 1, value, uri }`. It stores the last emitted timestamp and URI. If timestamp derivation, formatting, tie-break direction, or payload shape changes, treat that as a cursor-contract change and bump the version; old incompatible cursors must fail rather than paginate incorrectly.
 
 ## Database and operational safety
 

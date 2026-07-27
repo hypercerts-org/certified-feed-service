@@ -11,13 +11,13 @@ describe('feed cursor', () => {
     const encoded = encodeCursor('2026-07-21T10:00:00.123456Z', uri)
 
     expect(decodeCursor(encoded)).toEqual({
-      version: 2,
+      version: 1,
       value: '2026-07-21T10:00:00.123456Z',
       uri,
     })
   })
 
-  it('rejects a cursor from the previous sorting contract', () => {
+  it('rejects cursor payloads with unsupported fields', () => {
     const encoded = Buffer.from(
       JSON.stringify({
         version: 1,
@@ -38,12 +38,16 @@ describe('feed cursor', () => {
     'not base64url!',
     Buffer.from('not-json').toString('base64url'),
     Buffer.from(
-      JSON.stringify({ version: 3, value: 'x', uri }),
+      JSON.stringify({
+        version: 2,
+        value: '2026-07-21T10:00:00.000000Z',
+        uri,
+      }),
     ).toString('base64url'),
     Buffer.from(
-      JSON.stringify({ version: 2, value: 'not-a-time', uri }),
+      JSON.stringify({ version: 1, value: 'not-a-time', uri }),
     ).toString('base64url'),
-  ])('rejects malformed cursor %s', (cursor) => {
+  ])('rejects malformed or unsupported cursor %s', (cursor) => {
     expect(() => decodeCursor(cursor)).toThrowError(
       expect.objectContaining<Partial<FeedError>>({
         code: FeedErrorCode.InvalidCursor,

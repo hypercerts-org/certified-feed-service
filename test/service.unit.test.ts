@@ -55,7 +55,7 @@ describe('FeedService', () => {
     expect(output.items[1]?.subject.uri).toBe(`${baseUri}2`)
     expect(output.cursor).toBeDefined()
     expect(decodeCursor(output.cursor)).toMatchObject({
-      version: 2,
+      version: 1,
       value: '2026-07-21T10:00:02.000000Z',
       uri: `${baseUri}2`,
     })
