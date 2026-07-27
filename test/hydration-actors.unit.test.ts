@@ -477,7 +477,7 @@ describe('buildActorSummary', () => {
     )
 
     expect(buildActorSummary(sanitizeActorRow(didA, actorRow()), uriProfile).avatar).toEqual({
-      $type: 'app.certified.feed.beta.defs#uriImage',
+      $type: 'org.hypercerts.defs#uri',
       uri: 'https://example.com/avatar.png',
     })
     expect(

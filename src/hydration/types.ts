@@ -25,7 +25,7 @@ export interface IdentityReader {
 /** Public-safe image metadata; hydration never fetches or proxies blob bytes. */
 export type ImageReference =
   | {
-      readonly $type: 'app.certified.feed.beta.defs#uriImage'
+      readonly $type: 'org.hypercerts.defs#uri'
       readonly uri: string
     }
   | {

@@ -40,7 +40,7 @@ const imageReference = (
   if (!isObject(value)) return undefined
   if (value.$type === 'org.hypercerts.defs#uri' && typeof value.uri === 'string') {
     return {
-      $type: 'app.certified.feed.beta.defs#uriImage',
+      $type: 'org.hypercerts.defs#uri',
       uri: value.uri,
     }
   }

@@ -535,7 +535,7 @@ describe('feed-card view builders', () => {
       title: 'Watershed projects',
       shortDescription: 'A coordinated portfolio',
       image: {
-        $type: 'app.certified.feed.beta.defs#uriImage',
+        $type: 'org.hypercerts.defs#uri',
         uri: 'https://example.com/avatar.png',
       },
       createdAt,

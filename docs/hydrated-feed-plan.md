@@ -218,10 +218,10 @@ The public Lexicon exposes an open union of known available and invalid item var
 
 An invalid source retains exact page metadata and the event-author summary but has no view. Source JSON stays internal. `actor.did` already carries the event author, so hydrated items do not duplicate it in another field.
 
-Image variants are explicit `$type` unions:
+Image references are open `$type` unions so clients can tolerate future variants:
 
-- URI image: validated URI only;
-- blob image: owner DID, CID, and optional MIME/size descriptor;
+- known URI image: the shared `org.hypercerts.defs#uri` object;
+- known blob image: a feed-owned, resolvable owner DID and CID with optional MIME/size metadata;
 - no blob bytes, proxy URL invention, or download.
 
 ## Source validation and views
@@ -271,7 +271,7 @@ Committed JSON under `lexicons/` defines the wire contract. Both procedures:
 - enforce the 64 KiB request-body limit and malformed-JSON handling;
 - validate generated output inside the expected handler error boundary.
 
-`getFeedSkeleton` remains wire-compatible, including its local typed-definition discriminators. Hydrated image and view unions use explicit `$type` discriminators, and target fields reference `com.atproto.repo.strongRef`.
+`getFeedSkeleton` remains wire-compatible, including its local typed-definition discriminators. Hydrated image and view unions are open and use explicit `$type` discriminators. Known URI images reuse `org.hypercerts.defs#uri`, and target fields reference `com.atproto.repo.strongRef`.
 
 `@atproto/lex@0.3.0` needs the narrow ignored-output workaround documented in `AGENTS.md`. It changes generated TypeScript inference only; it does not change Lexicon JSON or runtime validation.
 

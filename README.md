@@ -96,7 +96,7 @@ Hydrated items are view-only and use an open item union so clients can tolerate 
 - The response does not expose source JSON or identity provenance.
 - Actor summaries use a valid meaningful Certified profile first, otherwise validated stored Bluesky fields, otherwise the DID alone. A valid stored handle is preserved independently.
 - Evaluation, measurement, and update views may include an exact `{ uri, cid }` target. The source record's authoritative validator validates the strong-reference shape. The service does not query, preview, recursively hydrate, or validate the referenced target record or body.
-- Image values are URI or blob descriptors. The service never fetches or proxies bytes.
+- Image values use open unions so clients can tolerate future variants. Known URI images use `org.hypercerts.defs#uri`; known blob images carry the repository DID, CID, and optional MIME/size metadata. The service never fetches or proxies bytes.
 
 ## Request behavior
 
@@ -195,7 +195,7 @@ npm run test:unit
 npm run build
 ```
 
-Committed Lexicon JSON under `lexicons/` is the public wire contract. Generated TypeScript under `src/lexicons/` is ignored and must not be edited or committed. `codegen`, `check`, tests, and build regenerate it. A narrow post-codegen workaround for `@atproto/lex@0.3.0` is documented in `AGENTS.md`.
+Committed Lexicon JSON under `lexicons/` is the public wire contract. Generated TypeScript under `src/lexicons/` is ignored and must not be edited or committed. `codegen`, `check`, tests, and build regenerate it. Codegen stages the canonical `org.hypercerts.defs#uri` fragment from the pinned `@hypercerts-org/lexicon` package so the feed does not commit a duplicate definition. A narrow post-codegen workaround for `@atproto/lex@0.3.0` is documented in `AGENTS.md`.
 
 The canonical feed statement is `src/feed/feed-query.sql`. Development watches it with the TypeScript sources, and build copies it beside `dist/feed/query.js` before smoke-loading production adapters.
 

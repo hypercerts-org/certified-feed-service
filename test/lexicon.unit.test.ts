@@ -32,7 +32,7 @@ const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 const createdAt = '2026-07-21T10:00:00.000Z'
 
 const uriImage = {
-  $type: 'app.certified.feed.beta.defs#uriImage',
+  $type: 'org.hypercerts.defs#uri',
   uri: 'https://example.com/image.png',
 }
 const blobImage = {
@@ -186,6 +186,12 @@ describe('feed Lexicon contract', () => {
     ).not.toThrow()
   })
 
+  it('keeps every union in the public feed Lexicons open', () => {
+    for (const lexicon of [skeletonLexicon, hydratedLexicon, defsLexicon]) {
+      expect(JSON.stringify(lexicon)).not.toContain('"closed":true')
+    }
+  })
+
   it('defines open available and invalid hydrated item variants', () => {
     expect(hydratedMain.output.schema.properties.items.items).toEqual({
       type: 'union',
@@ -243,6 +249,21 @@ describe('feed Lexicon contract', () => {
     }
   })
 
+  it('reuses the shared URI definition through open image unions', () => {
+    expect(defs).not.toHaveProperty('uriImage')
+    for (const [definition, property] of [
+      ['actorSummary', 'avatar'],
+      ['activityView', 'image'],
+      ['collectionView', 'image'],
+      ['updateView', 'image'],
+    ] as const) {
+      expect(defs[definition].properties[property]).toEqual({
+        type: 'union',
+        refs: ['org.hypercerts.defs#uri', '#blobImage'],
+      })
+    }
+  })
+
   it('uses strong-reference targets only on evaluation, measurement, and update views', () => {
     for (const name of ['evaluationView', 'measurementView', 'updateView']) {
       expect(defs[name].properties.target).toEqual({
@@ -272,10 +293,25 @@ describe('feed Lexicon contract', () => {
     ).not.toThrow()
   })
 
-  it('accepts unknown future item and view variants through open unions', () => {
+  it('accepts unknown future image, view, and item variants through open unions', () => {
+    const unknownImage = {
+      $type: 'example.feed#unknownImage',
+      uri: 'https://example.com/future-image.png',
+    }
     expect(() =>
       hydratedOutput.schema.$parse({
         items: [
+          {
+            ...availableItem(),
+            actor: { did: actorDid, avatar: unknownImage },
+          },
+          {
+            ...availableItem(),
+            view: {
+              ...viewsByKind['cert.create'],
+              image: unknownImage,
+            },
+          },
           {
             ...availableItem(),
             view: { $type: 'example.feed#unknownView' },
@@ -314,19 +350,6 @@ describe('feed Lexicon contract', () => {
         actor: {
           did: actorDid,
           avatar: { uri: 'https://example.com/image.png' },
-        },
-      },
-    ],
-    [
-      'unknown image discriminator',
-      {
-        ...availableItem(),
-        actor: {
-          did: actorDid,
-          avatar: {
-            $type: 'example.feed#unknownImage',
-            uri: 'https://example.com/image.png',
-          },
         },
       },
     ],
