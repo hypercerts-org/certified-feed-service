@@ -55,7 +55,7 @@ export interface GetFeedSkeletonInput {
   readonly organizationQuality?: OrganizationQualityPolicy
   /** Requested page size, defaulting to 20 and capped at 50. */
   readonly limit?: number
-  /** Opaque cursor returned by an earlier descending createdAt page. */
+  /** Opaque cursor returned by an earlier descending effective-timestamp page. */
   readonly cursor?: string
   /** Final event-kind filter; omitted or empty means every supported kind. */
   readonly kinds?: readonly string[]

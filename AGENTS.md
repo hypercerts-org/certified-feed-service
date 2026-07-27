@@ -2,7 +2,7 @@
 
 ## Read this first
 
-This repository is a standalone, read-only TypeScript service that exposes `app.certified.feed.beta.getFeedSkeleton` over XRPC. It reads Magic Indexer's current PostgreSQL state and returns exact AT Protocol strong references. It does not ingest, hydrate, authenticate, write records, own migrations, or provide immutable event history.
+This repository is a standalone, read-only TypeScript service that exposes `app.certified.feed.beta.getFeedSkeleton` over XRPC. It reads Hyperindex's current PostgreSQL state and returns exact AT Protocol strong references. It does not ingest, hydrate, authenticate, write records, own migrations, or provide immutable event history.
 
 Use **npm**, not pnpm. `package-lock.json` is authoritative. The package supports Node.js 22+, while CI and Docker use Node.js 24. PostgreSQL 16+ is required.
 
@@ -11,7 +11,7 @@ Before changing feed behavior, read these together:
 - `src/feed/feed-query.sql` — primary behavioral contract
 - `src/feed/query.ts` — SQL bind order and row mapping
 - `test/feed.integration.test.ts` — cross-table and pagination invariants
-- `docs/database-contract.md` — external Magic Indexer schema contract
+- `docs/database-contract.md` — external Hyperindex schema contract
 
 ## Commands
 
@@ -30,13 +30,13 @@ Integration tests require an explicitly chosen, empty, disposable PostgreSQL 16+
 TEST_DATABASE_URL='postgresql://...' npm run test:integration
 ```
 
-To test an externally migrated Magic Indexer schema:
+To test an externally migrated Hyperindex schema:
 
 ```bash
-TEST_DATABASE_URL='postgresql://...' npm run test:integration:magic
+TEST_DATABASE_URL='postgresql://...' npm run test:integration:hyperindex
 ```
 
-Never point either integration command at a shared, staging, or production database. The suite creates contractual tables and test rows but does not drop or truncate existing tables. `test:integration:magic` requires `psql`, verifies the migration versions listed in `scripts/test-magic-schema.sh`, and does not apply migrations.
+Never point either integration command at a shared, staging, or production database. The suite creates contractual tables and test rows but does not drop or truncate existing tables. `test:integration:hyperindex` requires `psql`, verifies the Hyperindex migrations and schema listed in `scripts/test-hyperindex-schema.sh`, and does not apply migrations.
 
 CI runs:
 
@@ -86,16 +86,16 @@ A request, response, event-kind, or public-error change usually requires coordin
 Preserve these unless the public contract is intentionally revised and documented:
 
 - Omitted `authors` resolves the viewer's current `app.certified.graph.follow` records. Explicit `authors` replaces only that base, and `authors: []` means an empty base. Preserve `hasExplicitAuthors` through validation and SQL.
-- Evaluator endorsement subjects are unioned after base-author resolution. The viewer is removed, candidates are deduplicated, known inactive actors are removed, and actors missing from `actor` remain eligible.
+- Evaluator endorsement subjects are unioned after base-author resolution. The viewer is removed and candidates are deduplicated. Do not query actor status: Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, and actors missing from `actor` remain eligible.
 - Deduplicate request lists before enforcing semantic limits. Current limits are 500 explicit authors, 64 evaluators, 16 kinds, 500 resolved authors, and 1–50 page items.
 - Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with `InvalidKind`.
 - Organization-quality policy applies to known certified organizations using only service-configured `TRUSTED_QUALITY_LABELER_DIDS`. Callers never choose label sources.
 - `includeUnrated` applies only when no active trusted quality label exists. An active disallowed label is not unrated.
-- Active quality assertions and negations use source, URI, value, `neg`, `cts`, and `exp` as documented in `docs/database-contract.md`.
+- Organization status comes only from the exact `at://<did>/app.certified.actor.organization/self` record. Active quality assertions and negations are trusted bare-DID, non-CID `external_label` rows as documented in `docs/database-contract.md`; malformed text timestamps are ignored safely.
 - Scope is capped after all unions and membership filtering. Oversized scopes return their count without expanding project or eligible-event record scans, then fail with `FeedScopeTooLarge`; do not silently truncate them.
 - Evaluator expansion and visible endorsement events share the same rules. Require an account subject, no self-endorsement, exact definition URI and CID, `badgeType: endorsement`, allowed-issuer compliance, and the latest subject-authored response targeting the exact award URI and CID. Do not replace this with `endorsement_edge`.
 - Missing `allowedIssuers` permits any issuer. An empty or malformed value permits none.
-- Project/activity pairing happens before kind filtering and pagination. It requires the same actor, an exact activity URI and CID, and a `sort_at` gap strictly below 60 seconds. The collection becomes `project.created_with_cert`; the paired activity stays suppressed across page boundaries.
+- Project/activity pairing happens before kind filtering and pagination. It requires the same actor, an exact activity URI and CID, and an effective timestamp gap strictly below 60 seconds. The collection becomes `project.created_with_cert`; the paired activity stays suppressed across page boundaries.
 - Output `subject` is the exact current `{ uri, cid }` strong reference. `id` currently equals the source URI. Hydration remains downstream.
 - The feed is mutable current state, not a snapshot or event log. Cursor traversal is deterministic for each query but does not provide snapshot isolation across requests.
 
@@ -107,17 +107,17 @@ Ordering and cursor handling are one coupled contract:
 effective timestamp DESC, record URI DESC
 ```
 
-A valid string `json.createdAt` is parsed as `timestamptz`; missing, malformed, non-string, or PostgreSQL-invalid values fall back to `record.sort_at`. Keep `pg_input_is_valid` before casting untrusted JSON.
+The effective timestamp is `COALESCE(record.record_created_at, record.indexed_at)`. Hyperindex materializes valid top-level `createdAt` values and preserves them across updates. Keep `pg_input_is_valid` guards around every cast of untrusted `external_label.cts` and `external_label.exp` text.
 
 Pagination must use the matching descending predicate and fetch `limit + 1`. The opaque cursor is unpadded base64url JSON with exactly `{ version: 1, value, uri }`. It stores the last emitted timestamp and URI. If timestamp derivation, formatting, tie-break direction, or payload shape changes, treat that as a cursor-contract change and bump the version; old incompatible cursors must fail rather than paginate incorrectly.
 
 ## Database and operational safety
 
-Magic Indexer owns the `record`, `actor`, and `label` schema. This repository must not apply migrations, create indexes, refresh materialized views, or write cursor state. Keep every caller-controlled SQL value parameterized. Schema or index changes belong in Magic Indexer and should be justified with production-shaped `EXPLAIN (ANALYZE, BUFFERS)` evidence.
+Hyperindex owns the `record` and `external_label` schema. This repository must not apply migrations, create indexes, refresh materialized views, or write cursor state. Keep every caller-controlled SQL value parameterized. Schema or index changes belong in Hyperindex and should be justified with production-shaped `EXPLAIN (ANALYZE, BUFFERS)` evidence.
 
 Use a deployment role with `SELECT` only. `default_transaction_read_only=on` is defense in depth, not a replacement for grants.
 
-`GET /ready` checks reachability, PostgreSQL 16 timestamp support, and read-only session state. It intentionally does not verify Magic Indexer tables, migration completeness, or ingestion freshness. `GET /health` remains process liveness only.
+`GET /ready` checks reachability, PostgreSQL 16 timestamp support, and read-only session state. It intentionally does not verify Hyperindex tables, migration completeness, external-label subscription health, backfill completion, or ingestion freshness. `GET /health` remains process liveness only.
 
 `REQUEST_TIMEOUT_MS` bounds receiving the HTTP request, not total handler or query duration. Pool acquisition and PostgreSQL statement timeouts are separate controls.
 

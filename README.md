@@ -1,8 +1,8 @@
 # Certified Feed Service
 
-Standalone TypeScript sidecar that reads Magic Indexer's current Postgres state and returns an ordered, paginated Hypercerts feed skeleton.
+Standalone TypeScript sidecar that reads Hyperindex's current PostgreSQL state and returns an ordered, paginated Hypercerts feed skeleton.
 
-The service does not ingest, copy, hydrate, or mutate indexed data. Magic Indexer is a behavioral and database-contract reference only. This repository does not import Magic Indexer code or call its GraphQL API.
+The service does not ingest, copy, hydrate, or mutate indexed data. Hyperindex is the only supported database owner. This service queries its PostgreSQL tables directly; it does not import Hyperindex code, call its GraphQL API, or apply its migrations.
 
 ## Endpoint
 
@@ -47,7 +47,7 @@ Example response:
 }
 ```
 
-The cursor is opaque to callers and is valid only for descending `createdAt` pagination.
+The cursor is opaque to callers and is valid only for descending effective-timestamp pagination.
 
 ## Request behavior
 
@@ -57,8 +57,9 @@ The cursor is opaque to callers and is valid only for descending `createdAt` pag
 - Explicit `authors` replaces only the direct-follow base.
 - `trustedEvaluators` adds subjects of each evaluator's current active endorsement awards.
 - Endorsement definitions without `allowedIssuers` permit any issuer. When present, only listed issuer DIDs qualify; an empty list permits none, and malformed values are ignored safely.
-- The viewer and known inactive actors are removed.
-- Organization-quality policy runs against the final author union before selecting events.
+- The viewer is removed. Hyperindex's identity lifecycle purges source records for explicitly deleted, deactivated, suspended, or taken-down identities; the feed does not query actor status.
+- Organization-quality policy runs against the final author union before selecting events. An organization is detected only by its exact `app.certified.actor.organization/self` record.
+- Trusted organization-quality labels are bare-DID, non-CID subjects from Hyperindex's `external_label` table; record-level and CID-specific labels do not count.
 - Omitted or empty `kinds` includes all supported kinds.
 - Unknown kinds are rejected instead of silently ignored.
 
@@ -79,13 +80,15 @@ Project and activity records fold before kind filtering and pagination. A paired
 
 ## Ordering
 
-The feed always validates and parses a top-level string `json.createdAt` as a timestamp and orders descending. Missing, malformed, or non-string values fall back to `record.sort_at`.
+Hyperindex materializes a valid top-level `json.createdAt` into `record.record_created_at`. The feed orders by `record_created_at`, falling back to `record.indexed_at` when the materialized value is null.
 
 Ordering is:
 
 ```text
-effective timestamp DESC, record URI DESC
+COALESCE(record_created_at, indexed_at) DESC, record URI DESC
 ```
+
+Cursor version 1 stores that effective timestamp and the record URI.
 
 The SQL pipeline classifies and folds all eligible records before kind filtering, keyset filtering, ordering, and `LIMIT`. It fetches `limit + 1` matching events to decide whether a next cursor should be returned.
 
@@ -121,12 +124,15 @@ Example operator setup:
 CREATE ROLE certified_feed_reader LOGIN PASSWORD '<managed-secret>';
 GRANT CONNECT ON DATABASE hyperindex TO certified_feed_reader;
 GRANT USAGE ON SCHEMA public TO certified_feed_reader;
-GRANT SELECT ON TABLE public.record, public.actor, public.label
+GRANT SELECT ON public.record, public.external_label
   TO certified_feed_reader;
-ALTER ROLE certified_feed_reader SET default_transaction_read_only = on;
+ALTER ROLE certified_feed_reader
+  SET default_transaction_read_only = on;
 ```
 
-The service owns no migrations or feed tables. `/ready` checks database reachability, PostgreSQL 16 timestamp validation, and read-only session state; it does not inspect Magic Indexer tables or columns. The feed still requires the documented runtime schema. See [`docs/database-contract.md`](docs/database-contract.md).
+The service owns no migrations or feed tables. `/ready` checks database reachability, PostgreSQL 16 timestamp validation, and read-only session state; it does not inspect Hyperindex tables, migrations, label-subscription health, timestamp-backfill completion, or ingestion freshness. The feed still requires the documented runtime schema. See [`docs/database-contract.md`](docs/database-contract.md).
+
+Before cutover, operators must verify that every trusted quality-labeler DID maps to a healthy, caught-up Hyperindex subscription; the migration-010 `record_created_at` backfill is complete; and Hyperindex's Tap filters/backfill include `org.hyperboards.board`. Live Hyperboard classification remains unvalidated when the target database contains no source Hyperboard records.
 
 ## Development
 
@@ -155,14 +161,14 @@ TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/certified_feed_
 
 The test creates the minimal contractual tables in that disposable database. It does not drop or truncate existing tables, so do not point it at a shared or production database. `npm run test:integration` fails when `TEST_DATABASE_URL` is missing, and the committed CI workflow runs it against Postgres 16.
 
-To verify against Magic Indexer's real migration set, first apply those migrations to an empty disposable database, then run:
+To verify against Hyperindex's real migration set, first let Hyperindex migrate a disposable database that is otherwise empty of application rows, then run:
 
 ```bash
-TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/magic_feed_test' \
-  npm run test:integration:magic
+TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/hyperindex_feed_test' \
+  npm run test:integration:hyperindex
 ```
 
-This compatibility command verifies the required Magic Indexer migration versions before executing the same feed behavior suite. It does not import Magic Indexer code or apply its migrations from this repository.
+This compatibility command requires `psql`, verifies the required Hyperindex migrations, columns, generated `record.rkey`, and external-label active lookup index, then executes the same feed behavior suite. It does not apply Hyperindex migrations.
 
 ## Deployment
 
@@ -176,7 +182,7 @@ docker run --rm -p 3000:3000 \
   certified-feed-service
 ```
 
-Deploy it beside Magic Indexer or Hyperindex with private database networking. It is a separate process and repository, even when both services share a deployment environment.
+Deploy it beside Hyperindex with private database networking. It is a separate process and repository, even when both services share a deployment environment.
 
 Apply per-IP rate limiting at the gateway. The initial public policy is 60 feed requests per minute per client IP with a burst of 20, returning HTTP 429 and `Retry-After` when exceeded. Health, readiness, and metrics should stay on private operator routes and outside that public bucket. Tune the threshold from measured query latency and pool saturation before increasing it. The process bounds request bodies, HTTP request receive time, pool size, connection acquisition, and SQL statement duration. `REQUEST_TIMEOUT_MS` is not an end-to-end handler or database deadline. The process intentionally does not maintain inconsistent per-replica rate-limit state in process.
 

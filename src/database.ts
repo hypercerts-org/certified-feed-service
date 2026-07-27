@@ -66,7 +66,7 @@ export class Database implements DatabaseCompatibilityChecker {
       if (!capability || capability.server_version_num < 160000) {
         return {
           compatible: false,
-          reason: 'Postgres 16 or newer is required for safe createdAt parsing; upgrade the database before starting this service.',
+          reason: 'Postgres 16 or newer is required for safe external-label timestamp parsing; upgrade the database before starting this service.',
         }
       }
       if (!capability.timestamp_validation) {

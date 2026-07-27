@@ -2,7 +2,7 @@ WITH
 -- =============================================================================
 -- Scope resolution
 -- Combine explicit/followed authors with valid DID endorsements from trusted
--- evaluators, then apply actor status and organization-quality policy.
+-- evaluators, then apply Hyperindex organization-quality policy.
 -- =============================================================================
 base_authors AS (
   SELECT explicit.did
@@ -25,7 +25,9 @@ base_authors AS (
 -- This rule is shared by evaluator scope expansion and visible award events.
 -- NOT MATERIALIZED lets PostgreSQL push each consumer's DID/URI filters into it.
 valid_endorsement_awards AS NOT MATERIALIZED (
-  SELECT award.*
+  SELECT
+    award.*,
+    award.json->'subject'->>'did' AS endorsement_subject_did
   FROM record AS award
   JOIN record AS definition
     -- Match the exact definition version referenced by the award.
@@ -57,24 +59,23 @@ valid_endorsement_awards AS NOT MATERIALIZED (
     AND jsonb_typeof(award.json->'subject') = 'object'
     AND award.json->'subject'->>'$type' = 'app.certified.defs#did'
     AND jsonb_typeof(award.json->'subject'->'did') = 'string'
-    AND award.subject_did IS NOT NULL
-    AND char_length(award.subject_did) <= 2048
-    AND award.subject_did ~ '^did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-]$'
+    AND char_length(award.json->'subject'->>'did') <= 2048
+    AND award.json->'subject'->>'did' ~ '^did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-]$'
     -- Self-endorsements neither expand scope nor produce feed events.
-    AND award.did <> award.subject_did
+    AND award.did <> award.json->'subject'->>'did'
     AND COALESCE(
       (
         SELECT response.json->>'response'
         FROM record AS response
         WHERE response.collection = 'app.certified.badge.response'
-          AND response.did = award.subject_did
+          AND response.did = award.json->'subject'->>'did'
           AND response.json->'badgeAward'->>'uri' = award.uri
           AND response.json->'badgeAward'->>'cid' = award.cid
           AND response.json->>'response' IS NOT NULL
           AND response.json->>'response' <> ''
         -- Responses are mutable current state; the latest non-empty response wins.
         ORDER BY
-          response.sort_at DESC NULLS LAST,
+          COALESCE(response.record_created_at, response.indexed_at) DESC,
           response.indexed_at DESC,
           response.uri DESC
         LIMIT 1
@@ -83,7 +84,7 @@ valid_endorsement_awards AS NOT MATERIALIZED (
     ) <> 'rejected'
 ),
 evaluator_endorsements AS (
-  SELECT award.subject_did AS did
+  SELECT award.endorsement_subject_did AS did
   FROM valid_endorsement_awards AS award
   WHERE award.did = ANY($4::text[])
 ),
@@ -97,31 +98,56 @@ requested_scope AS (
   WHERE candidate.did IS NOT NULL
     AND candidate.did <> $1
 ),
-active_scope AS (
-  SELECT requested.did
-  FROM requested_scope AS requested
-  LEFT JOIN actor ON actor.did = requested.did
-  WHERE actor.did IS NULL OR actor.is_active <> false
+-- Hyperindex stores external label timestamps as text. Every cast remains inside
+-- a CASE guard so malformed rows are ignored instead of failing the feed query.
+parsed_quality_labels AS MATERIALIZED (
+  SELECT
+    scoped.did,
+    label.src,
+    label.uri,
+    label.val,
+    label.neg,
+    label.exp,
+    CASE
+      WHEN pg_input_is_valid(label.cts, 'timestamp with time zone')
+        THEN label.cts::timestamptz
+      ELSE NULL
+    END AS cts_at,
+    CASE
+      WHEN label.exp IS NULL THEN NULL
+      WHEN pg_input_is_valid(label.exp, 'timestamp with time zone')
+        THEN label.exp::timestamptz
+      ELSE NULL
+    END AS exp_at,
+    pg_input_is_valid(label.cts, 'timestamp with time zone')
+      AND (
+        label.exp IS NULL
+        OR pg_input_is_valid(label.exp, 'timestamp with time zone')
+      ) AS timestamps_valid
+  FROM requested_scope AS scoped
+  JOIN external_label AS label
+    ON label.uri = scoped.did
+   AND label.cid IS NULL
+   AND label.src = ANY($8::text[])
+   AND label.val = ANY(ARRAY['high-quality', 'standard', 'draft', 'likely-test']::text[])
 ),
 active_quality_labels AS (
-  SELECT scoped.did, asserted.val
-  FROM active_scope AS scoped
-  JOIN label AS asserted
-    ON asserted.uri = 'at://' || scoped.did || '/app.certified.actor.organization/self'
-   AND asserted.src = ANY($8::text[])
-   AND asserted.val = ANY(ARRAY['high-quality', 'standard', 'draft', 'likely-test']::text[])
-   AND asserted.neg = false
-   AND (asserted.exp IS NULL OR asserted.exp > NOW())
-   AND NOT EXISTS (
-     SELECT 1
-     FROM label AS negation
-     WHERE negation.uri = asserted.uri
-       AND negation.src = asserted.src
-       AND negation.val = asserted.val
-       AND negation.neg = true
-       AND (negation.exp IS NULL OR negation.exp > NOW())
-       AND negation.cts >= asserted.cts
-   )
+  SELECT asserted.did, asserted.val
+  FROM parsed_quality_labels AS asserted
+  WHERE asserted.timestamps_valid
+    AND asserted.neg = false
+    AND (asserted.exp IS NULL OR asserted.exp_at > NOW())
+    AND NOT EXISTS (
+      SELECT 1
+      FROM parsed_quality_labels AS negation
+      WHERE negation.uri = asserted.uri
+        AND negation.src = asserted.src
+        AND negation.val = asserted.val
+        AND negation.timestamps_valid
+        AND negation.neg = true
+        AND (negation.exp IS NULL OR negation.exp_at > NOW())
+        AND negation.cts_at >= asserted.cts_at
+    )
 ),
 quality_summary AS (
   SELECT
@@ -132,11 +158,16 @@ quality_summary AS (
 ),
 final_scope AS (
   SELECT scoped.did
-  FROM active_scope AS scoped
-  LEFT JOIN actor ON actor.did = scoped.did
+  FROM requested_scope AS scoped
   LEFT JOIN quality_summary AS quality ON quality.did = scoped.did
   WHERE NOT $5::boolean
-     OR COALESCE(actor.is_certified_organization, false) = false
+     OR NOT EXISTS (
+       SELECT 1
+       FROM record AS organization
+       WHERE organization.uri =
+         'at://' || scoped.did || '/app.certified.actor.organization/self'
+         AND organization.collection = 'app.certified.actor.organization'
+     )
      OR COALESCE(quality.has_allowed, false)
      OR (quality.did IS NULL AND $7::boolean)
 ),
@@ -144,17 +175,22 @@ scope_meta AS (
   SELECT COUNT(*)::integer AS scope_count
   FROM final_scope
 ),
+-- Materializing the bounded scope prevents oversized requests from probing
+-- project or eligible-event records while preserving the exact scope count.
+bounded_scope AS MATERIALIZED (
+  SELECT scoped.did
+  FROM final_scope AS scoped
+  CROSS JOIN scope_meta AS meta
+  WHERE meta.scope_count <= $13::integer
+),
 -- =============================================================================
 -- Project pairing
 -- A collection and its referenced activity become one project-created event
--- when the records belong to the same actor and their sort times are close.
+-- when the records belong to the same actor and effective times are close.
 -- =============================================================================
--- The scope-size gate is intentionally repeated here and in eligible_records:
--- oversized requests still return scope_count but never expand into record scans.
 project_pairs AS (
   SELECT DISTINCT collection_record.uri AS collection_uri, activity.uri AS activity_uri
-  FROM final_scope AS scoped
-  JOIN scope_meta AS meta ON meta.scope_count <= $13::integer
+  FROM bounded_scope AS scoped
   JOIN record AS collection_record
     ON collection_record.did = scoped.did
    AND collection_record.collection = 'org.hypercerts.collection'
@@ -170,7 +206,13 @@ project_pairs AS (
    AND activity.cid = item->'itemIdentifier'->>'cid'
    AND activity.collection = 'org.hypercerts.claim.activity'
    AND activity.did = collection_record.did
-   AND ABS(EXTRACT(EPOCH FROM (activity.sort_at - collection_record.sort_at))) < 60
+   AND ABS(EXTRACT(EPOCH FROM (
+     COALESCE(activity.record_created_at, activity.indexed_at)
+       - COALESCE(
+         collection_record.record_created_at,
+         collection_record.indexed_at
+       )
+   ))) < 60
 ),
 paired_collections AS (
   SELECT DISTINCT collection_uri AS uri FROM project_pairs
@@ -185,8 +227,7 @@ paired_activities AS (
 -- =============================================================================
 eligible_records AS (
   SELECT source.*
-  FROM final_scope AS scoped
-  JOIN scope_meta AS meta ON meta.scope_count <= $13::integer
+  FROM bounded_scope AS scoped
   JOIN record AS source ON source.did = scoped.did
   WHERE source.collection = ANY($14::text[])
     AND (
@@ -211,8 +252,8 @@ eligible_records AS (
 ),
 -- =============================================================================
 -- Event classification and pagination
--- Convert eligible records into public event kinds, derive their stable sort
--- timestamp, apply keyset pagination, and return one limit-plus-one page.
+-- Convert eligible records into public event kinds, apply keyset pagination,
+-- and return one limit-plus-one page.
 -- =============================================================================
 classified_events AS (
   SELECT
@@ -234,15 +275,7 @@ classified_events AS (
       WHEN 'org.hypercerts.context.attachment' THEN 'update.create'
       WHEN 'app.certified.badge.award' THEN 'endorsement.award'
     END AS kind,
-    -- Prefer a valid record-authored timestamp; fall back to the indexer's
-    -- sort_at value when createdAt is absent or malformed.
-    CASE
-      WHEN jsonb_typeof(source.json->'createdAt') = 'string'
-        AND source.json->>'createdAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]([.][0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$'
-        AND pg_input_is_valid(source.json->>'createdAt', 'timestamp with time zone')
-      THEN (source.json->>'createdAt')::timestamptz
-      ELSE source.sort_at
-    END AS effective_at
+    COALESCE(source.record_created_at, source.indexed_at) AS effective_at
   FROM eligible_records AS source
 ),
 filtered_events AS (
