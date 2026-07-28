@@ -137,9 +137,7 @@ sequenceDiagram
 ## Request behavior
 
 - Malformed JSON or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`; it never becomes an internal server error.
-- Omitted `authors` resolves the viewer's current `app.certified.graph.follow` records; malformed follow subjects are ignored.
-- `authors: []` selects an empty base. It never means every indexed author.
-- Explicit `authors` replaces only the direct-follow base.
+- The base scope always comes from the viewer's current `app.certified.graph.follow` records; malformed follow subjects are ignored.
 - `trustedEvaluators` adds subjects of each evaluator's current active endorsement awards.
 - Endorsement definitions without `allowedIssuers` permit any issuer. When present, only listed issuer DIDs qualify; an empty or malformed value permits none.
 - The viewer is removed. Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, so feed selection does not query actor status.
@@ -294,7 +292,6 @@ Stable public feed errors:
 
 ```text
 InvalidRequest
-AuthorsFilterTooLarge
 TrustedEvaluatorsTooLarge
 FeedScopeTooLarge
 InvalidKind

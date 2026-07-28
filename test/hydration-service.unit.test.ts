@@ -163,7 +163,7 @@ describe('HydratedFeedService', () => {
     const pages = new FakePages(populatedPage())
     const identities = new FakeIdentities(allContexts())
     const service = new HydratedFeedService(pages, identities)
-    const input = { viewerDid, authors: [authorDid], limit: 3 }
+    const input = { viewerDid, limit: 3 }
 
     const output = await service.getFeed(input)
 

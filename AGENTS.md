@@ -134,8 +134,8 @@ A request, response, event kind, view, or public-error change normally requires 
 
 Preserve these unless the public contract is intentionally revised and documented:
 
-- Omitted `authors` uses the viewer's current Certified follows. Explicit `authors` replaces only that base; `authors: []` means an empty base. Preserve `hasExplicitAuthors` through validation and SQL.
-- Deduplicate request lists before enforcing semantic limits: 500 explicit authors, 64 evaluators, 16 kinds, 500 resolved authors, and 1–50 page items.
+- The base scope always resolves from the viewer's current Certified follows. There is no caller-supplied author override.
+- Deduplicate request lists before enforcing semantic limits: 64 evaluators, 16 kinds, 500 resolved authors, and 1–50 page items.
 - Evaluator endorsement subjects are unioned after base-author resolution. Remove the viewer and deduplicate candidates. Do not query actor status: Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, and actors absent from `actor` remain eligible.
 - Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with `InvalidKind`.
 - Organization-quality policy uses only service-configured `TRUSTED_QUALITY_LABELER_DIDS`. Organizations are exact `app.certified.actor.organization/self` records. Quality assertions are trusted bare-DID, non-CID `external_label` rows; malformed text timestamps are ignored safely. `includeUnrated` applies only when no active trusted label exists; an active disallowed label is not unrated.

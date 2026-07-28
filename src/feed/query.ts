@@ -114,8 +114,6 @@ export class FeedRepository implements FeedQueryReader {
     const policy = request.organizationQuality
     const result = await this.database.query<FeedQueryRow>(FEED_QUERY, [
       request.viewerDid,
-      request.authors,
-      request.hasExplicitAuthors,
       request.trustedEvaluators,
       policy !== undefined,
       (policy?.allowed ?? []) satisfies readonly OrganizationQuality[],

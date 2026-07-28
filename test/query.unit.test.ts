@@ -28,8 +28,6 @@ class FakeQueryExecutor implements FeedQueryExecutor {
 const input = (includeSource: boolean) => ({
   request: {
     viewerDid: viewer,
-    hasExplicitAuthors: true,
-    authors: [actor],
     trustedEvaluators: [],
     limit: 2,
     kinds: [],
@@ -82,9 +80,9 @@ describe('FeedRepository page modes', () => {
     })
     expect(result.rows[0]).not.toHaveProperty('sourceValue')
     expect(database.calls).toHaveLength(1)
-    expect(database.calls[0]?.values).toHaveLength(15)
-    expect(database.calls[0]?.values[11]).toBe(3)
-    expect(database.calls[0]?.values[14]).toBe(false)
+    expect(database.calls[0]?.values).toHaveLength(13)
+    expect(database.calls[0]?.values[9]).toBe(3)
+    expect(database.calls[0]?.values[12]).toBe(false)
   })
 
   it('joins source JSON only after pagination using exact URI and CID', async () => {
@@ -111,11 +109,11 @@ describe('FeedRepository page modes', () => {
     const call = database.calls[0]
     expect(call).toBeDefined()
     if (!call) throw new Error('expected one feed query call')
-    expect(call.values[14]).toBe(true)
+    expect(call.values[12]).toBe(true)
     expect(call.text.indexOf('selected_source.json AS source_json')).toBeGreaterThan(
       call.text.indexOf('paged_events AS'),
     )
-    expect(call.text).toContain('ON $15::boolean')
+    expect(call.text).toContain('ON $13::boolean')
     expect(call.text).toContain('selected_source.uri = page.uri')
     expect(call.text).toContain('selected_source.cid = page.cid')
     const classifiedProjection = call.text.slice(

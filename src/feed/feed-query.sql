@@ -1,20 +1,13 @@
 WITH
 -- =============================================================================
 -- Scope resolution
--- Combine explicit/followed authors with valid DID endorsements from trusted
--- evaluators, then apply Hyperindex organization-quality policy.
+-- Combine the viewer's current Certified follows with valid DID endorsements
+-- from trusted evaluators, then apply Hyperindex organization-quality policy.
 -- =============================================================================
 base_authors AS (
-  SELECT explicit.did
-  FROM unnest($2::text[]) AS explicit(did)
-  WHERE $3::boolean
-
-  UNION ALL
-
   SELECT follow.json->>'subject' AS did
   FROM record AS follow
-  WHERE NOT $3::boolean
-    AND follow.collection = 'app.certified.graph.follow'
+  WHERE follow.collection = 'app.certified.graph.follow'
     AND follow.did = $1
     AND jsonb_typeof(follow.json->'subject') = 'string'
     -- Bound untrusted values and require the conservative DID shape accepted by
@@ -86,7 +79,7 @@ valid_endorsement_awards AS NOT MATERIALIZED (
 evaluator_endorsements AS (
   SELECT award.endorsement_subject_did AS did
   FROM valid_endorsement_awards AS award
-  WHERE award.did = ANY($4::text[])
+  WHERE award.did = ANY($2::text[])
 ),
 requested_scope AS (
   SELECT DISTINCT candidate.did
@@ -128,7 +121,7 @@ parsed_quality_labels AS MATERIALIZED (
   JOIN external_label AS label
     ON label.uri = scoped.did
    AND label.cid IS NULL
-   AND label.src = ANY($8::text[])
+   AND label.src = ANY($6::text[])
    AND label.val = ANY(ARRAY['high-quality', 'standard', 'draft', 'likely-test']::text[])
 ),
 active_quality_labels AS (
@@ -152,7 +145,7 @@ active_quality_labels AS (
 quality_summary AS (
   SELECT
     quality.did,
-    bool_or(quality.val = ANY($6::text[])) AS has_allowed
+    bool_or(quality.val = ANY($4::text[])) AS has_allowed
   FROM active_quality_labels AS quality
   GROUP BY quality.did
 ),
@@ -160,7 +153,7 @@ final_scope AS (
   SELECT scoped.did
   FROM requested_scope AS scoped
   LEFT JOIN quality_summary AS quality ON quality.did = scoped.did
-  WHERE NOT $5::boolean
+  WHERE NOT $3::boolean
      OR NOT EXISTS (
        SELECT 1
        FROM record AS organization
@@ -169,7 +162,7 @@ final_scope AS (
          AND organization.collection = 'app.certified.actor.organization'
      )
      OR COALESCE(quality.has_allowed, false)
-     OR (quality.did IS NULL AND $7::boolean)
+     OR (quality.did IS NULL AND $5::boolean)
 ),
 scope_meta AS (
   SELECT COUNT(*)::integer AS scope_count
@@ -181,7 +174,7 @@ bounded_scope AS MATERIALIZED (
   SELECT scoped.did
   FROM final_scope AS scoped
   CROSS JOIN scope_meta AS meta
-  WHERE meta.scope_count <= $13::integer
+  WHERE meta.scope_count <= $11::integer
 ),
 -- =============================================================================
 -- Project pairing
@@ -229,7 +222,7 @@ eligible_records AS (
   SELECT source.*
   FROM bounded_scope AS scoped
   JOIN record AS source ON source.did = scoped.did
-  WHERE source.collection = ANY($14::text[])
+  WHERE source.collection = ANY($12::text[])
     AND (
       source.collection <> 'org.hypercerts.claim.activity'
       OR NOT EXISTS (
@@ -282,19 +275,19 @@ classified_events AS (
 filtered_events AS (
   SELECT event.*
   FROM classified_events AS event
-  WHERE (cardinality($9::text[]) = 0 OR event.kind = ANY($9::text[]))
+  WHERE (cardinality($7::text[]) = 0 OR event.kind = ANY($7::text[]))
     AND (
-      $10::timestamptz IS NULL
-      OR event.effective_at < $10::timestamptz
+      $8::timestamptz IS NULL
+      OR event.effective_at < $8::timestamptz
       -- URI is the deterministic tie-breaker for equal timestamps.
-      OR (event.effective_at = $10::timestamptz AND event.uri < $11::text)
+      OR (event.effective_at = $8::timestamptz AND event.uri < $9::text)
     )
 ),
 paged_events AS (
   SELECT *
   FROM filtered_events
   ORDER BY effective_at DESC, uri DESC
-  LIMIT $12::integer
+  LIMIT $10::integer
 )
 SELECT
   meta.scope_count,
@@ -314,7 +307,7 @@ SELECT
 FROM scope_meta AS meta
 LEFT JOIN paged_events AS page ON true
 LEFT JOIN record AS selected_source
-  ON $15::boolean
+  ON $13::boolean
  AND selected_source.uri = page.uri
  AND selected_source.cid = page.cid
 ORDER BY page.effective_at DESC NULLS LAST, page.uri DESC NULLS LAST

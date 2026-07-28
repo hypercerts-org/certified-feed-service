@@ -7,7 +7,6 @@
       "description": "Builds an ordered feed skeleton from current indexed records for the viewer scope supplied in the request. Authentication is not required, and viewerDid is not verified against an authenticated caller. The caller hydrates returned strong references separately.",
       "errors": [
         { "name": "InvalidRequest", "description": "The request is malformed or semantically invalid." },
-        { "name": "AuthorsFilterTooLarge", "description": "The authors filter exceeds its supported size." },
         { "name": "TrustedEvaluatorsTooLarge", "description": "The trusted evaluator filter exceeds its supported size." },
         { "name": "FeedScopeTooLarge", "description": "The resolved author scope exceeds its supported size." },
         { "name": "InvalidKind", "description": "The request contains an unsupported event kind." },
@@ -24,13 +23,7 @@
               "type": "string",
               "format": "did",
               "maxLength": 256,
-              "description": "Viewer whose Certified follows supply the default author scope."
-            },
-            "authors": {
-              "type": "array",
-              "maxLength": 1000,
-              "description": "Optional replacement for the viewer's direct-follow author set. An explicitly empty array selects no base authors.",
-              "items": { "type": "string", "format": "did", "maxLength": 256 }
+              "description": "Viewer whose current Certified follows supply the base author scope."
             },
             "trustedEvaluators": {
               "type": "array",

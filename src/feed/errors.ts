@@ -1,7 +1,6 @@
 /** Stable public error names returned by the Certified feed XRPC endpoint. */
 export const FeedErrorCode = {
   InvalidRequest: 'InvalidRequest',
-  AuthorsFilterTooLarge: 'AuthorsFilterTooLarge',
   TrustedEvaluatorsTooLarge: 'TrustedEvaluatorsTooLarge',
   FeedScopeTooLarge: 'FeedScopeTooLarge',
   InvalidKind: 'InvalidKind',

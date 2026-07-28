@@ -137,6 +137,7 @@ const feedItem = (
 describe('feed Lexicon contract', () => {
   it('keeps shared input fields and UpperCamelCase public errors identical', () => {
     expect(hydratedMain.input).toEqual(skeletonMain.input)
+    expect(hydratedMain.input.schema.properties).not.toHaveProperty('authors')
     expect(
       hydratedMain.input.schema.properties.organizationQuality.ref,
     ).toBe('app.certified.feed.beta.defs#organizationQualityPolicy')
@@ -146,7 +147,6 @@ describe('feed Lexicon contract', () => {
     )
     expect(errorNames).toEqual([
       'InvalidRequest',
-      'AuthorsFilterTooLarge',
       'TrustedEvaluatorsTooLarge',
       'FeedScopeTooLarge',
       'InvalidKind',

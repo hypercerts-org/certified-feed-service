@@ -65,7 +65,7 @@ describe('FeedService', () => {
       cursor,
     })
     const service = new FeedService(pages)
-    const input = { viewerDid: viewer, authors: [actor], limit: 1 }
+    const input = { viewerDid: viewer, limit: 1 }
 
     await expect(service.getFeedSkeleton(input)).resolves.toEqual({
       items: [
@@ -87,7 +87,7 @@ describe('FeedService', () => {
     const service = new FeedService(pages)
 
     await expect(
-      service.getFeedSkeleton({ viewerDid: viewer, authors: [] }),
+      service.getFeedSkeleton({ viewerDid: viewer }),
     ).resolves.toEqual({ items: [] })
   })
 })

@@ -60,7 +60,7 @@ describe('PostgresFeedPageLoader', () => {
     )
 
     const page = await loader.loadPage(
-      { viewerDid: viewer, authors: [actor], limit: 2 },
+      { viewerDid: viewer, limit: 2 },
       'metadata',
     )
 
@@ -70,7 +70,6 @@ describe('PostgresFeedPageLoader', () => {
       trustedQualityLabelerDids: [viewer],
       request: {
         viewerDid: viewer,
-        authors: [actor],
         limit: 2,
       },
     })
@@ -97,7 +96,7 @@ describe('PostgresFeedPageLoader', () => {
 
     await expect(
       loader.loadPage(
-        { viewerDid: viewer, authors: [actor] },
+        { viewerDid: viewer },
         'with-source',
       ),
     ).resolves.toEqual({
@@ -120,7 +119,7 @@ describe('PostgresFeedPageLoader', () => {
     )
 
     await expect(
-      loader.loadPage({ viewerDid: viewer, authors: [] }, 'metadata'),
+      loader.loadPage({ viewerDid: viewer }, 'metadata'),
     ).rejects.toEqual(
       expect.objectContaining<Partial<FeedError>>({
         code: FeedErrorCode.FeedScopeTooLarge,

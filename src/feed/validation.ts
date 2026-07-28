@@ -10,7 +10,6 @@ import {
   type OrganizationQuality,
 } from './types.js'
 
-const MAX_AUTHORS = 500
 const MAX_EVALUATORS = 64
 const MAX_KINDS = 16
 const DEFAULT_LIMIT = 20
@@ -22,20 +21,17 @@ const dedupe = <T>(values: readonly T[] | undefined): T[] => [
   ...new Set(values ?? []),
 ]
 
-const validateDids = (
-  values: readonly string[],
-  field: 'authors' | 'trustedEvaluators',
-): void => {
+const validateEvaluatorDids = (values: readonly string[]): void => {
   const invalidIndex = values.findIndex((did) => !isValidDid(did))
   if (invalidIndex !== -1) {
     throw new FeedError(
       FeedErrorCode.InvalidRequest,
-      `${field}[${invalidIndex}] is not a valid DID; replace it with a valid did:plc, did:web, or other syntactically valid DID.`,
+      `trustedEvaluators[${invalidIndex}] is not a valid DID; replace it with a valid did:plc, did:web, or other syntactically valid DID.`,
     )
   }
 }
 
-/** Applies semantic limits and preserves the omitted-versus-empty authors distinction. */
+/** Applies semantic limits and normalizes one public feed request. */
 export const normalizeFeedRequest = (
   input: GetFeedSkeletonInput,
 ): NormalizedFeedRequest => {
@@ -46,17 +42,8 @@ export const normalizeFeedRequest = (
     )
   }
 
-  const authors = dedupe(input.authors)
-  validateDids(authors, 'authors')
-  if (authors.length > MAX_AUTHORS) {
-    throw new FeedError(
-      FeedErrorCode.AuthorsFilterTooLarge,
-      `authors contains ${authors.length} unique DIDs, exceeding the maximum of ${MAX_AUTHORS}; remove authors before retrying.`,
-    )
-  }
-
   const trustedEvaluators = dedupe(input.trustedEvaluators)
-  validateDids(trustedEvaluators, 'trustedEvaluators')
+  validateEvaluatorDids(trustedEvaluators)
   if (trustedEvaluators.length > MAX_EVALUATORS) {
     throw new FeedError(
       FeedErrorCode.TrustedEvaluatorsTooLarge,
@@ -106,8 +93,6 @@ export const normalizeFeedRequest = (
 
   return {
     viewerDid: input.viewerDid,
-    hasExplicitAuthors: input.authors !== undefined,
-    authors,
     trustedEvaluators,
     ...(organizationQuality ? { organizationQuality } : {}),
     limit,
