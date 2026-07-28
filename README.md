@@ -1,10 +1,10 @@
 # Certified Feed Service
 
-Standalone, read-only TypeScript service that reads Magic Indexer's current PostgreSQL state and serves ordered Hypercerts feeds over XRPC.
+Standalone, read-only TypeScript service that reads Hyperindex's current PostgreSQL state and serves ordered Hypercerts feeds over XRPC.
 
 > **Pre-release:** This service and its Lexicons have not had their first public release. Wire contracts may change without backward compatibility.
 
-The service exposes an exact-reference skeleton and a view-only hydrated feed. It does not ingest or mutate indexed data, call Magic Indexer's API, authenticate callers, fetch blob bytes, or provide immutable event history.
+Hyperindex is the only supported database owner. The service exposes an exact-reference skeleton and a view-only hydrated feed; it does not ingest or mutate indexed data, import Hyperindex code, call its GraphQL API, authenticate callers, fetch blob bytes, or provide immutable event history.
 
 ## Endpoints
 
@@ -94,9 +94,45 @@ Hydrated items are view-only:
 - Selected source records that fail validation are omitted. The service does not refill the page, so a hydrated page may contain fewer than `limit` items, or no items, while still returning a cursor that advances over the selected source page.
 - The nested feed-view union is open. Clients must tolerate view `$type` values they do not recognize.
 - The response does not expose source JSON or identity provenance.
-- Actor summaries use a valid meaningful Certified profile first, then the current validated `app.bsky.actor.profile`, then validated stored actor handle/display fields, then the DID alone. A valid stored handle is preserved independently. Bluesky profile blobs come from the deterministic indexed profile record; the service does not call a PDS or AppView.
+- Actor summaries use a valid meaningful Certified profile first, then the current validated `app.bsky.actor.profile`, then a validated stored Hyperindex handle, then the DID alone. A valid stored handle is preserved independently. Bluesky profile blobs come from the deterministic indexed profile record; the service does not call a PDS or AppView.
 - Evaluation, measurement, and update views may include an exact `{ uri, cid }` target. The source record's authoritative validator validates the strong-reference shape. The service does not query, preview, recursively hydrate, or validate the referenced target record or body.
 - Image values use open unions so clients can tolerate future variants. Known values preserve protocol-native `org.hypercerts.defs#uri`, `#smallImage`, `#largeImage`, or `#smallBlob` wrappers and their nested AT Protocol blob refs. The containing actor supplies the repository DID; the service never fetches or proxies bytes.
+
+## Request flow
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant HTTP as HTTP App
+    participant XRPC as XRPC Handler
+    participant Service as FeedService / HydratedFeedService
+    participant Loader as Feed Page Loader
+    participant Repo as Feed Repository
+    participant Identity as Identity Reader
+    participant DB as Hyperindex PostgreSQL
+
+    Client->>HTTP: POST feed procedure
+    HTTP->>XRPC: Bounded, validated JSON
+    XRPC->>Service: Endpoint input
+    Service->>Loader: Load metadata or source-aware page
+    Loader->>Repo: One normalized feed query
+    Repo->>DB: Hyperindex selection statement
+    DB-->>Repo: Scope and limit+1 rows
+    Repo-->>Loader: Metadata or exact selected sources
+    Loader-->>Service: Selected page and cursor
+    alt Hydrated endpoint
+        Service->>Service: Validate sources and omit invalid rows
+        Service->>Identity: Requested actor DIDs when needed
+        Identity->>DB: One actor/profile batch
+        DB-->>Identity: Current identity contexts
+        Identity-->>Service: Complete DID map
+        Service-->>XRPC: View-only items and selected-page cursor
+    else Skeleton endpoint
+        Service-->>XRPC: Exact references and cursor
+    end
+    XRPC-->>HTTP: Procedure response
+    HTTP-->>Client: JSON response
+```
 
 ## Request behavior
 
@@ -106,9 +142,9 @@ Hydrated items are view-only:
 - Explicit `authors` replaces only the direct-follow base.
 - `trustedEvaluators` adds subjects of each evaluator's current active endorsement awards.
 - Endorsement definitions without `allowedIssuers` permit any issuer. When present, only listed issuer DIDs qualify; an empty or malformed value permits none.
-- The viewer and known inactive actors are removed.
-- Organization-quality policy runs against the final author union before selecting events.
-- Trusted quality labelers come only from service configuration; callers cannot choose label sources.
+- The viewer is removed. Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, so feed selection does not query actor status.
+- Organization-quality policy runs against the final author union before selecting events. Organizations are detected only by exact `app.certified.actor.organization/self` records.
+- Trusted quality labelers come only from service configuration. Quality labels are bare-DID, non-CID `external_label` rows; callers cannot choose label sources.
 - Omitted or empty `kinds` includes all supported kinds. Unknown kinds are rejected.
 
 Supported event kinds:
@@ -134,7 +170,7 @@ Ordering is:
 effective timestamp DESC, record URI DESC
 ```
 
-A valid top-level string `json.createdAt` supplies the effective timestamp. Missing, malformed, non-string, or PostgreSQL-invalid values fall back to `record.sort_at`. The query fetches `limit + 1` events to decide whether to return a next cursor.
+The effective timestamp is `COALESCE(record.record_created_at, record.indexed_at)`. Hyperindex materializes a valid top-level `json.createdAt` into `record_created_at`; `indexed_at` is the fallback. The query fetches `limit + 1` events to decide whether to return a next cursor.
 
 The opaque cursor stores the timestamp and URI of the last selected source row before hydration. Both endpoints use the same page loader, so ordering and cursor bytes are identical for the same request. Hydration may omit invalid selected sources without changing cursor advancement. Cursor traversal is deterministic for each query but does not provide snapshot isolation across requests.
 
@@ -150,7 +186,7 @@ Copy `.env.example` to `.env` for local development, or copy its values into the
 
 | Variable | Required | Default | Purpose |
 |---|---:|---:|---|
-| `DATABASE_URL` | yes | | Dedicated read-only Postgres URL for the indexer database |
+| `DATABASE_URL` | yes | | Dedicated read-only Postgres URL for the Hyperindex database |
 | `PORT` | no | `3000` | HTTP listen port |
 | `HOST` | no | `0.0.0.0` | HTTP listen interface |
 | `LOG_LEVEL` | no | `info` | Pino log level |
@@ -176,12 +212,14 @@ Example operator setup:
 CREATE ROLE certified_feed_reader LOGIN PASSWORD '<managed-secret>';
 GRANT CONNECT ON DATABASE hyperindex TO certified_feed_reader;
 GRANT USAGE ON SCHEMA public TO certified_feed_reader;
-GRANT SELECT ON TABLE public.record, public.actor, public.label
+GRANT SELECT ON TABLE public.record, public.actor, public.external_label
   TO certified_feed_reader;
 ALTER ROLE certified_feed_reader SET default_transaction_read_only = on;
 ```
 
-The service owns no migrations or feed tables. `/ready` checks database reachability, PostgreSQL 16 timestamp validation, and read-only session state; it does not inspect Magic Indexer tables or columns. See [`docs/database-contract.md`](docs/database-contract.md) for the runtime schema contract.
+The service owns no migrations or feed tables. `/ready` checks database reachability, PostgreSQL 16 timestamp validation, and read-only session state; it does not inspect Hyperindex tables, migrations, label subscriptions, backfill completion, or ingestion freshness. See [`docs/database-contract.md`](docs/database-contract.md) for the runtime schema contract.
+
+Before cutover, verify trusted quality-label subscriptions are healthy and current, migration-010 timestamp backfill is complete, and Hyperindex filters/backfill include `app.certified.actor.profile`, `app.bsky.actor.profile`, and `org.hyperboards.board`.
 
 ## Development
 
@@ -218,14 +256,14 @@ TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/certified_feed_
 
 The suite creates minimal contractual tables and test rows but does not drop or truncate existing tables. Never point it at a shared, staging, or production database.
 
-To verify against Magic Indexer's migrated schema:
+To verify against Hyperindex's migrated schema, first let Hyperindex migrate a separate disposable database that is otherwise empty of application rows:
 
 ```bash
-TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/magic_feed_test' \
-  npm run test:integration:magic
+TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/hyperindex_feed_test' \
+  npm run test:integration:hyperindex
 ```
 
-This command verifies required migration versions and runs the same behavior suite. It does not apply Magic Indexer migrations.
+This command requires `psql`, verifies required Hyperindex migrations, record/actor/external-label columns, the generated `record.rkey`, and the external-label lookup index, then runs the same behavior suite. It does not apply Hyperindex migrations.
 
 ## Deployment
 
@@ -237,7 +275,7 @@ docker run --rm -p 3000:3000 \
   certified-feed-service
 ```
 
-Deploy beside Magic Indexer or Hyperindex with private database networking.
+Deploy beside Hyperindex with private database networking.
 
 Apply per-IP rate limiting at the gateway. The initial public policy is 60 feed requests per minute per client IP with a burst of 20, returning HTTP 429 and `Retry-After` when exceeded. Keep health, readiness, and metrics private and outside that public bucket. Tune limits from measured query latency and pool saturation.
 
@@ -268,4 +306,4 @@ Public errors never include SQL, database credentials, table contents, internal 
 
 ## MVP boundaries
 
-The service does not ingest, authenticate, write records, own migrations, cache across requests, call Magic Indexer APIs, call PDS/AppView profile APIs, download blobs, hydrate target records, build target previews, recursively hydrate linked records, persist preferences, discover the network, or provide immutable event history. Results reflect Magic Indexer's mutable current state and freshness.
+The service does not ingest, authenticate, write records, own migrations, cache across requests, call Hyperindex/PDS/AppView APIs, download blobs, hydrate target records, build target previews, recursively hydrate linked records, persist preferences, discover the network, or provide immutable event history. Results reflect Hyperindex's mutable current state and freshness.

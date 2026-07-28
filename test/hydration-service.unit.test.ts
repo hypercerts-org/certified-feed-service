@@ -110,7 +110,6 @@ const allContexts = (): ReadonlyMap<string, ActorContext> =>
         actor: {
           did: authorDid,
           handle: 'author.example',
-          displayName: 'Stored Author',
         },
         certifiedProfile: {
           $type: 'app.certified.actor.profile',

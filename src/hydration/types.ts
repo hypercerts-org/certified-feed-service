@@ -2,11 +2,10 @@ import type { BlobRef } from '@atproto/lex'
 
 import type { FeedKind, FeedSubject } from '../feed/types.js'
 
-/** Stored actor fields used to build a feed-card identity summary. */
+/** Hyperindex actor fields used to build a feed-card identity summary. */
 export interface ActorRow {
   readonly did: string
   readonly handle: string | null
-  readonly displayName: string | null
 }
 
 /** Current stored identity data for one requested DID. */
@@ -64,11 +63,10 @@ export interface ActorSummary {
   readonly avatar?: ActorImageReference
 }
 
-/** Independently validated optional fields from one stored actor row. */
+/** Validated fields from one Hyperindex actor row. */
 export interface SanitizedActorRow {
   readonly did: string
   readonly handle?: string
-  readonly displayName?: string
 }
 
 /** First-render fields for an activity feed card. */

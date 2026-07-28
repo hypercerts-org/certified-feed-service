@@ -22,8 +22,6 @@ import type { FeedKind } from '../feed/types.js'
 import * as AppBskyActorProfile from '../lexicons/app/bsky/actor/profile.js'
 import type { ActorRow, SanitizedActorRow } from './types.js'
 
-const DISPLAY_NAME_MAX_GRAPHEMES = 64
-const DISPLAY_NAME_MAX_BYTES = 640
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/jpg',
@@ -187,7 +185,7 @@ export const isMeaningfulCertifiedProfile = (
       profile.website,
   )
 
-/** Validates each optional stored actor field independently. */
+/** Validates the optional handle from one Hyperindex actor row. */
 export const sanitizeActorRow = (
   did: string,
   row: ActorRow | undefined,
@@ -196,16 +194,9 @@ export const sanitizeActorRow = (
 
   const handle =
     row.handle !== null && isValidHandle(row.handle) ? row.handle : undefined
-  const displayName =
-    row.displayName !== null &&
-    graphemeLen(row.displayName) <= DISPLAY_NAME_MAX_GRAPHEMES &&
-    utf8Len(row.displayName) <= DISPLAY_NAME_MAX_BYTES
-      ? row.displayName
-      : undefined
   return {
     did,
     ...(handle === undefined ? {} : { handle }),
-    ...(displayName === undefined ? {} : { displayName }),
   }
 }
 

@@ -11,7 +11,6 @@ const IDENTITY_QUERY = `
     requested.did AS requested_did,
     actor.did AS actor_did,
     actor.handle,
-    actor.display_name,
     certified_profile.json AS certified_profile_json,
     bluesky_profile.json AS bluesky_profile_json
   FROM requested
@@ -29,7 +28,6 @@ interface IdentityQueryRow extends QueryResultRow {
   requested_did: string
   actor_did: string | null
   handle: string | null
-  display_name: string | null
   certified_profile_json: unknown
   bluesky_profile_json: unknown
 }
@@ -86,7 +84,6 @@ export class PostgresIdentityReader implements IdentityReader {
               actor: {
                 did: row.actor_did,
                 handle: row.handle,
-                displayName: row.display_name,
               },
             }),
         ...(row.certified_profile_json === null

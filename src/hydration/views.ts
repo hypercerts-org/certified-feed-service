@@ -111,9 +111,6 @@ export const buildActorSummary = (
   return {
     did: actor.did,
     ...(actor.handle === undefined ? {} : { handle: actor.handle }),
-    ...(actor.displayName === undefined
-      ? {}
-      : { displayName: actor.displayName }),
   }
 }
 

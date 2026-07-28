@@ -43,7 +43,6 @@ class FakeQueryExecutor implements IdentityQueryExecutor {
 const actorRow = (overrides: Partial<ActorRow> = {}): ActorRow => ({
   did: didA,
   handle: 'alice.example',
-  displayName: 'Alice',
   ...overrides,
 })
 
@@ -92,7 +91,6 @@ const identityResultRow = (
   requested_did: requestedDid,
   actor_did: requestedDid,
   handle: null,
-  display_name: null,
   certified_profile_json: null,
   bluesky_profile_json: null,
   ...overrides,
@@ -130,7 +128,6 @@ describe('PostgresIdentityReader', () => {
         requested_did: didD,
         actor_did: null,
         handle: null,
-        display_name: null,
         certified_profile_json: null,
         bluesky_profile_json: null,
       },
@@ -138,7 +135,6 @@ describe('PostgresIdentityReader', () => {
         requested_did: didC,
         actor_did: null,
         handle: null,
-        display_name: null,
         certified_profile_json: rawCertifiedC,
         bluesky_profile_json: rawBlueskyC,
       },
@@ -146,7 +142,6 @@ describe('PostgresIdentityReader', () => {
         requested_did: didB,
         actor_did: didB,
         handle: null,
-        display_name: 'Stored Bob',
         certified_profile_json: null,
         bluesky_profile_json: rawBlueskyB,
       },
@@ -154,7 +149,6 @@ describe('PostgresIdentityReader', () => {
         requested_did: didA,
         actor_did: didA,
         handle: 'alice.example',
-        display_name: 'Stored Alice',
         certified_profile_json: rawCertifiedA,
         bluesky_profile_json: null,
       },
@@ -172,7 +166,6 @@ describe('PostgresIdentityReader', () => {
             actor: {
               did: didA,
               handle: 'alice.example',
-              displayName: 'Stored Alice',
             },
             certifiedProfile: rawCertifiedA,
           },
@@ -184,7 +177,6 @@ describe('PostgresIdentityReader', () => {
             actor: {
               did: didB,
               handle: null,
-              displayName: 'Stored Bob',
             },
             blueskyProfile: rawBlueskyB,
           },
@@ -208,7 +200,7 @@ describe('PostgresIdentityReader', () => {
     expect(sql).toContain('LEFT JOIN actor')
     expect(sql).toContain('actor.did')
     expect(sql).toContain('actor.handle')
-    expect(sql).toContain('actor.display_name')
+    expect(sql).not.toContain('actor.display_name')
     expect(sql).not.toContain('actor.avatar_cid')
     expect(sql).toContain('app.certified.actor.profile/self')
     expect(sql).toContain(
@@ -229,7 +221,7 @@ describe('PostgresIdentityReader', () => {
     const reader = new PostgresIdentityReader(
       new FakeQueryExecutor([
         identityResultRow(didA),
-        identityResultRow(didA, { display_name: 'Conflicting Alice' }),
+        identityResultRow(didA, { handle: 'conflicting.example' }),
       ]),
     )
 
@@ -423,46 +415,23 @@ describe('Bluesky profile validation', () => {
 })
 
 describe('sanitizeActorRow', () => {
-  it('preserves valid fields and the requested DID', () => {
+  it('preserves a valid handle with the requested DID', () => {
     expect(sanitizeActorRow(didB, actorRow())).toEqual({
       did: didB,
       handle: 'alice.example',
-      displayName: 'Alice',
     })
   })
 
-  it('omits malformed optional fields independently', () => {
+  it('omits malformed or oversized handles', () => {
+    expect(
+      sanitizeActorRow(didA, actorRow({ handle: 'not a handle' })),
+    ).toEqual({ did: didA })
     expect(
       sanitizeActorRow(
         didA,
-        actorRow({ handle: 'not a handle', displayName: 'Alice' }),
-      ),
-    ).toEqual({ did: didA, displayName: 'Alice' })
-    expect(
-      sanitizeActorRow(
-        didA,
-        actorRow({ handle: 'alice.example', displayName: null }),
-      ),
-    ).toEqual({ did: didA, handle: 'alice.example' })
-  })
-
-  it('omits oversized handles and display names by grapheme and UTF-8 byte limits', () => {
-    expect(
-      sanitizeActorRow(
-        didA,
-        actorRow({
-          handle: `${'a'.repeat(250)}.example`,
-          displayName: 'a'.repeat(65),
-        }),
+        actorRow({ handle: `${'a'.repeat(250)}.example` }),
       ),
     ).toEqual({ did: didA })
-
-    expect(
-      sanitizeActorRow(
-        didA,
-        actorRow({ displayName: '👨‍👩‍👧‍👦'.repeat(64) }),
-      ),
-    ).not.toHaveProperty('displayName')
   })
 })
 
@@ -548,7 +517,7 @@ describe('buildActorSummary', () => {
     }
   })
 
-  it('uses a valid Bluesky profile wholesale instead of stale stored display fields', () => {
+  it('uses a valid Bluesky profile wholesale without fabricating missing fields', () => {
     const bluesky = validateBlueskyProfile(blueskyProfile())
 
     expect(
@@ -560,11 +529,10 @@ describe('buildActorSummary', () => {
     ).toEqual({ did: didA, handle: 'alice.example' })
   })
 
-  it('falls back to sanitized stored fields when both profile records are unavailable or invalid', () => {
+  it('falls back to the sanitized stored handle when both profiles are unavailable or invalid', () => {
     const expected = {
       did: didA,
       handle: 'alice.example',
-      displayName: 'Alice',
     }
 
     expect(
