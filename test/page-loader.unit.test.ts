@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 import {
   PostgresFeedPageLoader,
 } from '../src/feed/page-loader.js'
@@ -46,7 +45,6 @@ describe('PostgresFeedPageLoader', () => {
   it('normalizes once, invokes the repository once, trims the sentinel, and preserves cursor bytes', async () => {
     const reader = new FakeFeedReader({
       includeSource: false,
-      scopeCount: 1,
       rows: [
         metadataRow('3', '2026-07-21T10:00:03.000000Z'),
         metadataRow('2', '2026-07-21T10:00:02.000000Z'),
@@ -84,7 +82,6 @@ describe('PostgresFeedPageLoader', () => {
     const sourceValue = { $type: 'org.hypercerts.claim.activity', title: 'A' }
     const reader = new FakeFeedReader({
       includeSource: true,
-      scopeCount: 1,
       rows: [
         {
           ...metadataRow('1', '2026-07-21T10:00:01.000000Z'),
@@ -111,27 +108,12 @@ describe('PostgresFeedPageLoader', () => {
     expect(reader.calls[0]?.includeSource).toBe(true)
   })
 
-  it('rejects an oversized resolved scope without truncating it', async () => {
-    const loader = new PostgresFeedPageLoader(
-      new FakeFeedReader({ includeSource: false, scopeCount: 501, rows: [] }),
-      [],
-      new Metrics(),
-    )
-
-    await expect(
-      loader.loadPage({ viewerDid: viewer }, 'metadata'),
-    ).rejects.toEqual(
-      expect.objectContaining<Partial<FeedError>>({
-        code: FeedErrorCode.FeedScopeTooLarge,
-      }),
-    )
-  })
 
   it('records feed database timing when the repository rejects', async () => {
     const metrics = new Metrics()
     const loader = new PostgresFeedPageLoader(
       new FakeFeedReader(
-        { includeSource: false, scopeCount: 0, rows: [] },
+        { includeSource: false, rows: [] },
         new Error('database unavailable'),
       ),
       [],

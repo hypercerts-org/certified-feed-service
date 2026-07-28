@@ -65,7 +65,7 @@ Missing source-event rows produce a smaller feed. Missing identity rows do not r
 2. Resolve current evaluator endorsement subjects from award JSON.
 3. Union, deduplicate, and remove the viewer.
 4. Detect organizations from exact organization self records and apply trusted active account-quality labels.
-5. Count the final author scope and materialize a bounded scope only when it contains at most 500 DIDs.
+5. Materialize the complete resolved author scope once for downstream joins.
 6. Calculate project/activity pairs independently of page boundaries.
 7. Select and classify eligible source records.
 8. Apply final kind and keyset filters.
@@ -171,6 +171,6 @@ Grant `CONNECT` on the selected database separately when required by the deploym
 
 Run the integration suite through `npm run test:integration:hyperindex` against a disposable database already migrated by Hyperindex and otherwise empty of application rows. The command checks required migrations, record/actor/external-label columns, the generated `rkey`, and the external-label active lookup index before running the shared behavior suite. It does not apply migrations.
 
-Before production traffic, use `EXPLAIN (ANALYZE, BUFFERS)` with production-shaped data for followed authors, evaluator expansion, organization-quality filtering, an oversized scope, and Hyperboard events. Capture both metadata and source-aware feed modes plus the identity batch. Verify that the source JSON join stays after pagination, identity joins remain DID-bounded, and oversized scopes do not execute project or eligible-event source scans.
+Before production traffic, use `EXPLAIN (ANALYZE, BUFFERS)` with production-shaped data for small and large followed scopes, evaluator expansion, organization-quality filtering, and Hyperboard events. Capture both metadata and source-aware feed modes plus the identity batch. Verify that the source JSON join stays after pagination and identity joins remain DID-bounded.
 
 Do not add an index from this repository. Query-plan evidence should result in a Hyperindex migration because Hyperindex owns the schema.

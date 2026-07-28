@@ -95,7 +95,7 @@ Ownership:
 - `src/app.ts` is the fetch-compatible boundary. It owns fixed route metadata, POST enforcement, the 64 KiB body limit, malformed JSON, routed validation messages, and bounded request metrics.
 - `src/api/get-feed-skeleton.ts` and `src/api/get-feed.ts` register the procedures, run generated output validation inside the error boundary, and translate expected `FeedError` values.
 - `src/feed/service.ts` projects metadata rows into the public skeleton. It does not own cursor or pagination policy.
-- `src/feed/page-loader.ts` owns request normalization, cursor decoding, repository execution/timing, scope-cap enforcement, `limit + 1` trimming, result metrics, and next-cursor creation for both endpoints.
+- `src/feed/page-loader.ts` owns request normalization, cursor decoding, repository execution/timing, `limit + 1` trimming, result metrics, and next-cursor creation for both endpoints.
 - `src/feed/query.ts` owns SQL bind order, execution, metadata/source result mapping, and explicit query invariants.
 - `src/feed/feed-query.sql` owns scope resolution, quality and endorsement rules, project pairing, classification, ordering, keyset pagination, and the conditional post-pagination source join.
 - `src/hydration/service.ts` directly coordinates source validation, omission of invalid selected sources, DID discovery, at most one identity batch, identity projection, total view construction, and output ordering. It must not call the public skeleton service.
@@ -135,11 +135,11 @@ A request, response, event kind, view, or public-error change normally requires 
 Preserve these unless the public contract is intentionally revised and documented:
 
 - The base scope always resolves from the viewer's current Certified follows. There is no caller-supplied author override.
-- Deduplicate request lists before enforcing semantic limits: 64 evaluators, 16 kinds, 500 resolved authors, and 1–50 page items.
+- Deduplicate request lists before enforcing semantic limits: 64 evaluators, 16 kinds, and 1–50 page items.
 - Evaluator endorsement subjects are unioned after base-author resolution. Remove the viewer and deduplicate candidates. Do not query actor status: Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, and actors absent from `actor` remain eligible.
 - Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with `InvalidKind`.
 - Organization-quality policy uses only service-configured `TRUSTED_QUALITY_LABELER_DIDS`. Organizations are exact `app.certified.actor.organization/self` records. Quality assertions are trusted bare-DID, non-CID `external_label` rows; malformed text timestamps are ignored safely. `includeUnrated` applies only when no active trusted label exists; an active disallowed label is not unrated.
-- Cap scope after all unions and membership filtering. Oversized scope returns its count without project/event scans, then fails with `FeedScopeTooLarge`; never truncate silently.
+- Materialize the complete resolved scope once for project pairing and event selection. Do not cap or truncate followed or evaluator-expanded accounts.
 - Evaluator expansion and visible endorsement events use the same JSON account-subject, self-endorsement, exact definition URI/CID, badge type, allowed-issuer, and latest exact response rules. Do not use derived endorsement adjacency data.
 - Project/activity pairing happens before kind filtering and pagination. It requires the same actor, exact activity URI/CID, and an effective timestamp gap strictly below 60 seconds. Paired activities remain suppressed across pages.
 - Ordering is `COALESCE(record_created_at, indexed_at)` descending, URI descending. Keep `pg_input_is_valid` guards before casting untrusted `external_label.cts` or `external_label.exp` text.

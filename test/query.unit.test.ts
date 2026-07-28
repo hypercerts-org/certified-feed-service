@@ -37,7 +37,6 @@ const input = (includeSource: boolean) => ({
 })
 
 const resultRow = (overrides: Record<string, unknown> = {}) => ({
-  scope_count: 1,
   uri,
   cid,
   collection: 'org.hypercerts.claim.activity',
@@ -66,7 +65,6 @@ describe('FeedRepository page modes', () => {
 
     expect(result).toEqual({
       includeSource: false,
-      scopeCount: 1,
       rows: [
         {
           uri,
@@ -80,9 +78,9 @@ describe('FeedRepository page modes', () => {
     })
     expect(result.rows[0]).not.toHaveProperty('sourceValue')
     expect(database.calls).toHaveLength(1)
-    expect(database.calls[0]?.values).toHaveLength(13)
+    expect(database.calls[0]?.values).toHaveLength(12)
     expect(database.calls[0]?.values[9]).toBe(3)
-    expect(database.calls[0]?.values[12]).toBe(false)
+    expect(database.calls[0]?.values[11]).toBe(false)
   })
 
   it('joins source JSON only after pagination using exact URI and CID', async () => {
@@ -92,7 +90,6 @@ describe('FeedRepository page modes', () => {
 
     await expect(repository.getFeed(input(true))).resolves.toEqual({
       includeSource: true,
-      scopeCount: 1,
       rows: [
         {
           uri,
@@ -109,11 +106,11 @@ describe('FeedRepository page modes', () => {
     const call = database.calls[0]
     expect(call).toBeDefined()
     if (!call) throw new Error('expected one feed query call')
-    expect(call.values[12]).toBe(true)
+    expect(call.values[11]).toBe(true)
     expect(call.text.indexOf('selected_source.json AS source_json')).toBeGreaterThan(
       call.text.indexOf('paged_events AS'),
     )
-    expect(call.text).toContain('ON $13::boolean')
+    expect(call.text).toContain('ON $12::boolean')
     expect(call.text).toContain('selected_source.uri = page.uri')
     expect(call.text).toContain('selected_source.cid = page.cid')
     const classifiedProjection = call.text.slice(
@@ -124,28 +121,11 @@ describe('FeedRepository page modes', () => {
     expect(classifiedProjection).not.toContain('source.json AS source_json')
   })
 
-  it('preserves scope metadata for an empty source-aware page', async () => {
-    const repository = new FeedRepository(
-      new FakeQueryExecutor([
-        resultRow({
-          scope_count: 0,
-          uri: null,
-          cid: null,
-          collection: null,
-          actor_did: null,
-          kind: null,
-          sort_value: null,
-          selected_source_uri: null,
-          selected_source_cid: null,
-          selected_source_collection: null,
-          source_json: null,
-        }),
-      ]),
-    )
+  it('returns an empty source-aware page when no events match', async () => {
+    const repository = new FeedRepository(new FakeQueryExecutor([]))
 
     await expect(repository.getFeed(input(true))).resolves.toEqual({
       includeSource: true,
-      scopeCount: 0,
       rows: [],
     })
   })

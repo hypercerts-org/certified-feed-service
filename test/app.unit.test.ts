@@ -373,8 +373,8 @@ describe('HTTP application', () => {
   it('keeps expected skeleton FeedError translation unchanged', async () => {
     const getFeedSkeleton = vi.fn(async () => {
       throw new FeedError(
-        FeedErrorCode.FeedScopeTooLarge,
-        "Reduce the viewer's Certified follows or trustedEvaluators before retrying.",
+        FeedErrorCode.TrustedEvaluatorsTooLarge,
+        'Reduce trustedEvaluators before retrying.',
         422,
       )
     })
@@ -391,8 +391,8 @@ describe('HTTP application', () => {
 
     expect(response.status).toBe(422)
     await expect(response.json()).resolves.toEqual({
-      error: 'FeedScopeTooLarge',
-      message: "Reduce the viewer's Certified follows or trustedEvaluators before retrying.",
+      error: 'TrustedEvaluatorsTooLarge',
+      message: 'Reduce trustedEvaluators before retrying.',
     })
   })
 
@@ -400,8 +400,8 @@ describe('HTTP application', () => {
     const internalCause = new Error('secret database detail')
     const getFeed = vi.fn(async () => {
       throw new FeedError(
-        FeedErrorCode.FeedScopeTooLarge,
-        "Reduce the viewer's Certified follows or trustedEvaluators before retrying.",
+        FeedErrorCode.TrustedEvaluatorsTooLarge,
+        'Reduce trustedEvaluators before retrying.',
         422,
         { cause: internalCause },
       )
@@ -421,8 +421,8 @@ describe('HTTP application', () => {
     expect(getFeed).toHaveBeenCalledOnce()
     expect(response.status).toBe(422)
     expect(JSON.parse(responseText)).toEqual({
-      error: 'FeedScopeTooLarge',
-      message: "Reduce the viewer's Certified follows or trustedEvaluators before retrying.",
+      error: 'TrustedEvaluatorsTooLarge',
+      message: 'Reduce trustedEvaluators before retrying.',
     })
     expect(responseText).not.toContain(internalCause.message)
   })

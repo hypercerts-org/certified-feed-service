@@ -293,7 +293,6 @@ Stable public feed errors:
 ```text
 InvalidRequest
 TrustedEvaluatorsTooLarge
-FeedScopeTooLarge
 InvalidKind
 InvalidCursor
 InternalError

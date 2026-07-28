@@ -10,16 +10,12 @@ import type {
   OrganizationQuality,
 } from './types.js'
 
-/** Maximum resolved author scope permitted before event expansion is suppressed. */
-export const MAX_RESOLVED_AUTHOR_COUNT = 500
-
 const FEED_QUERY = readFileSync(
   new URL('./feed-query.sql', import.meta.url),
   'utf8',
 )
 
 interface FeedQueryRow extends QueryResultRow {
-  scope_count: number
   uri: string | null
   cid: string | null
   collection: string | null
@@ -67,19 +63,14 @@ export interface FeedQuerySourceRow extends FeedQueryMetadataRow {
   readonly sourceValue: unknown
 }
 
-interface FeedQueryResultBase {
-  /** Number of accounts remaining after all scope membership rules. */
-  readonly scopeCount: number
-}
-
 /** Metadata-only result returned when source values were not requested. */
-export interface MetadataFeedQueryResult extends FeedQueryResultBase {
+export interface MetadataFeedQueryResult {
   readonly includeSource: false
   readonly rows: readonly FeedQueryMetadataRow[]
 }
 
 /** Source-aware result returned for hydrated page loading. */
-export interface SourceFeedQueryResult extends FeedQueryResultBase {
+export interface SourceFeedQueryResult {
   readonly includeSource: true
   readonly rows: readonly FeedQuerySourceRow[]
 }
@@ -89,7 +80,7 @@ export type FeedQueryResult = MetadataFeedQueryResult | SourceFeedQueryResult
 
 /** Seam used by the shared page loader to execute the database-owned feed pipeline. */
 export interface FeedQueryReader {
-  /** Resolves a feed request into a scope count and limit+1 classified rows. */
+  /** Resolves a feed request into limit+1 classified rows. */
   getFeed(input: FeedQueryInput): Promise<FeedQueryResult>
 }
 
@@ -123,25 +114,14 @@ export class FeedRepository implements FeedQueryReader {
       cursor?.value ?? null,
       cursor?.uri ?? null,
       request.limit + 1,
-      MAX_RESOLVED_AUTHOR_COUNT,
       FEED_COLLECTIONS,
       includeSource,
     ])
 
-    const first = result.rows[0]
-    const scopeCount = first?.scope_count ?? 0
     const metadataRows: FeedQueryMetadataRow[] = []
     const sourceRows: FeedQuerySourceRow[] = []
 
     for (const row of result.rows) {
-      const isScopeMetadataOnly =
-        row.uri === null &&
-        row.cid === null &&
-        row.collection === null &&
-        row.actor_did === null &&
-        row.kind === null &&
-        row.sort_value === null
-      if (isScopeMetadataOnly) continue
       if (
         row.uri === null ||
         row.cid === null ||
@@ -177,7 +157,7 @@ export class FeedRepository implements FeedQueryReader {
     }
 
     return includeSource
-      ? { includeSource: true, scopeCount, rows: sourceRows }
-      : { includeSource: false, scopeCount, rows: metadataRows }
+      ? { includeSource: true, rows: sourceRows }
+      : { includeSource: false, rows: metadataRows }
   }
 }
