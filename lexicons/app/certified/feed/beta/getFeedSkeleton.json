@@ -90,7 +90,7 @@
     },
     "feedSkeletonItem": {
       "type": "object",
-      "required": ["id", "kind", "subject", "actorDid", "sortAt"],
+      "required": ["id", "kind", "subject", "actorDid", "feedTimestamp"],
       "description": "One classified feed event represented by its exact indexed record version.",
       "properties": {
         "id": { "type": "string", "format": "at-uri" },
@@ -110,7 +110,11 @@
         },
         "subject": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
         "actorDid": { "type": "string", "format": "did" },
-        "sortAt": { "type": "string", "format": "datetime" }
+        "feedTimestamp": {
+          "type": "string",
+          "format": "datetime",
+          "description": "Timestamp used to place this item in the feed, newest first. It uses the record's createdAt when valid; otherwise, it uses the time Hyperindex indexed the record."
+        }
       }
     }
   }

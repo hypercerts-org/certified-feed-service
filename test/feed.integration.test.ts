@@ -685,12 +685,12 @@ describe('FeedRepository against Postgres', () => {
       visibleAwardUri,
     ])
     expect(output.items.some((item) => item.subject.uri === activityUri)).toBe(false)
-    expect(output.items[0]?.sortAt).toBe('2026-07-21T11:00:00.000000Z')
-    expect(output.items.find((item) => item.subject.uri === boardUri)?.sortAt).toBe(
+    expect(output.items[0]?.feedTimestamp).toBe('2026-07-21T11:00:00.000000Z')
+    expect(output.items.find((item) => item.subject.uri === boardUri)?.feedTimestamp).toBe(
       '2026-07-21T08:00:00.000000Z',
     )
     expect(
-      output.items.find((item) => item.subject.uri === dateOnlyUri)?.sortAt,
+      output.items.find((item) => item.subject.uri === dateOnlyUri)?.feedTimestamp,
     ).toBe('2026-07-21T07:30:00.000000Z')
 
     const projectOnly = await getFeedForFollows([followedOrg], {
@@ -978,7 +978,7 @@ describe('FeedRepository against Postgres', () => {
       materialized,
       fallback,
     ])
-    expect(output.items.map((item) => item.sortAt)).toEqual([
+    expect(output.items.map((item) => item.feedTimestamp)).toEqual([
       '2026-07-21T12:00:00.000000Z',
       '2026-07-21T11:00:00.000000Z',
     ])

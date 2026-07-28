@@ -126,7 +126,7 @@
     },
     "feedItem": {
       "type": "object",
-      "required": ["id", "kind", "subject", "sortAt", "actor", "view"],
+      "required": ["id", "kind", "subject", "feedTimestamp", "actor", "view"],
       "description": "A feed event whose indexed source record was validated and projected into a view.",
       "properties": {
         "id": {
@@ -149,10 +149,10 @@
           ]
         },
         "subject": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
-        "sortAt": {
+        "feedTimestamp": {
           "type": "string",
           "format": "datetime",
-          "description": "Effective timestamp used to order this item."
+          "description": "Timestamp used to place this item in the feed, newest first. It uses the record's createdAt when valid; otherwise, it uses the time Hyperindex indexed the record."
         },
         "actor": { "type": "ref", "ref": "#actorSummary" },
         "view": {

@@ -129,7 +129,7 @@ const feedItem = (
   id: uri,
   kind,
   subject: { uri, cid },
-  sortAt: createdAt,
+  feedTimestamp: createdAt,
   actor,
   view: viewsByKind[kind],
 })
@@ -166,14 +166,14 @@ describe('feed Lexicon contract', () => {
       'kind',
       'subject',
       'actorDid',
-      'sortAt',
+      'feedTimestamp',
     ])
     expect(Object.keys(skeletonLexicon.defs.feedSkeletonItem.properties)).toEqual([
       'id',
       'kind',
       'subject',
       'actorDid',
-      'sortAt',
+      'feedTimestamp',
     ])
     expect(defs).toHaveProperty('organizationQualityPolicy')
     expect(skeletonLexicon.defs).not.toHaveProperty(
@@ -198,7 +198,7 @@ describe('feed Lexicon contract', () => {
             kind: 'cert.create',
             subject: { uri, cid },
             actorDid,
-            sortAt: createdAt,
+            feedTimestamp: createdAt,
           },
         ],
       }),
@@ -220,7 +220,7 @@ describe('feed Lexicon contract', () => {
       'id',
       'kind',
       'subject',
-      'sortAt',
+      'feedTimestamp',
       'actor',
       'view',
     ])

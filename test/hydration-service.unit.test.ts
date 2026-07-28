@@ -178,7 +178,7 @@ describe('HydratedFeedService', () => {
       id: activityUri,
       kind: 'cert.create',
       subject: { uri: activityUri, cid },
-      sortAt: '2026-07-20T00:00:03.000000Z',
+      feedTimestamp: '2026-07-20T00:00:03.000000Z',
       actor: {
         did: authorDid,
         handle: 'author.example',

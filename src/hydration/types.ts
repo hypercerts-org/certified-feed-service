@@ -146,7 +146,7 @@ export interface HydratedFeedItem {
   readonly id: string
   readonly kind: FeedKind
   readonly subject: FeedSubject
-  readonly sortAt: string
+  readonly feedTimestamp: string
   readonly actor: ActorSummary
   readonly view: FeedItemView
 }

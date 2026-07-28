@@ -49,7 +49,7 @@ Use the same body with `getFeedSkeleton` when a downstream data plane only needs
         "cid": "bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u"
       },
       "actorDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
-      "sortAt": "2026-07-21T10:00:00.000000Z"
+      "feedTimestamp": "2026-07-21T10:00:00.000000Z"
     }
   ],
   "cursor": "eyJ2ZXJzaW9uIjoxLCJ2YWx1ZSI6IjIwMjYtMDctMjFUMTA6MDA6MDAuMDAwMDAwWiIsInVyaSI6ImF0Oi8vZGlkOnBsYzpld3ZpN254enlvdW42emh4cmhzNjRvaXovb3JnLmh5cGVyY2VydHMuY2xhaW0uYWN0aXZpdHkvM2twbiJ9"
@@ -68,7 +68,7 @@ Use the same body with `getFeedSkeleton` when a downstream data plane only needs
         "uri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.context.evaluation/3kpn",
         "cid": "bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u"
       },
-      "sortAt": "2026-07-21T10:00:00.000000Z",
+      "feedTimestamp": "2026-07-21T10:00:00.000000Z",
       "actor": {
         "did": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
         "handle": "evaluator.example",
@@ -165,10 +165,10 @@ Project and activity records fold before kind filtering and pagination. A paired
 Ordering is:
 
 ```text
-effective timestamp DESC, record URI DESC
+feed timestamp DESC, record URI DESC
 ```
 
-The effective timestamp is `COALESCE(record.record_created_at, record.indexed_at)`. Hyperindex materializes a valid top-level `json.createdAt` into `record_created_at`; `indexed_at` is the fallback. The query fetches `limit + 1` events to decide whether to return a next cursor.
+`feedTimestamp` is the timestamp used to place an item in the feed, newest first. It uses the record's valid `createdAt` when available; otherwise, it uses the time Hyperindex indexed the record. The query fetches `limit + 1` events to decide whether to return a next cursor.
 
 The opaque cursor stores the timestamp and URI of the last selected source row before hydration. Both endpoints use the same page loader, so ordering and cursor bytes are identical for the same request. Hydration may omit invalid selected sources without changing cursor advancement. Cursor traversal is deterministic for each query but does not provide snapshot isolation across requests.
 

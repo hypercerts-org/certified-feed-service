@@ -24,7 +24,7 @@ const avatarBlob = jsonToLex(
   },
   { strict: true },
 ) as BlobRef
-const sortAt = '2026-07-21T10:00:00.000000Z'
+const feedTimestamp = '2026-07-21T10:00:00.000000Z'
 const logger = pino({ enabled: false })
 
 const skeletonPath =
@@ -68,7 +68,7 @@ describe('HTTP application', () => {
               kind: 'cert.create' as const,
               subject: { uri, cid },
               actorDid: actor,
-              sortAt,
+              feedTimestamp,
             },
           ],
         }
@@ -103,7 +103,7 @@ describe('HTTP application', () => {
               id: uri,
               kind: 'cert.create' as const,
               subject: { uri, cid },
-              sortAt,
+              feedTimestamp,
               actor: {
                 did: actor,
                 handle: 'actor.example',
@@ -283,7 +283,7 @@ describe('HTTP application', () => {
               kind: 'cert.create' as const,
               subject: { uri: 'bad', cid: 'bad' },
               actorDid: 'not-a-did',
-              sortAt: 'not-a-date',
+              feedTimestamp: 'not-a-date',
             },
           ],
         })),
@@ -299,7 +299,7 @@ describe('HTTP application', () => {
               id: 'not-an-at-uri',
               kind: 'cert.create' as const,
               subject: { uri: 'bad', cid: 'bad' },
-              sortAt: 'not-a-date',
+              feedTimestamp: 'not-a-date',
               actor: { did: 'not-a-did' },
               view: {
                 $type: 'app.certified.feed.beta.defs#activityView' as const,

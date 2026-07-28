@@ -21,7 +21,7 @@ export const encodeCursor = (value: string, uri: string): string =>
     'base64url',
   )
 
-/** Decodes and validates an opaque cursor for descending effective-timestamp pagination. */
+/** Decodes and validates an opaque cursor for descending feed-timestamp pagination. */
 export const decodeCursor = (cursor: string | undefined): FeedCursor | undefined => {
   if (cursor === undefined || cursor === '') return undefined
   if (cursor.length > MAX_CURSOR_LENGTH) {

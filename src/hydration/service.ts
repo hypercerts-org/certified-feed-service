@@ -108,7 +108,7 @@ export class HydratedFeedService implements HydratedFeedReader {
         id: row.uri,
         kind: row.kind,
         subject: { uri: row.uri, cid: row.cid },
-        sortAt: row.sortValue,
+        feedTimestamp: row.sortValue,
         actor,
         view: buildFeedItemView(record, {
           ...(endorsedActor === undefined ? {} : { endorsedActor }),

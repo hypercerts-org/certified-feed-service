@@ -21,7 +21,7 @@ describe('feed cursor', () => {
     const encoded = Buffer.from(
       JSON.stringify({
         version: 1,
-        sortBy: 'sortAt',
+        sortBy: 'feedTimestamp',
         value: '2026-07-21T10:00:00.000000Z',
         uri,
       }),

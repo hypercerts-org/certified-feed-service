@@ -25,7 +25,7 @@ export class FeedService implements FeedSkeletonReader {
         kind: row.kind,
         subject: { uri: row.uri, cid: row.cid },
         actorDid: row.actorDid,
-        sortAt: row.sortValue,
+        feedTimestamp: row.sortValue,
       })),
       ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
     }
