@@ -30,6 +30,10 @@ const app = createApp(
   { skeleton: feedService, hydrated: hydratedFeed },
   metrics,
   logger,
+  {
+    allowedOrigins: config.corsAllowedOrigins,
+    allowLocalhost: config.corsAllowLocalhost,
+  },
 )
 
 metrics.setReady(false)

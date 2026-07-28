@@ -6,6 +6,10 @@ export interface Config {
   readonly host: string
   /** TCP port used by the HTTP server. */
   readonly port: number
+  /** Exact browser origins allowed to read HTTP responses. */
+  readonly corsAllowedOrigins: readonly string[]
+  /** Whether any HTTP localhost origin may read HTTP responses. */
+  readonly corsAllowLocalhost: boolean
   /** Postgres connection URL for the indexer's existing database. */
   readonly databaseUrl: string
   /** Maximum number of Postgres sessions held by this sidecar. */
@@ -24,6 +28,50 @@ export interface Config {
   readonly trustedQualityLabelerDids: readonly string[]
   /** Pino logging threshold. */
   readonly logLevel: string
+}
+
+export const DEFAULT_CORS_ALLOWED_ORIGINS = ['https://certified.app'] as const
+
+const booleanEnv = (
+  env: NodeJS.ProcessEnv,
+  name: string,
+  fallback: boolean,
+): boolean => {
+  const raw = env[name]
+  if (raw === undefined || raw === '') return fallback
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  throw new Error(
+    `${name} must be either true or false; change ${name} from ${JSON.stringify(raw)} to one of those values.`,
+  )
+}
+
+const corsOriginsEnv = (env: NodeJS.ProcessEnv): readonly string[] => {
+  const raw = env.CORS_ALLOWED_ORIGINS
+  const origins = (raw === undefined || raw.trim() === ''
+    ? DEFAULT_CORS_ALLOWED_ORIGINS.join(',')
+    : raw
+  )
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+  const invalidOrigin = origins.find((origin) => {
+    try {
+      const parsed = new URL(origin)
+      return (
+        !['http:', 'https:'].includes(parsed.protocol) ||
+        parsed.origin !== origin
+      )
+    } catch {
+      return true
+    }
+  })
+  if (invalidOrigin !== undefined) {
+    throw new Error(
+      `CORS_ALLOWED_ORIGINS contains invalid origin ${JSON.stringify(invalidOrigin)}; use comma-separated http(s) origins without paths, queries, or fragments.`,
+    )
+  }
+  return [...new Set(origins)]
 }
 
 const integerEnv = (
@@ -85,6 +133,8 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
   return {
     host: env.HOST || '0.0.0.0',
     port: integerEnv(env, 'PORT', 3000, 1, 65_535),
+    corsAllowedOrigins: corsOriginsEnv(env),
+    corsAllowLocalhost: booleanEnv(env, 'CORS_ALLOW_LOCALHOST', true),
     databaseUrl,
     databaseMaxConnections: integerEnv(
       env,

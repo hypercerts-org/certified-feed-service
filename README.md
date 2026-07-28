@@ -216,6 +216,8 @@ For local development, copy `.env.example` to `.env`. For deployment, copy its v
 | `PORT` | no | `3000` | HTTP listen port |
 | `HOST` | no | `0.0.0.0` | HTTP listen interface |
 | `LOG_LEVEL` | no | `info` | Pino log level |
+| `CORS_ALLOWED_ORIGINS` | no | `https://certified.app` | Comma-separated exact browser origins; use origins without paths, queries, or fragments |
+| `CORS_ALLOW_LOCALHOST` | no | `true` | Allow `http://localhost`, `http://127.0.0.1`, and `http://[::1]` on any port; disable for production if local browser access is not needed |
 | `DATABASE_MAX_CONNECTIONS` | no | `5` | Maximum pool size, capped at 20; the pool keeps one connection warm |
 | `DATABASE_IDLE_TIMEOUT_MS` | no | `60000` | Time before idle connections above the one-connection minimum are closed |
 | `DATABASE_CONNECTION_TIMEOUT_MS` | no | `2000` | Pool acquisition timeout |
@@ -305,7 +307,7 @@ Deploy the service beside Hyperindex and use private networking for the database
 
 Set per-IP rate limits at the gateway. The first public policy allows 60 feed requests per minute for each client IP, with a burst of 20. When a client exceeds the limit, return HTTP 429 with `Retry-After`. Keep health, readiness, and metrics private and outside this public limit. Adjust the limits using measured query response time and pool saturation.
 
-The process limits request body size, HTTP request receive time, pool size, connection wait time, and SQL statement duration. `REQUEST_TIMEOUT_MS` is not a deadline for the whole handler or query. Do not add rate-limit state to this service because separate replicas would disagree.
+The process limits request body size, HTTP request receive time, pool size, connection wait time, and SQL statement duration. `REQUEST_TIMEOUT_MS` is not a deadline for the whole handler or query. Feed procedures support CORS preflight requests for configured browser origins. CORS does not authenticate callers or replace gateway rate limiting. Do not add rate-limit state to this service because separate replicas would disagree.
 
 ## Operations
 

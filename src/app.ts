@@ -6,6 +6,7 @@ import type { Logger } from 'pino'
 import { registerGetFeedSkeleton } from './api/get-feed-skeleton.js'
 import { registerGetFeed } from './api/get-feed.js'
 import type { DatabaseCompatibilityChecker } from './database.js'
+import { DEFAULT_CORS_ALLOWED_ORIGINS } from './config.js'
 import { FeedErrorCode } from './feed/errors.js'
 import type { FeedSkeletonReader } from './feed/service.js'
 import type { HydratedFeedReader } from './hydration/service.js'
@@ -28,6 +29,18 @@ const FEED_ROUTES = [
 
 type FeedRoute = (typeof FEED_ROUTES)[number]
 type FetchHandler = (request: Request) => Promise<Response>
+
+export interface AppCorsOptions {
+  /** Exact origins allowed to receive CORS response headers. */
+  readonly allowedOrigins: readonly string[]
+  /** Allows HTTP localhost, loopback, and IPv6 loopback origins on any port. */
+  readonly allowLocalhost: boolean
+}
+
+const DEFAULT_CORS_OPTIONS: AppCorsOptions = {
+  allowedOrigins: DEFAULT_CORS_ALLOWED_ORIGINS,
+  allowLocalhost: true,
+}
 
 const feedRoute = (pathname: string): FeedRoute | undefined =>
   FEED_ROUTES.find((route) => route.path === pathname)
@@ -61,6 +74,115 @@ const routeLabel = (pathname: string): string => {
   if (pathname === '/ready') return 'ready'
   if (pathname === '/metrics') return 'metrics'
   return feedRoute(pathname)?.label ?? 'other'
+}
+
+const isLocalhostOrigin = (origin: string): boolean => {
+  try {
+    const parsed = new URL(origin)
+    const isCanonicalOrigin = parsed.origin === origin
+    const isExplicitHttpDefaultPort =
+      parsed.protocol === 'http:' &&
+      parsed.port === '' &&
+      origin === `http://${parsed.hostname}:80`
+    return (
+      parsed.protocol === 'http:' &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname) &&
+      (isCanonicalOrigin || isExplicitHttpDefaultPort)
+    )
+  } catch {
+    return false
+  }
+}
+
+const allowedCorsOrigin = (
+  origin: string | null,
+  options: AppCorsOptions,
+): string | undefined => {
+  if (origin === null) return undefined
+  if (options.allowedOrigins.includes(origin)) return origin
+  return options.allowLocalhost && isLocalhostOrigin(origin)
+    ? origin
+    : undefined
+}
+
+const setVaryOrigin = (headers: Headers): void => {
+  const values = new Set(
+    (headers.get('vary') ?? '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  )
+  if (!values.has('origin')) {
+    const current = headers.get('vary')
+    headers.set('vary', current ? `${current}, Origin` : 'Origin')
+  }
+}
+
+const withCorsHeaders = (
+  response: Response,
+  origin: string | undefined,
+): Response => {
+  if (origin === undefined) return response
+  const headers = new Headers(response.headers)
+  headers.set('access-control-allow-origin', origin)
+  setVaryOrigin(headers)
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
+const corsPreflightResponse = (
+  origin: string | undefined,
+  request: Request,
+): Response => {
+  if (origin === undefined) {
+    return jsonResponse(
+      {
+        error: FeedErrorCode.InvalidRequest,
+        message:
+          'This browser origin is not allowed; use a configured feed client origin and retry.',
+      },
+      403,
+    )
+  }
+
+  const requestedMethod = request.headers.get('access-control-request-method')
+  if (requestedMethod !== 'POST') {
+    return jsonResponse(
+      {
+        error: FeedErrorCode.InvalidRequest,
+        message:
+          'This feed preflight must request POST; retry with the feed procedure method.',
+      },
+      400,
+    )
+  }
+
+  const requestedHeaders = request.headers.get('access-control-request-headers')
+  const unsupportedHeader = requestedHeaders
+    ?.split(',')
+    .map((value) => value.trim().toLowerCase())
+    .find((value) => value !== '' && value !== 'content-type')
+  if (unsupportedHeader !== undefined) {
+    return jsonResponse(
+      {
+        error: FeedErrorCode.InvalidRequest,
+        message: `This feed preflight requests unsupported header ${JSON.stringify(unsupportedHeader)}; retry with content-type only.`,
+      },
+      400,
+    )
+  }
+
+  const headers = new Headers({
+    'access-control-allow-origin': origin,
+    'access-control-allow-methods': 'POST',
+    'access-control-allow-headers': 'content-type',
+    'access-control-max-age': '600',
+  })
+  setVaryOrigin(headers)
+  return new Response(null, { status: 204, headers })
 }
 
 const readBoundedRequest = async (
@@ -237,13 +359,31 @@ const handleRequest = async (
   database: DatabaseCompatibilityChecker,
   router: LexRouter,
   metrics: Metrics,
+  corsOptions: AppCorsOptions,
 ): Promise<Response> => {
-  if (pathname === '/health') return handleHealthRequest(request)
-  if (pathname === '/ready') {
-    return handleReadyRequest(request, database, metrics)
+  const matchedFeedRoute = feedRoute(pathname)
+  const corsOrigin =
+    matchedFeedRoute === undefined
+      ? undefined
+      : allowedCorsOrigin(request.headers.get('origin'), corsOptions)
+
+  let response: Response
+  if (matchedFeedRoute && request.method === 'OPTIONS') {
+    response = corsPreflightResponse(corsOrigin, request)
+    if (response.status >= 400) {
+      metrics.observeError(FeedErrorCode.InvalidRequest)
+    }
+  } else if (pathname === '/health') {
+    response = handleHealthRequest(request)
+  } else if (pathname === '/ready') {
+    response = await handleReadyRequest(request, database, metrics)
+  } else if (pathname === '/metrics') {
+    response = await handleMetricsRequest(request, metrics)
+  } else {
+    response = await handleFeedRequest(request, matchedFeedRoute, router, metrics)
   }
-  if (pathname === '/metrics') return handleMetricsRequest(request, metrics)
-  return handleFeedRequest(request, feedRoute(pathname), router, metrics)
+
+  return withCorsHeaders(response, corsOrigin)
 }
 
 /** Public feed services registered at the HTTP composition boundary. */
@@ -258,6 +398,7 @@ export const createApp = (
   services: AppFeedServices,
   metrics: Metrics,
   logger: Logger,
+  corsOptions: AppCorsOptions = DEFAULT_CORS_OPTIONS,
 ): { fetch: FetchHandler } => {
   const router = new LexRouter({
     onHandlerError: ({ error, method }) => {
@@ -280,6 +421,7 @@ export const createApp = (
         database,
         router,
         metrics,
+        corsOptions,
       )
       status = response.status
       return response

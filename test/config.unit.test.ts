@@ -14,9 +14,25 @@ describe('loadConfig', () => {
 
     expect(config.databaseMaxConnections).toBe(5)
     expect(config.databaseIdleTimeoutMs).toBe(60_000)
+    expect(config.corsAllowedOrigins).toEqual(['https://certified.app'])
+    expect(config.corsAllowLocalhost).toBe(true)
     expect(config.trustedQualityLabelerDids).toEqual([
       'did:plc:ar7c4by46qjdydhdevvrndac',
     ])
+  })
+
+  it('loads configured CORS origins and local access policy', () => {
+    const config = loadConfig({
+      DATABASE_URL: databaseUrl,
+      CORS_ALLOWED_ORIGINS: 'https://certified.app, https://staging.example, https://certified.app',
+      CORS_ALLOW_LOCALHOST: 'false',
+    })
+
+    expect(config.corsAllowedOrigins).toEqual([
+      'https://certified.app',
+      'https://staging.example',
+    ])
+    expect(config.corsAllowLocalhost).toBe(false)
   })
 
   it('loads a configured database idle timeout', () => {
@@ -26,6 +42,21 @@ describe('loadConfig', () => {
     })
 
     expect(config.databaseIdleTimeoutMs).toBe(120_000)
+  })
+
+  it('explains how to fix malformed CORS settings', () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: databaseUrl,
+        CORS_ALLOWED_ORIGINS: 'https://certified.app/path',
+      }),
+    ).toThrow('CORS_ALLOWED_ORIGINS contains invalid origin')
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: databaseUrl,
+        CORS_ALLOW_LOCALHOST: 'yes',
+      }),
+    ).toThrow('CORS_ALLOW_LOCALHOST must be either true or false')
   })
 
   it('explains how to fix missing and malformed values', () => {
