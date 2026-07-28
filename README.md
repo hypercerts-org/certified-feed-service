@@ -49,6 +49,31 @@ Example response:
 
 The cursor is opaque to callers and is valid only for descending effective-timestamp pagination.
 
+## Request flow
+
+```mermaid
+sequenceDiagram
+    actor Client as ATProto Client
+    participant HTTP as HTTP App
+    participant XRPC as XRPC Handler
+    participant Service as Feed Service
+    participant Repo as Feed Repository
+    participant DB as Hyperindex PostgreSQL
+
+    Client->>HTTP: POST getFeedSkeleton
+    HTTP->>XRPC: Validated request
+    XRPC->>Service: getFeedSkeleton(input)
+    Service->>Service: Normalize request and decode cursor
+    Service->>Repo: getFeed(request)
+    Repo->>DB: Execute parameterized feed query
+    DB-->>Repo: Scope count and feed rows
+    Repo-->>Service: Mapped query result
+    Service->>Service: Paginate and create cursor
+    Service-->>XRPC: Feed skeleton
+    XRPC-->>HTTP: XRPC response
+    HTTP-->>Client: Items and optional cursor
+```
+
 ## Request behavior
 
 - Malformed JSON or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`; it never becomes an internal server error.
