@@ -139,13 +139,11 @@ const normalizeLexiconValidationError = async (
   )
 }
 
-/** Builds the fetch-style HTTP application containing XRPC and operational endpoints. */
-export const createApp = (
-  database: DatabaseCompatibilityChecker,
+const createRouter = (
   feedService: FeedSkeletonReader,
   metrics: Metrics,
   logger: Logger,
-): { fetch: FetchHandler } => {
+): LexRouter => {
   const router = new LexRouter({
     onHandlerError: ({ error, method }) => {
       if (error instanceof LexServerError) return
@@ -153,79 +151,125 @@ export const createApp = (
     },
   })
   registerGetFeedSkeleton(router, feedService, metrics, logger)
+  return router
+}
 
-  return {
-    fetch: async (originalRequest: Request): Promise<Response> => {
-      const startedAt = performance.now()
-      const url = new URL(originalRequest.url)
-      const route = routeLabel(url.pathname)
-      let status = 500
-      try {
-        let response: Response
-        if (url.pathname === '/health') {
-          response =
-            originalRequest.method === 'GET'
-              ? jsonResponse({ status: 'ok' })
-              : methodNotAllowed('GET')
-        } else if (url.pathname === '/ready' && originalRequest.method !== 'GET') {
-          response = methodNotAllowed('GET')
-        } else if (url.pathname === '/ready') {
-          const readyStartedAt = performance.now()
-          const compatibility = await database.checkCompatibility()
-          metrics.observeDatabase(
-            'readiness',
-            (performance.now() - readyStartedAt) / 1_000,
-          )
-          metrics.setReady(compatibility.compatible)
-          response = compatibility.compatible
-            ? jsonResponse({ status: 'ready' })
-            : jsonResponse(
-                { status: 'not_ready', reason: compatibility.reason },
-                503,
-              )
-        } else if (url.pathname === '/metrics') {
-          response =
-            originalRequest.method === 'GET'
-              ? new Response(await metrics.registry.metrics(), {
-                  status: 200,
-                  headers: { 'content-type': metrics.registry.contentType },
-                })
-              : methodNotAllowed('GET')
-        } else if (url.pathname === XRPC_PATH && originalRequest.method !== 'POST') {
-          metrics.observeError(FeedErrorCode.InvalidRequest)
-          response = methodNotAllowed('POST')
-        } else {
-          let request = originalRequest
-          if (url.pathname === XRPC_PATH && originalRequest.method === 'POST') {
-            const bounded = await readBoundedRequest(originalRequest)
-            if (bounded instanceof Response) {
-              metrics.observeError(FeedErrorCode.InvalidRequest)
-              response = bounded
-              status = response.status
-              return response
-            }
-            request = bounded
-            const malformedJson = await rejectMalformedJson(request)
-            if (malformedJson) {
-              metrics.observeError(FeedErrorCode.InvalidRequest)
-              response = malformedJson
-              status = response.status
-              return response
-            }
-          }
-          response = await router.fetch(request)
-          response = await normalizeLexiconValidationError(response, metrics)
-        }
-        status = response.status
-        return response
-      } finally {
-        metrics.observeRequest(
-          route,
-          originalRequest.method,
-          status,
-          (performance.now() - startedAt) / 1_000,
-        )
-      }
-    },
+const readinessResponse = async (
+  database: DatabaseCompatibilityChecker,
+  metrics: Metrics,
+): Promise<Response> => {
+  const startedAt = performance.now()
+  const compatibility = await database.checkCompatibility()
+  metrics.observeDatabase(
+    'readiness',
+    (performance.now() - startedAt) / 1_000,
+  )
+  metrics.setReady(compatibility.compatible)
+  return compatibility.compatible
+    ? jsonResponse({ status: 'ready' })
+    : jsonResponse(
+        { status: 'not_ready', reason: compatibility.reason },
+        503,
+      )
+}
+
+const metricsResponse = async (metrics: Metrics): Promise<Response> =>
+  new Response(await metrics.registry.metrics(), {
+    status: 200,
+    headers: { 'content-type': metrics.registry.contentType },
+  })
+
+const xrpcResponse = async (
+  request: Request,
+  router: LexRouter,
+  metrics: Metrics,
+): Promise<Response> => {
+  if (request.method !== 'POST') {
+    metrics.observeError(FeedErrorCode.InvalidRequest)
+    return methodNotAllowed('POST')
   }
+
+  const bounded = await readBoundedRequest(request)
+  if (bounded instanceof Response) {
+    metrics.observeError(FeedErrorCode.InvalidRequest)
+    return bounded
+  }
+
+  const malformedJson = await rejectMalformedJson(bounded)
+  if (malformedJson) {
+    metrics.observeError(FeedErrorCode.InvalidRequest)
+    return malformedJson
+  }
+
+  const response = await router.fetch(bounded)
+  return normalizeLexiconValidationError(response, metrics)
+}
+
+const routeRequest = async (
+  request: Request,
+  pathname: string,
+  database: DatabaseCompatibilityChecker,
+  router: LexRouter,
+  metrics: Metrics,
+): Promise<Response> => {
+  if (pathname === '/health') {
+    return request.method === 'GET'
+      ? jsonResponse({ status: 'ok' })
+      : methodNotAllowed('GET')
+  }
+  if (pathname === '/ready') {
+    return request.method === 'GET'
+      ? readinessResponse(database, metrics)
+      : methodNotAllowed('GET')
+  }
+  if (pathname === '/metrics') {
+    return request.method === 'GET'
+      ? metricsResponse(metrics)
+      : methodNotAllowed('GET')
+  }
+  if (pathname === XRPC_PATH) {
+    return xrpcResponse(request, router, metrics)
+  }
+
+  const response = await router.fetch(request)
+  return normalizeLexiconValidationError(response, metrics)
+}
+
+const createFetchHandler = (
+  database: DatabaseCompatibilityChecker,
+  router: LexRouter,
+  metrics: Metrics,
+): FetchHandler => async (request) => {
+  const startedAt = performance.now()
+  const pathname = new URL(request.url).pathname
+  let status = 500
+  try {
+    const response = await routeRequest(
+      request,
+      pathname,
+      database,
+      router,
+      metrics,
+    )
+    status = response.status
+    return response
+  } finally {
+    metrics.observeRequest(
+      routeLabel(pathname),
+      request.method,
+      status,
+      (performance.now() - startedAt) / 1_000,
+    )
+  }
+}
+
+/** Builds the fetch-style HTTP application containing XRPC and operational endpoints. */
+export const createApp = (
+  database: DatabaseCompatibilityChecker,
+  feedService: FeedSkeletonReader,
+  metrics: Metrics,
+  logger: Logger,
+): { fetch: FetchHandler } => {
+  const router = createRouter(feedService, metrics, logger)
+  return { fetch: createFetchHandler(database, router, metrics) }
 }
