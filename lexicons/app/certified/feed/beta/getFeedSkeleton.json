@@ -8,7 +8,6 @@
       "errors": [
         { "name": "InvalidRequest", "description": "The request is malformed or semantically invalid." },
         { "name": "TrustedEvaluatorsTooLarge", "description": "The trusted evaluator filter exceeds its supported size." },
-        { "name": "FeedScopeTooLarge", "description": "The resolved author scope exceeds its supported size." },
         { "name": "InvalidKind", "description": "The request contains an unsupported event kind." },
         { "name": "InvalidCursor", "description": "The cursor is invalid or incompatible." },
         { "name": "InternalError", "description": "The service encountered an internal error." }

@@ -66,7 +66,7 @@ sequenceDiagram
     Service->>Service: Normalize request and decode cursor
     Service->>Repo: getFeed(request)
     Repo->>DB: Execute parameterized feed query
-    DB-->>Repo: Scope count and feed rows
+    DB-->>Repo: Classified feed rows
     Repo-->>Service: Mapped query result
     Service->>Service: Paginate and create cursor
     Service-->>XRPC: Feed skeleton
@@ -223,7 +223,6 @@ Stable public feed errors:
 ```text
 InvalidRequest
 TrustedEvaluatorsTooLarge
-FeedScopeTooLarge
 InvalidKind
 InvalidCursor
 InternalError

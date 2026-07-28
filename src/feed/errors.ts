@@ -2,7 +2,6 @@
 export const FeedErrorCode = {
   InvalidRequest: 'InvalidRequest',
   TrustedEvaluatorsTooLarge: 'TrustedEvaluatorsTooLarge',
-  FeedScopeTooLarge: 'FeedScopeTooLarge',
   InvalidKind: 'InvalidKind',
   InvalidCursor: 'InvalidCursor',
   InternalError: 'InternalError',

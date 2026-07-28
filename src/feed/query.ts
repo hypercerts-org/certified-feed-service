@@ -9,16 +9,12 @@ import type {
   OrganizationQuality,
 } from './types.js'
 
-/** Maximum resolved author scope permitted before event expansion is suppressed. */
-export const MAX_RESOLVED_AUTHOR_COUNT = 500
-
 const FEED_QUERY = readFileSync(
   new URL('./feed-query.sql', import.meta.url),
   'utf8',
 )
 
 interface FeedQueryRow {
-  scope_count: number
   uri: string | null
   cid: string | null
   actor_did: string | null
@@ -38,8 +34,6 @@ export interface FeedQueryInput {
 
 /** One database result before the service trims the limit+1 sentinel row. */
 export interface FeedQueryResult {
-  /** Number of accounts remaining after all scope membership rules. */
-  readonly scopeCount: number
   /** Fully classified rows in deterministic descending order. */
   readonly rows: readonly {
     readonly uri: string
@@ -52,7 +46,7 @@ export interface FeedQueryResult {
 
 /** Seam used by FeedService to execute the database-owned feed pipeline. */
 export interface FeedQueryReader {
-  /** Resolves a feed request into a scope count and limit+1 classified rows. */
+  /** Resolves a feed request into limit+1 classified rows. */
   getFeed(input: FeedQueryInput): Promise<FeedQueryResult>
 }
 
@@ -76,12 +70,9 @@ export class FeedRepository implements FeedQueryReader {
       cursor?.value ?? null,
       cursor?.uri ?? null,
       request.limit + 1,
-      MAX_RESOLVED_AUTHOR_COUNT,
       FEED_COLLECTIONS,
     ])
 
-    const first = result.rows[0]
-    const scopeCount = first?.scope_count ?? 0
     const rows = result.rows.flatMap((row) => {
       if (
         row.uri === null ||
@@ -103,6 +94,6 @@ export class FeedRepository implements FeedQueryReader {
       ]
     })
 
-    return { scopeCount, rows }
+    return { rows }
   }
 }

@@ -42,7 +42,6 @@ describe('feed skeleton Lexicon contract', () => {
     expect(errorNames).toEqual([
       'InvalidRequest',
       'TrustedEvaluatorsTooLarge',
-      'FeedScopeTooLarge',
       'InvalidKind',
       'InvalidCursor',
       'InternalError',

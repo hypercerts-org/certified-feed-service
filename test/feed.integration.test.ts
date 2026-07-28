@@ -1,5 +1,4 @@
 import { randomBytes } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 
 import pino from 'pino'
 import { Pool } from 'pg'
@@ -9,7 +8,6 @@ import { loadConfig } from '../src/config.js'
 import { Database } from '../src/database.js'
 import { FeedRepository } from '../src/feed/query.js'
 import { FeedService } from '../src/feed/service.js'
-import { FEED_COLLECTIONS } from '../src/feed/types.js'
 import type { GetFeedSkeletonInput } from '../src/feed/types.js'
 import { Metrics } from '../src/metrics.js'
 
@@ -19,23 +17,9 @@ if (!TEST_DATABASE_URL) {
     'TEST_DATABASE_URL is required for integration tests; point it at an empty disposable Postgres 16+ database.',
   )
 }
-const FEED_QUERY = readFileSync(
-  new URL('../src/feed/feed-query.sql', import.meta.url),
-  'utf8',
-)
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 const staleCid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72a'
 const plcAlphabet = 'abcdefghijklmnopqrstuvwxyz234567'
-
-interface ExplainPlanNode {
-  readonly Alias?: string
-  readonly ['Actual Loops']?: number
-  readonly Plans?: readonly ExplainPlanNode[]
-}
-
-interface ExplainResultRow {
-  readonly ['QUERY PLAN']: readonly [{ readonly Plan: ExplainPlanNode }]
-}
 
 const randomDid = (): string => {
   const bytes = randomBytes(24)
@@ -43,11 +27,6 @@ const randomDid = (): string => {
   for (const byte of bytes) suffix += plcAlphabet[byte % plcAlphabet.length]
   return `did:plc:${suffix}`
 }
-
-const flattenPlan = (node: ExplainPlanNode): readonly ExplainPlanNode[] => [
-  node,
-  ...(node.Plans ?? []).flatMap(flattenPlan),
-]
 
 describe('FeedRepository against Postgres', () => {
   const logger = pino({ enabled: false })
@@ -1385,9 +1364,10 @@ describe('FeedRepository against Postgres', () => {
     )
   })
 
-  it('caps oversized resolved scopes before project and event record scans', async () => {
+  it('supports more than 500 followed accounts without truncating the scope', async () => {
     const viewer = randomDid()
     const followedDids = Array.from({ length: 501 }, randomDid)
+    const selectedAuthor = followedDids.at(-1)!
     await seedActor(viewer)
     await admin.query(
       `INSERT INTO record (
@@ -1407,37 +1387,16 @@ describe('FeedRepository against Postgres', () => {
        FROM unnest($3::text[]) WITH ORDINALITY AS followed(did, ordinality)`,
       [viewer, cid, followedDids],
     )
+    const selectedUri = await seedRecord(
+      selectedAuthor,
+      'org.hypercerts.claim.activity',
+      'large-follow-scope',
+      { createdAt: '2026-07-22T11:00:00Z' },
+      '2026-07-22T11:00:00Z',
+    )
 
-    await expect(
-      service.getFeedSkeleton({ viewerDid: viewer }),
-    ).rejects.toMatchObject({ code: 'FeedScopeTooLarge' })
+    const output = await service.getFeedSkeleton({ viewerDid: viewer })
 
-    const explained = await admin.query<ExplainResultRow>(
-      `EXPLAIN (ANALYZE, FORMAT JSON) ${FEED_QUERY}`,
-      [
-        viewer,
-        [],
-        false,
-        [],
-        false,
-        [],
-        [],
-        null,
-        null,
-        21,
-        500,
-        [...FEED_COLLECTIONS],
-      ],
-    )
-    const plan = explained.rows[0]?.['QUERY PLAN'][0]?.Plan
-    expect(plan).toBeDefined()
-    const gatedScans = flattenPlan(plan!).filter(
-      (node) => node.Alias === 'collection_record' || node.Alias === 'source',
-    )
-    expect(gatedScans.some((node) => node.Alias === 'collection_record')).toBe(
-      true,
-    )
-    expect(gatedScans.some((node) => node.Alias === 'source')).toBe(true)
-    for (const scan of gatedScans) expect(scan['Actual Loops']).toBe(0)
+    expect(output.items.map((item) => item.subject.uri)).toEqual([selectedUri])
   })
 })

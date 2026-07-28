@@ -87,12 +87,12 @@ Preserve these unless the public contract is intentionally revised and documente
 
 - The base scope always resolves from the viewer's current `app.certified.graph.follow` records. There is no caller-supplied author override.
 - Evaluator endorsement subjects are unioned after base-author resolution. The viewer is removed and candidates are deduplicated. Do not query actor status: Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, and actors missing from `actor` remain eligible.
-- Deduplicate request lists before enforcing semantic limits. Current limits are 64 evaluators, 16 kinds, 500 resolved authors, and 1–50 page items.
+- Deduplicate request lists before enforcing semantic limits. Current limits are 64 evaluators, 16 kinds, and 1–50 page items.
 - Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with `InvalidKind`.
 - Organization-quality policy applies to known certified organizations using only service-configured `TRUSTED_QUALITY_LABELER_DIDS`. Callers never choose label sources.
 - `includeUnrated` applies only when no active trusted quality label exists. An active disallowed label is not unrated.
 - Organization status comes only from the exact `at://<did>/app.certified.actor.organization/self` record. Active quality assertions and negations are trusted bare-DID, non-CID `external_label` rows as documented in `docs/database-contract.md`; malformed text timestamps are ignored safely.
-- Scope is capped after all unions and membership filtering. Oversized scopes return their count without expanding project or eligible-event record scans, then fail with `FeedScopeTooLarge`; do not silently truncate them.
+- Materialize the complete resolved scope once for project pairing and event selection. Do not cap or truncate followed or evaluator-expanded accounts.
 - Evaluator expansion and visible endorsement events share the same rules. Require an account subject, no self-endorsement, exact definition URI and CID, `badgeType: endorsement`, allowed-issuer compliance, and the latest subject-authored response targeting the exact award URI and CID. Do not replace this with `endorsement_edge`.
 - Missing `allowedIssuers` permits any issuer. An empty or malformed value permits none.
 - Project/activity pairing happens before kind filtering and pagination. It requires the same actor, an exact activity URI and CID, and an effective timestamp gap strictly below 60 seconds. The collection becomes `project.created_with_cert`; the paired activity stays suppressed across page boundaries.

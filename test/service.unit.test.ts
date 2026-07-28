@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import { decodeCursor } from '../src/feed/cursor.js'
-import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 import type {
   FeedQueryInput,
   FeedQueryReader,
@@ -36,7 +35,6 @@ const row = (suffix: string, sortValue: string) => ({
 describe('FeedService', () => {
   it('trims limit+1 and emits a cursor only when another page may exist', async () => {
     const reader = new FakeFeedReader({
-      scopeCount: 1,
       rows: [
         row('3', '2026-07-21T10:00:03.000000Z'),
         row('2', '2026-07-21T10:00:02.000000Z'),
@@ -64,7 +62,6 @@ describe('FeedService', () => {
   it('omits the cursor on a known final page', async () => {
     const service = new FeedService(
       new FakeFeedReader({
-        scopeCount: 1,
         rows: [row('1', '2026-07-21T10:00:01.000000Z')],
       }),
       [],
@@ -78,19 +75,4 @@ describe('FeedService', () => {
     )
   })
 
-  it('rejects a resolved scope over 500 without truncating it', async () => {
-    const service = new FeedService(
-      new FakeFeedReader({ scopeCount: 501, rows: [] }),
-      [],
-      new Metrics(),
-    )
-
-    await expect(
-      service.getFeedSkeleton({ viewerDid: viewer }),
-    ).rejects.toEqual(
-      expect.objectContaining<Partial<FeedError>>({
-        code: FeedErrorCode.FeedScopeTooLarge,
-      }),
-    )
-  })
 })

@@ -8,7 +8,7 @@ Before cutover, verify that Hyperindex's Tap collection filters and backfill mak
 
 ## Goal
 
-Switch the feed service from Magic Indexer's PostgreSQL schema to Hyperindex's PostgreSQL schema without changing the public XRPC request or response contract.
+Switch the feed service from Magic Indexer's PostgreSQL schema to Hyperindex's PostgreSQL schema and incorporate the approved pre-release scope contract revisions.
 
 The service remains read-only. It continues to query PostgreSQL directly and does not call Hyperindex's GraphQL API, apply migrations, or write indexed data.
 
@@ -17,12 +17,11 @@ The service remains read-only. It continues to query PostgreSQL directly and doe
 ### Keep
 
 - Direct PostgreSQL access
-- The existing XRPC request and response contract
-- The 500-author resolved-scope limit
+- The existing XRPC response contract
 - Cursor version 1
 - Effective timestamp descending, then record URI descending
 - Existing endorsement, organization-quality, project-pairing, and pagination rules
-- The current SQL parameter order and repository result shape
+- Fixed SQL parameter ownership
 
 ### Drop
 
@@ -157,22 +156,18 @@ Hyperindex preserves a non-null `record_created_at` across record updates. `inde
 
 Before cutover, verify that every record with a service-valid top-level `createdAt` has a non-null `record_created_at`. Migration 010 adds the column and indexes, while Hyperindex startup performs the historical backfill; migration presence alone does not prove backfill completion.
 
-### Resolved-scope cap
+### Resolved-scope materialization
 
-Create an explicitly materialized bounded scope after calculating `scope_count`:
+Materialize the complete resolved scope once:
 
 ```sql
-bounded_scope AS MATERIALIZED (
+resolved_scope AS MATERIALIZED (
   SELECT scoped.did
   FROM final_scope AS scoped
-  CROSS JOIN scope_meta AS meta
-  WHERE meta.scope_count <= $11
 )
 ```
 
-Both project pairing and eligible-event selection must start from `bounded_scope`.
-
-This preserves the public `FeedScopeTooLarge` behavior while preventing PostgreSQL from reordering joins and probing event records for scopes over 500 DIDs.
+Both project pairing and eligible-event selection start from `resolved_scope`. The service does not cap or truncate followed or evaluator-expanded accounts; database statement timeouts and gateway rate limits remain the operational safeguards.
 
 ### Repository seam
 
@@ -186,12 +181,11 @@ interface FeedQueryInput {
 }
 
 interface FeedQueryResult {
-  readonly scopeCount: number
   readonly rows: readonly FeedQueryRow[]
 }
 ```
 
-After the pre-release removal of the explicit-author override, `src/feed/query.ts` binds 12 values and maps the same result columns.
+After the pre-release removal of the explicit-author override and hard scope cap, `src/feed/query.ts` binds 11 values and maps the same result columns.
 
 ## Cursor contract
 
@@ -283,9 +277,7 @@ Add or adapt tests for:
 - Hyperboard classification
 - Equal-timestamp pagination
 - A viewer with no follows and no evaluator expansion producing an empty scope
-- More than 500 resolved authors returning `FeedScopeTooLarge`
-
-Add a PostgreSQL plan regression using `EXPLAIN (ANALYZE, FORMAT JSON)` for an oversized scope. Assert only that project and eligible source scans have zero actual loops; do not pin the complete planner tree or cost estimates.
+- More than 500 followed accounts remaining eligible without truncation
 
 ## Compatibility tooling
 
@@ -365,7 +357,7 @@ Use read-only query plans against the current Hyperindex database for:
 - Followed authors
 - Evaluator expansion
 - Organization-quality filtering
-- An oversized author scope
+- Small and large followed scopes
 - Hyperboard events
 
 Record the commands, timings, index usage, and anything not validated.
@@ -374,9 +366,9 @@ Record the commands, timings, index usage, and anything not validated.
 
 - The feed query prepares and executes against the supported Hyperindex schema.
 - No runtime query references Magic Indexer-only columns or `label`.
-- The pre-release public XRPC request omits the explicit `authors` override and `AuthorsFilterTooLarge`; response shape, event kinds, and 500-resolved-author limit remain unchanged.
+- The pre-release public XRPC request omits the explicit `authors` override, `AuthorsFilterTooLarge`, and `FeedScopeTooLarge`; response shape and event kinds remain unchanged.
 - Cursor version remains 1 and pagination remains deterministic.
-- Oversized scopes do not execute project or eligible-event record scans.
+- Large followed and evaluator-expanded scopes remain eligible without truncation.
 - Organization-quality filtering uses trusted bare-DID labels from `external_label`.
 - Integration coverage proves that indexed Hyperboards appear as `hyperboard.create` events; live classification is recorded as unvalidated when the target database has no source Hyperboard records.
 - Unit, integration, type-check, and production-build checks pass.

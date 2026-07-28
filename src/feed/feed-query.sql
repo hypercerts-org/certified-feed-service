@@ -164,17 +164,10 @@ final_scope AS (
      OR COALESCE(quality.has_allowed, false)
      OR (quality.did IS NULL AND $5::boolean)
 ),
-scope_meta AS (
-  SELECT COUNT(*)::integer AS scope_count
-  FROM final_scope
-),
--- Materializing the bounded scope prevents oversized requests from probing
--- project or eligible-event records while preserving the exact scope count.
-bounded_scope AS MATERIALIZED (
+-- Materialize the complete resolved scope once for project and event selection.
+resolved_scope AS MATERIALIZED (
   SELECT scoped.did
   FROM final_scope AS scoped
-  CROSS JOIN scope_meta AS meta
-  WHERE meta.scope_count <= $11::integer
 ),
 -- =============================================================================
 -- Project pairing
@@ -183,7 +176,7 @@ bounded_scope AS MATERIALIZED (
 -- =============================================================================
 project_pairs AS (
   SELECT DISTINCT collection_record.uri AS collection_uri, activity.uri AS activity_uri
-  FROM bounded_scope AS scoped
+  FROM resolved_scope AS scoped
   JOIN record AS collection_record
     ON collection_record.did = scoped.did
    AND collection_record.collection = 'org.hypercerts.collection'
@@ -220,9 +213,9 @@ paired_activities AS (
 -- =============================================================================
 eligible_records AS (
   SELECT source.*
-  FROM bounded_scope AS scoped
+  FROM resolved_scope AS scoped
   JOIN record AS source ON source.did = scoped.did
-  WHERE source.collection = ANY($12::text[])
+  WHERE source.collection = ANY($11::text[])
     AND (
       source.collection <> 'org.hypercerts.claim.activity'
       OR NOT EXISTS (
@@ -289,7 +282,6 @@ paged_events AS (
   LIMIT $10::integer
 )
 SELECT
-  meta.scope_count,
   page.uri,
   page.cid,
   page.actor_did,
@@ -298,6 +290,5 @@ SELECT
     page.effective_at AT TIME ZONE 'UTC',
     'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
   ) AS sort_value
-FROM scope_meta AS meta
-LEFT JOIN paged_events AS page ON true
-ORDER BY page.effective_at DESC NULLS LAST, page.uri DESC NULLS LAST
+FROM paged_events AS page
+ORDER BY page.effective_at DESC, page.uri DESC
