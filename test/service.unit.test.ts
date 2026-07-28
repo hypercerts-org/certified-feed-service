@@ -47,7 +47,6 @@ describe('FeedService', () => {
 
     const output = await service.getFeedSkeleton({
       viewerDid: viewer,
-      authors: [actor],
       limit: 2,
     })
 
@@ -73,7 +72,7 @@ describe('FeedService', () => {
     )
 
     await expect(
-      service.getFeedSkeleton({ viewerDid: viewer, authors: [actor] }),
+      service.getFeedSkeleton({ viewerDid: viewer }),
     ).resolves.toEqual(
       expect.not.objectContaining({ cursor: expect.anything() }),
     )
@@ -87,7 +86,7 @@ describe('FeedService', () => {
     )
 
     await expect(
-      service.getFeedSkeleton({ viewerDid: viewer, authors: [] }),
+      service.getFeedSkeleton({ viewerDid: viewer }),
     ).rejects.toEqual(
       expect.objectContaining<Partial<FeedError>>({
         code: FeedErrorCode.FeedScopeTooLarge,

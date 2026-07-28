@@ -90,15 +90,14 @@ Hyperindex owns these tables and indexes. This repository must not add migration
 
 ## Feed SQL changes
 
-Update `src/feed/feed-query.sql` while preserving its existing bind order and output columns.
+Update `src/feed/feed-query.sql` while preserving fixed parameter ownership and output columns.
 
 ### Scope resolution
 
-1. Continue selecting explicit authors when `authors` is present.
-2. Continue resolving the viewer's `app.certified.graph.follow` records when `authors` is omitted.
-3. Derive endorsement subjects from `award.json.subject.did` instead of `record.subject_did`.
-4. Preserve the account-subject type check, DID validation, self-endorsement rejection, exact definition URI and CID match, allowed-issuer policy, and subject-response policy.
-5. Stop joining `actor` for active-state filtering. Hyperindex removes records and actor rows when an identity is explicitly deleted, deactivated, suspended, or taken down.
+1. Resolve the base scope only from the viewer's current `app.certified.graph.follow` records.
+2. Derive endorsement subjects from `award.json.subject.did` instead of `record.subject_did`.
+3. Preserve the account-subject type check, DID validation, self-endorsement rejection, exact definition URI and CID match, allowed-issuer policy, and subject-response policy.
+4. Stop joining `actor` for active-state filtering. Hyperindex removes records and actor rows when an identity is explicitly deleted, deactivated, suspended, or taken down.
 
 Actors missing from `actor` remain eligible. Feed output is naturally empty when Hyperindex has purged all source records for an inactive account.
 
@@ -167,7 +166,7 @@ bounded_scope AS MATERIALIZED (
   SELECT scoped.did
   FROM final_scope AS scoped
   CROSS JOIN scope_meta AS meta
-  WHERE meta.scope_count <= $13
+  WHERE meta.scope_count <= $11
 )
 ```
 
@@ -192,7 +191,7 @@ interface FeedQueryResult {
 }
 ```
 
-`src/feed/query.ts` continues to bind the same 14 values in the same order and map the same result columns.
+After the pre-release removal of the explicit-author override, `src/feed/query.ts` binds 12 values and maps the same result columns.
 
 ## Cursor contract
 
@@ -267,7 +266,7 @@ Seed unique subscription sequence and label-index values and satisfy Hyperindex'
 
 Add or adapt tests for:
 
-- Follow and explicit-author resolution
+- Viewer-follow resolution
 - Endorsement subjects extracted from JSON
 - Invalid, record-target, and self-endorsements
 - Exact award, definition, activity, and response CIDs
@@ -283,7 +282,7 @@ Add or adapt tests for:
 - Project/activity pairing and suppression across page boundaries
 - Hyperboard classification
 - Equal-timestamp pagination
-- Explicitly empty scope
+- A viewer with no follows and no evaluator expansion producing an empty scope
 - More than 500 resolved authors returning `FeedScopeTooLarge`
 
 Add a PostgreSQL plan regression using `EXPLAIN (ANALYZE, FORMAT JSON)` for an oversized scope. Assert only that project and eligible source scans have zero actual loops; do not pin the complete planner tree or cost estimates.
@@ -363,7 +362,6 @@ Never run either integration command against a shared, staging, or production da
 
 Use read-only query plans against the current Hyperindex database for:
 
-- Explicit authors
 - Followed authors
 - Evaluator expansion
 - Organization-quality filtering
@@ -376,7 +374,7 @@ Record the commands, timings, index usage, and anything not validated.
 
 - The feed query prepares and executes against the supported Hyperindex schema.
 - No runtime query references Magic Indexer-only columns or `label`.
-- The public XRPC request, response, errors, event kinds, and 500-author limit are unchanged.
+- The pre-release public XRPC request omits the explicit `authors` override and `AuthorsFilterTooLarge`; response shape, event kinds, and 500-resolved-author limit remain unchanged.
 - Cursor version remains 1 and pagination remains deterministic.
 - Oversized scopes do not execute project or eligible-event record scans.
 - Organization-quality filtering uses trusted bare-DID labels from `external_label`.

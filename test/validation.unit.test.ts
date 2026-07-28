@@ -4,31 +4,23 @@ import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 import { normalizeFeedRequest } from '../src/feed/validation.js'
 
 const viewer = 'did:plc:ar7c4by46qjdydhdevvrndac'
-const author = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 
 describe('feed request validation', () => {
-  it('preserves omitted and explicitly empty author semantics', () => {
+  it('normalizes the viewer-follow request defaults', () => {
     expect(normalizeFeedRequest({ viewerDid: viewer })).toMatchObject({
-      hasExplicitAuthors: false,
-      authors: [],
+      viewerDid: viewer,
+      trustedEvaluators: [],
+      kinds: [],
       limit: 20,
-    })
-    expect(
-      normalizeFeedRequest({ viewerDid: viewer, authors: [] }),
-    ).toMatchObject({
-      hasExplicitAuthors: true,
-      authors: [],
     })
   })
 
-  it('deduplicates before applying list limits', () => {
+  it('deduplicates evaluator DIDs before applying the list limit', () => {
     const result = normalizeFeedRequest({
       viewerDid: viewer,
-      authors: Array.from({ length: 900 }, () => author),
-      trustedEvaluators: [viewer, viewer],
+      trustedEvaluators: Array.from({ length: 100 }, () => viewer),
     })
 
-    expect(result.authors).toEqual([author])
     expect(result.trustedEvaluators).toEqual([viewer])
   })
 

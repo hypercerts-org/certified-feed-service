@@ -54,7 +54,7 @@ export class FeedService implements FeedSkeletonReader {
     if (result.scopeCount > MAX_RESOLVED_AUTHOR_COUNT) {
       throw new FeedError(
         FeedErrorCode.FeedScopeTooLarge,
-        `resolved feed scope contains ${result.scopeCount} unique DIDs, exceeding the maximum of ${MAX_RESOLVED_AUTHOR_COUNT}; reduce authors or trustedEvaluators before retrying.`,
+        `resolved feed scope contains ${result.scopeCount} unique DIDs, exceeding the maximum of ${MAX_RESOLVED_AUTHOR_COUNT}; reduce the viewer's Certified follows or trustedEvaluators before retrying.`,
       )
     }
 

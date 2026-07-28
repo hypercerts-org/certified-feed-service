@@ -31,6 +31,7 @@ describe('feed skeleton Lexicon contract', () => {
       type: 'ref',
       ref: 'app.certified.feed.beta.defs#organizationQualityPolicy',
     })
+    expect(main.input.schema.properties).not.toHaveProperty('authors')
     expect(defsLexicon.defs).toHaveProperty('organizationQualityPolicy')
     expect(skeletonLexicon.defs).not.toHaveProperty(
       'organizationQualityPolicy',
@@ -40,7 +41,6 @@ describe('feed skeleton Lexicon contract', () => {
     )
     expect(errorNames).toEqual([
       'InvalidRequest',
-      'AuthorsFilterTooLarge',
       'TrustedEvaluatorsTooLarge',
       'FeedScopeTooLarge',
       'InvalidKind',

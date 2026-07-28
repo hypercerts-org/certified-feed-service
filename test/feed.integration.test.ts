@@ -10,6 +10,7 @@ import { Database } from '../src/database.js'
 import { FeedRepository } from '../src/feed/query.js'
 import { FeedService } from '../src/feed/service.js'
 import { FEED_COLLECTIONS } from '../src/feed/types.js'
+import type { GetFeedSkeletonInput } from '../src/feed/types.js'
 import { Metrics } from '../src/metrics.js'
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL
@@ -173,6 +174,26 @@ describe('FeedRepository against Postgres', () => {
       ],
     )
     return uri
+  }
+
+  const seedFollow = async (viewerDid: string, subjectDid: string): Promise<void> => {
+    await seedRecord(
+      viewerDid,
+      'app.certified.graph.follow',
+      `follow-${randomBytes(8).toString('hex')}`,
+      { subject: subjectDid },
+      '2026-07-20T00:00:00Z',
+    )
+  }
+
+  const getFeedForFollows = async (
+    followedDids: readonly string[],
+    input: Omit<GetFeedSkeletonInput, 'viewerDid'> = {},
+  ) => {
+    const viewerDid = randomDid()
+    await seedActor(viewerDid)
+    await Promise.all(followedDids.map((did) => seedFollow(viewerDid, did)))
+    return service.getFeedSkeleton({ viewerDid, ...input })
   }
 
   const seedOrganization = async (
@@ -508,9 +529,7 @@ describe('FeedRepository against Postgres', () => {
       output.items.find((item) => item.subject.uri === dateOnlyUri)?.sortAt,
     ).toBe('2026-07-21T07:30:00.000000Z')
 
-    const projectOnly = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [followedOrg],
+    const projectOnly = await getFeedForFollows([followedOrg], {
       organizationQuality: {
         allowed: ['high-quality'],
         includeUnrated: false,
@@ -525,9 +544,7 @@ describe('FeedRepository against Postgres', () => {
       cts: '2026-07-20T00:00:00Z',
       exp: '2000-01-01T00:00:00Z',
     })
-    const expiredNegation = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [blockedOrg],
+    const expiredNegation = await getFeedForFollows([blockedOrg], {
       organizationQuality: { allowed: ['high-quality'], includeUnrated: true },
     })
     expect(expiredNegation.items).toEqual([])
@@ -549,9 +566,7 @@ describe('FeedRepository against Postgres', () => {
       neg: true,
       cts: '2026-07-20T00:00:01Z',
     })
-    const activeNegation = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [activelyNegatedOrg],
+    const activeNegation = await getFeedForFollows([activelyNegatedOrg], {
       organizationQuality: { allowed: ['high-quality'], includeUnrated: true },
     })
     expect(activeNegation.items.map((item) => item.kind)).toEqual([
@@ -589,14 +604,15 @@ describe('FeedRepository against Postgres', () => {
       '2026-07-21T02:00:00Z',
     )
 
-    const output = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [personWithNearMatch, organization],
-      organizationQuality: {
+    const output = await getFeedForFollows(
+      [personWithNearMatch, organization],
+      {
+        organizationQuality: {
         allowed: ['high-quality'],
-        includeUnrated: false,
+          includeUnrated: false,
+        },
       },
-    })
+    )
 
     expect(output.items.map((item) => item.subject.uri)).toEqual([
       personActivity,
@@ -678,24 +694,26 @@ describe('FeedRepository against Postgres', () => {
       [trustedLabeler],
       new Metrics(),
     )
-    const assertions = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [malformedCtsAssertion, malformedExpAssertion],
-      organizationQuality: {
+    const assertions = await getFeedForFollows(
+      [malformedCtsAssertion, malformedExpAssertion],
+      {
+        organizationQuality: {
         allowed: ['high-quality'],
-        includeUnrated: false,
+          includeUnrated: false,
+        },
       },
-    })
+    )
     expect(assertions.items).toEqual([])
 
-    const negations = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [malformedCtsNegation, malformedExpNegation, unlabeled],
-      organizationQuality: {
+    const negations = await getFeedForFollows(
+      [malformedCtsNegation, malformedExpNegation, unlabeled],
+      {
+        organizationQuality: {
         allowed: ['high-quality'],
-        includeUnrated: true,
+          includeUnrated: true,
+        },
       },
-    })
+    )
     expect(negations.items).toHaveLength(1)
     expect(negations.items[0]?.actorDid).toBe(unlabeled)
   })
@@ -749,9 +767,7 @@ describe('FeedRepository against Postgres', () => {
       [trustedLabeler],
       new Metrics(),
     )
-    const expired = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [expiredAssertionOrg],
+    const expired = await getFeedForFollows([expiredAssertionOrg], {
       organizationQuality: {
         allowed: ['high-quality'],
         includeUnrated: false,
@@ -759,9 +775,7 @@ describe('FeedRepository against Postgres', () => {
     })
     expect(expired.items).toEqual([])
 
-    const equalNegation = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [equalNegationOrg],
+    const equalNegation = await getFeedForFollows([equalNegationOrg], {
       organizationQuality: {
         allowed: ['high-quality'],
         includeUnrated: true,
@@ -792,10 +806,7 @@ describe('FeedRepository against Postgres', () => {
       { recordCreatedAt: null },
     )
 
-    const output = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [author],
-    })
+    const output = await getFeedForFollows([author])
 
     expect(output.items.map((item) => item.subject.uri)).toEqual([
       materialized,
@@ -850,11 +861,7 @@ describe('FeedRepository against Postgres', () => {
       { recordCreatedAt: null },
     )
 
-    const output = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [author],
-      limit: 50,
-    })
+    const output = await getFeedForFollows([author], { limit: 50 })
 
     expect(output.items.map((item) => item.subject.uri)).toEqual([
       fallbackCollection,
@@ -926,9 +933,7 @@ describe('FeedRepository against Postgres', () => {
       { indexedAt: '2026-07-21T03:30:00Z' },
     )
 
-    const output = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [evaluator],
+    const output = await getFeedForFollows([evaluator], {
       trustedEvaluators: [evaluator],
       limit: 50,
     })
@@ -979,15 +984,11 @@ describe('FeedRepository against Postgres', () => {
     await expect(
       service.getFeedSkeleton({
         viewerDid: viewer,
-        authors: [],
         trustedEvaluators: [disallowedIssuer],
       }),
     ).resolves.toEqual({ items: [] })
     await expect(
-      service.getFeedSkeleton({
-        viewerDid: viewer,
-        authors: [disallowedIssuer],
-      }),
+      getFeedForFollows([disallowedIssuer]),
     ).resolves.toEqual({ items: [] })
 
     const allowedAwardUri = await seedRecord(
@@ -1017,10 +1018,7 @@ describe('FeedRepository against Postgres', () => {
       },
       '2026-07-21T04:00:02Z',
     )
-    const allowedOutput = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [allowedIssuer],
-    })
+    const allowedOutput = await getFeedForFollows([allowedIssuer])
 
     expect(allowedOutput.items.map((item) => item.subject.uri)).toEqual([
       allowedAwardUri,
@@ -1092,13 +1090,12 @@ describe('FeedRepository against Postgres', () => {
     await expect(
       service.getFeedSkeleton({
         viewerDid: viewer,
-        authors: [],
         trustedEvaluators: [evaluator],
       }),
     ).resolves.toEqual({ items: [] })
 
     await expect(
-      service.getFeedSkeleton({ viewerDid: viewer, authors: [evaluator] }),
+      getFeedForFollows([evaluator]),
     ).resolves.toEqual({ items: [] })
   })
 
@@ -1158,9 +1155,7 @@ describe('FeedRepository against Postgres', () => {
       '2026-07-21T11:00:00Z',
     )
 
-    const output = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [author],
+    const output = await getFeedForFollows([author], {
       trustedEvaluators: [author],
       limit: 50,
     })
@@ -1216,9 +1211,9 @@ describe('FeedRepository against Postgres', () => {
       '2026-07-21T09:00:00Z',
     )
 
+    await seedFollow(viewer, author)
     const first = await service.getFeedSkeleton({
       viewerDid: viewer,
-      authors: [author],
       limit: 2,
     })
     expect(first.items.map((item) => item.subject.uri)).toEqual([
@@ -1229,7 +1224,6 @@ describe('FeedRepository against Postgres', () => {
 
     const second = await service.getFeedSkeleton({
       viewerDid: viewer,
-      authors: [author],
       limit: 2,
       cursor: first.cursor!,
     })
@@ -1259,9 +1253,9 @@ describe('FeedRepository against Postgres', () => {
       )
     }
 
+    await seedFollow(viewer, author)
     const first = await service.getFeedSkeleton({
       viewerDid: viewer,
-      authors: [author],
       limit: 2,
     })
     expect(first.items.map((item) => item.subject.uri)).toEqual([
@@ -1272,7 +1266,6 @@ describe('FeedRepository against Postgres', () => {
 
     const second = await service.getFeedSkeleton({
       viewerDid: viewer,
-      authors: [author],
       limit: 2,
       cursor: first.cursor!,
     })
@@ -1349,26 +1342,22 @@ describe('FeedRepository against Postgres', () => {
       '2026-07-22T06:00:00Z',
     )
 
-    const authorOutput = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [evaluator],
-    })
+    const authorOutput = await getFeedForFollows([evaluator])
     expect(authorOutput.items).toHaveLength(1)
     expect(authorOutput.items[0]?.subject.uri).toBe(awardUri)
 
     const evaluatorOutput = await service.getFeedSkeleton({
       viewerDid: viewer,
-      authors: [],
       trustedEvaluators: [evaluator],
     })
     expect(evaluatorOutput.items).toHaveLength(1)
     expect(evaluatorOutput.items[0]?.subject.uri).toBe(subjectActivity)
   })
 
-  it('replaces followed authors with explicit authors, including an empty list', async () => {
+  it('always derives the base scope from the viewer current follows', async () => {
     const viewer = randomDid()
     const followedAuthor = randomDid()
-    const explicitAuthor = randomDid()
+    const unfollowedAuthor = randomDid()
     await seedActor(viewer)
     const followedUri = await seedRecord(
       followedAuthor,
@@ -1377,39 +1366,23 @@ describe('FeedRepository against Postgres', () => {
       { createdAt: '2026-07-22T07:00:00Z' },
       '2026-07-22T07:00:00Z',
     )
-    const explicitUri = await seedRecord(
-      explicitAuthor,
+    const unfollowedUri = await seedRecord(
+      unfollowedAuthor,
       'org.hypercerts.claim.activity',
-      'explicit-author',
+      'unfollowed-author',
       { createdAt: '2026-07-22T08:00:00Z' },
       '2026-07-22T08:00:00Z',
     )
-    await seedRecord(
-      viewer,
-      'app.certified.graph.follow',
-      'explicit-replacement-follow',
-      { subject: followedAuthor },
-      '2026-07-22T09:00:00Z',
-    )
+    await seedFollow(viewer, followedAuthor)
 
-    const explicit = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [explicitAuthor],
-      trustedEvaluators: [],
-    })
-    expect(explicit.items.map((item) => item.subject.uri)).toEqual([
-      explicitUri,
+    const output = await service.getFeedSkeleton({ viewerDid: viewer })
+
+    expect(output.items.map((item) => item.subject.uri)).toEqual([
+      followedUri,
     ])
-    expect(explicit.items.some((item) => item.subject.uri === followedUri)).toBe(
+    expect(output.items.some((item) => item.subject.uri === unfollowedUri)).toBe(
       false,
     )
-
-    const empty = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      authors: [],
-      trustedEvaluators: [],
-    })
-    expect(empty).toEqual({ items: [] })
   })
 
   it('caps oversized resolved scopes before project and event record scans', async () => {
@@ -1443,8 +1416,6 @@ describe('FeedRepository against Postgres', () => {
       `EXPLAIN (ANALYZE, FORMAT JSON) ${FEED_QUERY}`,
       [
         viewer,
-        [],
-        false,
         [],
         false,
         [],

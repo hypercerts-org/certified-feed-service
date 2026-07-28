@@ -45,10 +45,8 @@ export interface OrganizationQualityPolicy {
 
 /** Raw request body accepted by app.certified.feed.beta.getFeedSkeleton. */
 export interface GetFeedSkeletonInput {
-  /** Viewer whose Certified outbound follows supply the default base scope. */
+  /** Viewer whose current Certified outbound follows supply the base scope. */
   readonly viewerDid: string
-  /** Optional replacement for the direct-follow base, where an empty list means no base authors. */
-  readonly authors?: readonly string[]
   /** Evaluators whose active endorsement subjects are added to the base scope. */
   readonly trustedEvaluators?: readonly string[]
   /** Optional organization-quality membership policy. */
@@ -93,12 +91,8 @@ export interface GetFeedSkeletonOutput {
 
 /** Fully validated and deduplicated request passed to the SQL adapter. */
 export interface NormalizedFeedRequest {
-  /** Validated viewer DID. */
+  /** Validated viewer DID whose current Certified follows supply the base scope. */
   readonly viewerDid: string
-  /** Whether authors was present in the original JSON body. */
-  readonly hasExplicitAuthors: boolean
-  /** Deduplicated explicit authors, empty when omitted or explicitly empty. */
-  readonly authors: readonly string[]
   /** Deduplicated evaluator DIDs. */
   readonly trustedEvaluators: readonly string[]
   /** Optional validated account-quality policy. */

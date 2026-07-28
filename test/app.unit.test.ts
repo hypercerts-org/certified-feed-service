@@ -45,13 +45,13 @@ describe('HTTP application', () => {
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ viewerDid: viewer, authors: [actor] }),
+          body: JSON.stringify({ viewerDid: viewer }),
         },
       ),
     )
 
     expect(response.status).toBe(200)
-    expect(received).toMatchObject({ viewerDid: viewer, authors: [actor] })
+    expect(received).toMatchObject({ viewerDid: viewer })
     await expect(response.json()).resolves.toMatchObject({
       items: [{ id: uri, subject: { cid } }],
     })
@@ -105,7 +105,7 @@ describe('HTTP application', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'InvalidRequest',
       message:
-        'Request body exceeds the 65536-byte limit; remove unnecessary authors, evaluators, or other fields before retrying.',
+        'Request body exceeds the 65536-byte limit; remove unnecessary evaluators or other fields before retrying.',
     })
   })
 
@@ -140,7 +140,7 @@ describe('HTTP application', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'InvalidRequest',
       message:
-        'Request body exceeds the 65536-byte limit; remove unnecessary authors, evaluators, or other fields before retrying.',
+        'Request body exceeds the 65536-byte limit; remove unnecessary evaluators or other fields before retrying.',
     })
   })
 
@@ -247,7 +247,7 @@ describe('HTTP application', () => {
     const getFeedSkeleton = vi.fn(async () => {
       throw new FeedError(
         FeedErrorCode.FeedScopeTooLarge,
-        'Reduce authors or trustedEvaluators before retrying.',
+        "Reduce the viewer's Certified follows or trustedEvaluators before retrying.",
         422,
         { cause: internalCause },
       )
@@ -271,7 +271,7 @@ describe('HTTP application', () => {
     expect(response.status).toBe(422)
     expect(JSON.parse(responseText)).toEqual({
       error: 'FeedScopeTooLarge',
-      message: 'Reduce authors or trustedEvaluators before retrying.',
+      message: "Reduce the viewer's Certified follows or trustedEvaluators before retrying.",
     })
     expect(responseText).not.toContain(internalCause.message)
   })

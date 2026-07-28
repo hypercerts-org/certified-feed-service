@@ -57,7 +57,7 @@ Missing rows produce a smaller feed. They do not make readiness fail, and readin
 
 `src/feed/feed-query.sql` owns one parameterized CTE statement, while `src/feed/query.ts` owns parameter binding, execution, and result mapping. The statement has these stages:
 
-1. Choose explicit authors or current Certified outbound follows.
+1. Resolve the viewer's current Certified outbound follows.
 2. Resolve current evaluator endorsement subjects from award JSON.
 3. Union, deduplicate, and remove the viewer.
 4. Detect organizations from exact organization self records and apply trusted active account-quality labels.
@@ -162,6 +162,6 @@ Grant `CONNECT` on the selected database separately when required by the deploym
 
 Run the integration suite through `npm run test:integration:hyperindex` against a disposable database already migrated by Hyperindex and otherwise empty of application rows. The command checks required migrations, columns, the generated `rkey`, and the external-label active lookup index before running the shared behavior suite. It does not apply migrations.
 
-Before production traffic, run `src/feed/feed-query.sql` through `EXPLAIN (ANALYZE, BUFFERS)` with production-shaped data for explicit authors, followed authors, evaluator expansion, organization-quality filtering, an oversized scope, and Hyperboard events. In particular, verify that oversized scopes do not execute project or eligible-event source scans.
+Before production traffic, run `src/feed/feed-query.sql` through `EXPLAIN (ANALYZE, BUFFERS)` with production-shaped data for followed authors, evaluator expansion, organization-quality filtering, an oversized scope, and Hyperboard events. In particular, verify that oversized scopes do not execute project or eligible-event source scans.
 
 Do not add an index from this repository. Query-plan evidence should result in a Hyperindex migration because Hyperindex owns the schema.

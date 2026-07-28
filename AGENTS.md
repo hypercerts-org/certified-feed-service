@@ -85,9 +85,9 @@ A request, response, event-kind, or public-error change usually requires coordin
 
 Preserve these unless the public contract is intentionally revised and documented:
 
-- Omitted `authors` resolves the viewer's current `app.certified.graph.follow` records. Explicit `authors` replaces only that base, and `authors: []` means an empty base. Preserve `hasExplicitAuthors` through validation and SQL.
+- The base scope always resolves from the viewer's current `app.certified.graph.follow` records. There is no caller-supplied author override.
 - Evaluator endorsement subjects are unioned after base-author resolution. The viewer is removed and candidates are deduplicated. Do not query actor status: Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, and actors missing from `actor` remain eligible.
-- Deduplicate request lists before enforcing semantic limits. Current limits are 500 explicit authors, 64 evaluators, 16 kinds, 500 resolved authors, and 1–50 page items.
+- Deduplicate request lists before enforcing semantic limits. Current limits are 64 evaluators, 16 kinds, 500 resolved authors, and 1–50 page items.
 - Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with `InvalidKind`.
 - Organization-quality policy applies to known certified organizations using only service-configured `TRUSTED_QUALITY_LABELER_DIDS`. Callers never choose label sources.
 - `includeUnrated` applies only when no active trusted quality label exists. An active disallowed label is not unrated.
