@@ -26,7 +26,6 @@
     },
     "actorSummary": {
       "type": "object",
-      "required": ["did"],
       "description": "Validated current identity fields for one feed actor.",
       "properties": {
         "did": { "type": "string", "format": "did" },
