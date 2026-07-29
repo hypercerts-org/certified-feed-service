@@ -158,6 +158,94 @@ const normalizeLexiconValidationError = async (
   )
 }
 
+const handleHealthRequest = (request: Request): Response =>
+  request.method === 'GET'
+    ? jsonResponse({ status: 'ok' })
+    : methodNotAllowed('GET')
+
+const handleReadyRequest = async (
+  request: Request,
+  database: DatabaseCompatibilityChecker,
+  metrics: Metrics,
+): Promise<Response> => {
+  if (request.method !== 'GET') return methodNotAllowed('GET')
+
+  const startedAt = performance.now()
+  const compatibility = await database.checkCompatibility()
+  metrics.observeDatabase(
+    'readiness',
+    (performance.now() - startedAt) / 1_000,
+  )
+  metrics.setReady(compatibility.compatible)
+  return compatibility.compatible
+    ? jsonResponse({ status: 'ready' })
+    : jsonResponse(
+        { status: 'not_ready', reason: compatibility.reason },
+        503,
+      )
+}
+
+const handleMetricsRequest = async (
+  request: Request,
+  metrics: Metrics,
+): Promise<Response> =>
+  request.method === 'GET'
+    ? new Response(await metrics.registry.metrics(), {
+        status: 200,
+        headers: { 'content-type': metrics.registry.contentType },
+      })
+    : methodNotAllowed('GET')
+
+const handleFeedRequest = async (
+  originalRequest: Request,
+  matchedRoute: FeedRoute | undefined,
+  router: LexRouter,
+  metrics: Metrics,
+): Promise<Response> => {
+  if (matchedRoute && originalRequest.method !== 'POST') {
+    metrics.observeError(FeedErrorCode.InvalidRequest)
+    return methodNotAllowed('POST')
+  }
+
+  let request = originalRequest
+  if (matchedRoute) {
+    const bounded = await readBoundedRequest(originalRequest)
+    if (bounded instanceof Response) {
+      metrics.observeError(FeedErrorCode.InvalidRequest)
+      return bounded
+    }
+    request = bounded
+
+    const malformedJson = await rejectMalformedJson(request)
+    if (malformedJson) {
+      metrics.observeError(FeedErrorCode.InvalidRequest)
+      return malformedJson
+    }
+  }
+
+  const response = await router.fetch(request)
+  return normalizeLexiconValidationError(
+    response,
+    metrics,
+    matchedRoute?.nsid,
+  )
+}
+
+const handleRequest = async (
+  request: Request,
+  pathname: string,
+  database: DatabaseCompatibilityChecker,
+  router: LexRouter,
+  metrics: Metrics,
+): Promise<Response> => {
+  if (pathname === '/health') return handleHealthRequest(request)
+  if (pathname === '/ready') {
+    return handleReadyRequest(request, database, metrics)
+  }
+  if (pathname === '/metrics') return handleMetricsRequest(request, metrics)
+  return handleFeedRequest(request, feedRoute(pathname), router, metrics)
+}
+
 /** Public feed services registered at the HTTP composition boundary. */
 export interface AppFeedServices {
   readonly skeleton: FeedSkeletonReader
@@ -180,83 +268,30 @@ export const createApp = (
   registerGetFeedSkeleton(router, services.skeleton, metrics, logger)
   registerGetFeed(router, services.hydrated, metrics, logger)
 
-  return {
-    fetch: async (originalRequest: Request): Promise<Response> => {
-      const startedAt = performance.now()
-      const url = new URL(originalRequest.url)
-      const matchedFeedRoute = feedRoute(url.pathname)
-      const route = routeLabel(url.pathname)
-      let status = 500
-      try {
-        let response: Response
-        if (url.pathname === '/health') {
-          response =
-            originalRequest.method === 'GET'
-              ? jsonResponse({ status: 'ok' })
-              : methodNotAllowed('GET')
-        } else if (url.pathname === '/ready' && originalRequest.method !== 'GET') {
-          response = methodNotAllowed('GET')
-        } else if (url.pathname === '/ready') {
-          const readyStartedAt = performance.now()
-          const compatibility = await database.checkCompatibility()
-          metrics.observeDatabase(
-            'readiness',
-            (performance.now() - readyStartedAt) / 1_000,
-          )
-          metrics.setReady(compatibility.compatible)
-          response = compatibility.compatible
-            ? jsonResponse({ status: 'ready' })
-            : jsonResponse(
-                { status: 'not_ready', reason: compatibility.reason },
-                503,
-              )
-        } else if (url.pathname === '/metrics') {
-          response =
-            originalRequest.method === 'GET'
-              ? new Response(await metrics.registry.metrics(), {
-                  status: 200,
-                  headers: { 'content-type': metrics.registry.contentType },
-                })
-              : methodNotAllowed('GET')
-        } else if (matchedFeedRoute && originalRequest.method !== 'POST') {
-          metrics.observeError(FeedErrorCode.InvalidRequest)
-          response = methodNotAllowed('POST')
-        } else {
-          let request = originalRequest
-          if (matchedFeedRoute && originalRequest.method === 'POST') {
-            const bounded = await readBoundedRequest(originalRequest)
-            if (bounded instanceof Response) {
-              metrics.observeError(FeedErrorCode.InvalidRequest)
-              response = bounded
-              status = response.status
-              return response
-            }
-            request = bounded
-            const malformedJson = await rejectMalformedJson(request)
-            if (malformedJson) {
-              metrics.observeError(FeedErrorCode.InvalidRequest)
-              response = malformedJson
-              status = response.status
-              return response
-            }
-          }
-          response = await router.fetch(request)
-          response = await normalizeLexiconValidationError(
-            response,
-            metrics,
-            matchedFeedRoute?.nsid,
-          )
-        }
-        status = response.status
-        return response
-      } finally {
-        metrics.observeRequest(
-          route,
-          originalRequest.method,
-          status,
-          (performance.now() - startedAt) / 1_000,
-        )
-      }
-    },
+  const fetch: FetchHandler = async (request) => {
+    const startedAt = performance.now()
+    const pathname = new URL(request.url).pathname
+    const route = routeLabel(pathname)
+    let status = 500
+    try {
+      const response = await handleRequest(
+        request,
+        pathname,
+        database,
+        router,
+        metrics,
+      )
+      status = response.status
+      return response
+    } finally {
+      metrics.observeRequest(
+        route,
+        request.method,
+        status,
+        (performance.now() - startedAt) / 1_000,
+      )
+    }
   }
+
+  return { fetch }
 }
