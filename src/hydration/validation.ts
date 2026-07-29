@@ -252,6 +252,174 @@ const hasAccountSubject = (value: AppCertifiedBadgeAward.Record): boolean =>
   value.subject.$type === 'app.certified.defs#did' &&
   typeof value.subject.did === 'string'
 
+type ValidatedFeedRecordFor<
+  Collection extends ValidatedFeedRecord['collection'],
+> = Extract<
+  ValidatedFeedRecord,
+  { readonly collection: Collection }
+>
+
+const validateActivityRecord = (
+  kind: FeedKind,
+  rawValue: unknown,
+  parsedValue: unknown,
+): ValidatedFeedRecordFor<'org.hypercerts.claim.activity'> | undefined => {
+  if (kind !== 'cert.create') return undefined
+
+  const result = OrgHypercertsClaimActivity.validateRecord(parsedValue)
+  if (
+    !result.success ||
+    !hasValidKnownBlob(
+      result.value.image,
+      'org.hypercerts.defs#smallImage',
+      SMALL_IMAGE_MAX_BYTES,
+    )
+  ) {
+    return undefined
+  }
+  return {
+    kind,
+    collection: 'org.hypercerts.claim.activity',
+    rawValue,
+    value: result.value,
+  }
+}
+
+const validateCollectionRecord = (
+  kind: FeedKind,
+  rawValue: unknown,
+  parsedValue: unknown,
+): ValidatedFeedRecordFor<'org.hypercerts.collection'> | undefined => {
+  if (
+    kind !== 'collection.create' &&
+    kind !== 'project.created_with_cert'
+  ) {
+    return undefined
+  }
+
+  const result = OrgHypercertsCollection.validateRecord(parsedValue)
+  if (
+    !result.success ||
+    !hasValidKnownBlob(
+      result.value.avatar,
+      'org.hypercerts.defs#smallImage',
+      SMALL_IMAGE_MAX_BYTES,
+    ) ||
+    !hasValidKnownBlob(
+      result.value.banner,
+      'org.hypercerts.defs#largeImage',
+      LARGE_IMAGE_MAX_BYTES,
+    )
+  ) {
+    return undefined
+  }
+  return {
+    kind,
+    collection: 'org.hypercerts.collection',
+    rawValue,
+    value: result.value,
+  }
+}
+
+const validateEvaluationRecord = (
+  kind: FeedKind,
+  rawValue: unknown,
+  parsedValue: unknown,
+): ValidatedFeedRecordFor<'org.hypercerts.context.evaluation'> | undefined => {
+  if (kind !== 'evaluation.create') return undefined
+
+  const result = OrgHypercertsContextEvaluation.validateRecord(parsedValue)
+  if (
+    !result.success ||
+    (result.value.content !== undefined &&
+      !result.value.content.every(hasValidKnownSmallBlob))
+  ) {
+    return undefined
+  }
+  return {
+    kind,
+    collection: 'org.hypercerts.context.evaluation',
+    rawValue,
+    value: result.value,
+  }
+}
+
+const validateMeasurementRecord = (
+  kind: FeedKind,
+  rawValue: unknown,
+  parsedValue: unknown,
+): ValidatedFeedRecordFor<'org.hypercerts.context.measurement'> | undefined => {
+  if (kind !== 'measurement.create') return undefined
+
+  const result = OrgHypercertsContextMeasurement.validateRecord(parsedValue)
+  if (!result.success) return undefined
+  return {
+    kind,
+    collection: 'org.hypercerts.context.measurement',
+    rawValue,
+    value: result.value,
+  }
+}
+
+const validateHyperboardRecord = (
+  kind: FeedKind,
+  rawValue: unknown,
+  parsedValue: unknown,
+): ValidatedFeedRecordFor<'org.hyperboards.board'> | undefined => {
+  if (kind !== 'hyperboard.create') return undefined
+
+  const result = OrgHyperboardsBoard.validateRecord(parsedValue)
+  if (!result.success || !hasValidKnownHyperboardBlobs(result.value)) {
+    return undefined
+  }
+  return {
+    kind,
+    collection: 'org.hyperboards.board',
+    rawValue,
+    value: result.value,
+  }
+}
+
+const validateUpdateRecord = (
+  kind: FeedKind,
+  rawValue: unknown,
+  parsedValue: unknown,
+): ValidatedFeedRecordFor<'org.hypercerts.context.attachment'> | undefined => {
+  if (kind !== 'update.create') return undefined
+
+  const result = OrgHypercertsContextAttachment.validateRecord(parsedValue)
+  if (
+    !result.success ||
+    (result.value.content !== undefined &&
+      !result.value.content.every(hasValidKnownSmallBlob))
+  ) {
+    return undefined
+  }
+  return {
+    kind,
+    collection: 'org.hypercerts.context.attachment',
+    rawValue,
+    value: result.value,
+  }
+}
+
+const validateEndorsementRecord = (
+  kind: FeedKind,
+  rawValue: unknown,
+  parsedValue: unknown,
+): ValidatedFeedRecordFor<'app.certified.badge.award'> | undefined => {
+  if (kind !== 'endorsement.award') return undefined
+
+  const result = AppCertifiedBadgeAward.validateRecord(parsedValue)
+  if (!result.success || !hasAccountSubject(result.value)) return undefined
+  return {
+    kind,
+    collection: 'app.certified.badge.award',
+    rawValue,
+    value: result.value,
+  }
+}
+
 /** Validates one raw indexed record using only its trusted collection and skeleton kind. */
 export const validateFeedRecord = (
   kind: FeedKind,
@@ -261,94 +429,24 @@ export const validateFeedRecord = (
   if (!hasRecordType(value, collection)) return undefined
 
   try {
-    const parsed = jsonToLegacyLex(
+    const parsedValue = jsonToLegacyLex(
       value as Parameters<typeof jsonToLegacyLex>[0],
     )
     switch (collection) {
-      case 'org.hypercerts.claim.activity': {
-        if (kind !== 'cert.create') return undefined
-        const result = OrgHypercertsClaimActivity.validateRecord(parsed)
-        if (
-          !result.success ||
-          !hasValidKnownBlob(
-            result.value.image,
-            'org.hypercerts.defs#smallImage',
-            SMALL_IMAGE_MAX_BYTES,
-          )
-        ) {
-          return undefined
-        }
-        return { kind, collection, rawValue: value, value: result.value }
-      }
-      case 'org.hypercerts.collection': {
-        if (
-          kind !== 'collection.create' &&
-          kind !== 'project.created_with_cert'
-        ) {
-          return undefined
-        }
-        const result = OrgHypercertsCollection.validateRecord(parsed)
-        if (
-          !result.success ||
-          !hasValidKnownBlob(
-            result.value.avatar,
-            'org.hypercerts.defs#smallImage',
-            SMALL_IMAGE_MAX_BYTES,
-          ) ||
-          !hasValidKnownBlob(
-            result.value.banner,
-            'org.hypercerts.defs#largeImage',
-            LARGE_IMAGE_MAX_BYTES,
-          )
-        ) {
-          return undefined
-        }
-        return { kind, collection, rawValue: value, value: result.value }
-      }
-      case 'org.hypercerts.context.evaluation': {
-        if (kind !== 'evaluation.create') return undefined
-        const result = OrgHypercertsContextEvaluation.validateRecord(parsed)
-        if (
-          !result.success ||
-          (result.value.content !== undefined &&
-            !result.value.content.every(hasValidKnownSmallBlob))
-        ) {
-          return undefined
-        }
-        return { kind, collection, rawValue: value, value: result.value }
-      }
-      case 'org.hypercerts.context.measurement': {
-        if (kind !== 'measurement.create') return undefined
-        const result = OrgHypercertsContextMeasurement.validateRecord(parsed)
-        if (!result.success) return undefined
-        return { kind, collection, rawValue: value, value: result.value }
-      }
-      case 'org.hyperboards.board': {
-        if (kind !== 'hyperboard.create') return undefined
-        const result = OrgHyperboardsBoard.validateRecord(parsed)
-        if (!result.success || !hasValidKnownHyperboardBlobs(result.value)) {
-          return undefined
-        }
-        return { kind, collection, rawValue: value, value: result.value }
-      }
-      case 'org.hypercerts.context.attachment': {
-        if (kind !== 'update.create') return undefined
-        const result = OrgHypercertsContextAttachment.validateRecord(parsed)
-        if (
-          !result.success ||
-          (result.value.content !== undefined &&
-            !result.value.content.every(hasValidKnownSmallBlob))
-        ) {
-          return undefined
-        }
-        return { kind, collection, rawValue: value, value: result.value }
-      }
-      case 'app.certified.badge.award': {
-        if (kind !== 'endorsement.award') return undefined
-        const result = AppCertifiedBadgeAward.validateRecord(parsed)
-        if (!result.success || !hasAccountSubject(result.value)) return undefined
-        return { kind, collection, rawValue: value, value: result.value }
-      }
+      case 'org.hypercerts.claim.activity':
+        return validateActivityRecord(kind, value, parsedValue)
+      case 'org.hypercerts.collection':
+        return validateCollectionRecord(kind, value, parsedValue)
+      case 'org.hypercerts.context.evaluation':
+        return validateEvaluationRecord(kind, value, parsedValue)
+      case 'org.hypercerts.context.measurement':
+        return validateMeasurementRecord(kind, value, parsedValue)
+      case 'org.hyperboards.board':
+        return validateHyperboardRecord(kind, value, parsedValue)
+      case 'org.hypercerts.context.attachment':
+        return validateUpdateRecord(kind, value, parsedValue)
+      case 'app.certified.badge.award':
+        return validateEndorsementRecord(kind, value, parsedValue)
       default:
         return undefined
     }
