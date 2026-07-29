@@ -53,7 +53,7 @@ export interface GetFeedSkeletonInput {
   readonly organizationQuality?: OrganizationQualityPolicy
   /** Requested page size, defaulting to 20 and capped at 50. */
   readonly limit?: number
-  /** Opaque cursor returned by an earlier descending effective-timestamp page. */
+  /** Opaque cursor returned by an earlier descending feed-timestamp page. */
   readonly cursor?: string
   /** Final event-kind filter; omitted or empty means every supported kind. */
   readonly kinds?: readonly string[]
@@ -77,8 +77,8 @@ export interface FeedSkeletonItem {
   readonly subject: FeedSubject
   /** DID that owns and published the source record. */
   readonly actorDid: string
-  /** Effective timestamp used to order this item. */
-  readonly sortAt: string
+  /** Timestamp used to place this item in the feed, newest first; falls back to indexing time when needed. */
+  readonly feedTimestamp: string
 }
 
 /** Public response body from app.certified.feed.beta.getFeedSkeleton. */

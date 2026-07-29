@@ -70,7 +70,7 @@ describe('feed skeleton Lexicon contract', () => {
             kind: 'cert.create',
             subject: { uri, cid },
             actorDid,
-            sortAt: '2026-07-21T10:00:00.000Z',
+            feedTimestamp: '2026-07-21T10:00:00.000Z',
           },
         ],
       }),

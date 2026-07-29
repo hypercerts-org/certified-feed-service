@@ -53,7 +53,7 @@ export class FeedService implements FeedSkeletonReader {
       kind: row.kind,
       subject: { uri: row.uri, cid: row.cid },
       actorDid: row.actorDid,
-      sortAt: row.sortValue,
+      feedTimestamp: row.sortValue,
     }))
     this.metrics.observeResult(items.map((item) => item.kind))
 

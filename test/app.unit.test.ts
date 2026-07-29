@@ -31,7 +31,7 @@ describe('HTTP application', () => {
               kind: 'cert.create' as const,
               subject: { uri, cid },
               actorDid: actor,
-              sortAt: '2026-07-21T10:00:00.000000Z',
+              feedTimestamp: '2026-07-21T10:00:00.000000Z',
             },
           ],
         }
@@ -171,7 +171,7 @@ describe('HTTP application', () => {
             kind: 'cert.create' as const,
             subject: { uri: 'bad', cid: 'bad' },
             actorDid: 'not-a-did',
-            sortAt: 'not-a-date',
+            feedTimestamp: 'not-a-date',
           },
         ],
       })),

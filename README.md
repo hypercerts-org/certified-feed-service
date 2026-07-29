@@ -40,14 +40,14 @@ Example response:
         "cid": "bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u"
       },
       "actorDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
-      "sortAt": "2026-07-21T10:00:00.000000Z"
+      "feedTimestamp": "2026-07-21T10:00:00.000000Z"
     }
   ],
   "cursor": "eyJ2ZXJzaW9uIjoxLCJ2YWx1ZSI6IjIwMjYtMDctMjFUMTA6MDA6MDAuMDAwMDAwWiIsInVyaSI6ImF0Oi8vZGlkOnBsYzpld3ZpN254enlvdW42emh4cmhzNjRvaXovb3JnLmh5cGVyY2VydHMuY2xhaW0uYWN0aXZpdHkvM2twbiJ9"
 }
 ```
 
-The cursor is opaque to callers and is valid only for descending effective-timestamp pagination.
+The cursor is opaque to callers and is valid only for descending feed-timestamp pagination.
 
 ## Request flow
 
@@ -103,15 +103,15 @@ Project and activity records fold before kind filtering and pagination. A paired
 
 ## Ordering
 
-Hyperindex materializes a valid top-level `json.createdAt` into `record.record_created_at`. The feed orders by `record_created_at`, falling back to `record.indexed_at` when the materialized value is null.
-
 Ordering is:
 
 ```text
-COALESCE(record_created_at, indexed_at) DESC, record URI DESC
+feed timestamp DESC, record URI DESC
 ```
 
-Cursor version 1 stores that effective timestamp and the record URI.
+`feedTimestamp` is the timestamp used to place an item in the feed, newest first. It uses the record's valid `createdAt` when available; otherwise, it uses the time Hyperindex indexed the record.
+
+Cursor version 1 stores that feed timestamp and the record URI.
 
 The SQL pipeline classifies and folds all eligible records before kind filtering, keyset filtering, ordering, and `LIMIT`. It fetches `limit + 1` matching events to decide whether a next cursor should be returned.
 
