@@ -1,12 +1,19 @@
 import type { FeedSubject } from '../feed/types.js'
 import type {
+  ActivityFeedView,
   ActorImageReference,
   ActorSummary,
+  CollectionFeedView,
   CollectionImageReference,
+  EndorsementFeedView,
+  EvaluationFeedView,
   FeedItemView,
+  HyperboardFeedView,
   LargeImageReference,
+  MeasurementFeedView,
   SanitizedActorRow,
   SmallBlobImageReference,
+  UpdateFeedView,
   UriImageReference,
 } from './types.js'
 import {
@@ -128,102 +135,147 @@ const endorsementViewInvariantError = (): Error =>
     'Endorsement view invariant failed: the validated account subject did not have its exact discovered subject summary; verify endorsement DID discovery and identity mapping before serving hydrated pages.',
   )
 
+type FeedRecordValue<
+  Collection extends ValidatedFeedRecord['collection'],
+> = Extract<
+  ValidatedFeedRecord,
+  { readonly collection: Collection }
+>['value']
+
+type EndorsementRecord = Extract<
+  ValidatedFeedRecord,
+  { readonly collection: 'app.certified.badge.award' }
+>
+
+const buildActivityView = (
+  value: FeedRecordValue<'org.hypercerts.claim.activity'>,
+): ActivityFeedView => {
+  const image = smallImageReference(value.image)
+  return {
+    $type: 'app.certified.feed.beta.defs#activityView',
+    title: value.title,
+    shortDescription: value.shortDescription,
+    ...(image === undefined ? {} : { image }),
+    createdAt: value.createdAt,
+    ...(value.startDate === undefined ? {} : { startDate: value.startDate }),
+    ...(value.endDate === undefined ? {} : { endDate: value.endDate }),
+    locationCount: value.locations?.length ?? 0,
+  }
+}
+
+const buildCollectionView = (
+  value: FeedRecordValue<'org.hypercerts.collection'>,
+): CollectionFeedView => {
+  const image: CollectionImageReference | undefined =
+    smallImageReference(value.avatar) ?? largeImageReference(value.banner)
+  return {
+    $type: 'app.certified.feed.beta.defs#collectionView',
+    ...(value.type === undefined ? {} : { collectionType: value.type }),
+    title: value.title,
+    ...(value.shortDescription === undefined
+      ? {}
+      : { shortDescription: value.shortDescription }),
+    ...(image === undefined ? {} : { image }),
+    createdAt: value.createdAt,
+    itemCount: value.items?.length ?? 0,
+  }
+}
+
+const buildEndorsementView = (
+  record: EndorsementRecord,
+  context: FeedViewContext,
+): EndorsementFeedView => {
+  const subjectDid = getEndorsedActorDid(record)
+  if (
+    subjectDid === undefined ||
+    context.endorsedActor === undefined ||
+    context.endorsedActor.did !== subjectDid
+  ) {
+    throw endorsementViewInvariantError()
+  }
+  return {
+    $type: 'app.certified.feed.beta.defs#endorsementView',
+    subject: context.endorsedActor,
+    createdAt: record.value.createdAt,
+  }
+}
+
+const buildEvaluationView = (
+  value: FeedRecordValue<'org.hypercerts.context.evaluation'>,
+): EvaluationFeedView => {
+  const target = targetReference(value.subject)
+  return {
+    $type: 'app.certified.feed.beta.defs#evaluationView',
+    summary: value.summary,
+    createdAt: value.createdAt,
+    ...(target === undefined ? {} : { target }),
+  }
+}
+
+const buildMeasurementView = (
+  value: FeedRecordValue<'org.hypercerts.context.measurement'>,
+): MeasurementFeedView => {
+  const target = targetReference(value.subjects?.[0])
+  return {
+    $type: 'app.certified.feed.beta.defs#measurementView',
+    metric: value.metric,
+    createdAt: value.createdAt,
+    ...(target === undefined ? {} : { target }),
+  }
+}
+
+const buildHyperboardView = (
+  value: FeedRecordValue<'org.hyperboards.board'>,
+): HyperboardFeedView => ({
+  $type: 'app.certified.feed.beta.defs#hyperboardView',
+  createdAt: value.createdAt,
+})
+
+const buildUpdateView = (
+  value: FeedRecordValue<'org.hypercerts.context.attachment'>,
+): UpdateFeedView => {
+  const imageBlob = value.content?.find(
+    (entry) =>
+      isObject(entry) &&
+      entry.$type === 'org.hypercerts.defs#smallBlob' &&
+      isObject(entry.blob) &&
+      typeof entry.blob.mimeType === 'string' &&
+      entry.blob.mimeType.startsWith('image/'),
+  )
+  const image = smallBlobImageReference(imageBlob)
+  const target = targetReference(value.subjects?.[0])
+  return {
+    $type: 'app.certified.feed.beta.defs#updateView',
+    title: value.title,
+    ...(value.shortDescription === undefined
+      ? {}
+      : { shortDescription: value.shortDescription }),
+    ...(image === undefined ? {} : { image }),
+    createdAt: value.createdAt,
+    ...(target === undefined ? {} : { target }),
+  }
+}
+
 /** Builds one stable feed-card view without performing hydration or other I/O. */
 export const buildFeedItemView = (
   record: ValidatedFeedRecord,
   context: FeedViewContext = {},
 ): FeedItemView => {
   switch (record.kind) {
-    case 'cert.create': {
-      const value = record.value
-      const image = smallImageReference(value.image)
-      return {
-        $type: 'app.certified.feed.beta.defs#activityView',
-        title: value.title,
-        shortDescription: value.shortDescription,
-        ...(image === undefined ? {} : { image }),
-        createdAt: value.createdAt,
-        ...(value.startDate === undefined ? {} : { startDate: value.startDate }),
-        ...(value.endDate === undefined ? {} : { endDate: value.endDate }),
-        locationCount: value.locations?.length ?? 0,
-      }
-    }
+    case 'cert.create':
+      return buildActivityView(record.value)
     case 'collection.create':
-    case 'project.created_with_cert': {
-      const value = record.value
-      const image: CollectionImageReference | undefined =
-        smallImageReference(value.avatar) ?? largeImageReference(value.banner)
-      return {
-        $type: 'app.certified.feed.beta.defs#collectionView',
-        ...(value.type === undefined ? {} : { collectionType: value.type }),
-        title: value.title,
-        ...(value.shortDescription === undefined
-          ? {}
-          : { shortDescription: value.shortDescription }),
-        ...(image === undefined ? {} : { image }),
-        createdAt: value.createdAt,
-        itemCount: value.items?.length ?? 0,
-      }
-    }
-    case 'endorsement.award': {
-      const subjectDid = getEndorsedActorDid(record)
-      if (
-        subjectDid === undefined ||
-        context.endorsedActor === undefined ||
-        context.endorsedActor.did !== subjectDid
-      ) {
-        throw endorsementViewInvariantError()
-      }
-      return {
-        $type: 'app.certified.feed.beta.defs#endorsementView',
-        subject: context.endorsedActor,
-        createdAt: record.value.createdAt,
-      }
-    }
-    case 'evaluation.create': {
-      const target = targetReference(record.value.subject)
-      return {
-        $type: 'app.certified.feed.beta.defs#evaluationView',
-        summary: record.value.summary,
-        createdAt: record.value.createdAt,
-        ...(target === undefined ? {} : { target }),
-      }
-    }
-    case 'measurement.create': {
-      const target = targetReference(record.value.subjects?.[0])
-      return {
-        $type: 'app.certified.feed.beta.defs#measurementView',
-        metric: record.value.metric,
-        createdAt: record.value.createdAt,
-        ...(target === undefined ? {} : { target }),
-      }
-    }
+    case 'project.created_with_cert':
+      return buildCollectionView(record.value)
+    case 'endorsement.award':
+      return buildEndorsementView(record, context)
+    case 'evaluation.create':
+      return buildEvaluationView(record.value)
+    case 'measurement.create':
+      return buildMeasurementView(record.value)
     case 'hyperboard.create':
-      return {
-        $type: 'app.certified.feed.beta.defs#hyperboardView',
-        createdAt: record.value.createdAt,
-      }
-    case 'update.create': {
-      const imageBlob = record.value.content?.find(
-        (entry) =>
-          isObject(entry) &&
-          entry.$type === 'org.hypercerts.defs#smallBlob' &&
-          isObject(entry.blob) &&
-          typeof entry.blob.mimeType === 'string' &&
-          entry.blob.mimeType.startsWith('image/'),
-      )
-      const image = smallBlobImageReference(imageBlob)
-      const target = targetReference(record.value.subjects?.[0])
-      return {
-        $type: 'app.certified.feed.beta.defs#updateView',
-        title: record.value.title,
-        ...(record.value.shortDescription === undefined
-          ? {}
-          : { shortDescription: record.value.shortDescription }),
-        ...(image === undefined ? {} : { image }),
-        createdAt: record.value.createdAt,
-        ...(target === undefined ? {} : { target }),
-      }
-    }
+      return buildHyperboardView(record.value)
+    case 'update.create':
+      return buildUpdateView(record.value)
   }
 }
