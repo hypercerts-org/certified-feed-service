@@ -251,6 +251,37 @@ describe('feed Lexicon contract', () => {
     }
   })
 
+  it('keeps activity and collection counts optional on the wire', () => {
+    expect(defs.activityView.required).toEqual(['title'])
+    expect(defs.collectionView.required).toEqual(['title'])
+    expect(defs.activityView.properties.locationCount).toEqual({
+      type: 'integer',
+      minimum: 0,
+    })
+    expect(defs.collectionView.properties.itemCount).toEqual({
+      type: 'integer',
+      minimum: 0,
+    })
+
+    const activityWithoutCount: Record<string, unknown> = {
+      ...viewsByKind['cert.create'],
+    }
+    const collectionWithoutCount: Record<string, unknown> = {
+      ...viewsByKind['collection.create'],
+    }
+    delete activityWithoutCount.locationCount
+    delete collectionWithoutCount.itemCount
+
+    expect(() =>
+      hydratedOutput.schema.$parse({
+        items: [
+          { ...feedItem('cert.create'), view: activityWithoutCount },
+          { ...feedItem('collection.create'), view: collectionWithoutCount },
+        ],
+      }),
+    ).not.toThrow()
+  })
+
   it('uses protocol-native Hypercerts variants through open image unions', () => {
     expect(defs).not.toHaveProperty('uriImage')
     expect(defs).not.toHaveProperty('blobImage')

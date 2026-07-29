@@ -42,7 +42,7 @@
     },
     "activityView": {
       "type": "object",
-      "required": ["title", "locationCount"],
+      "required": ["title"],
       "properties": {
         "title": { "type": "string" },
         "shortDescription": { "type": "string" },
@@ -61,7 +61,7 @@
     },
     "collectionView": {
       "type": "object",
-      "required": ["title", "itemCount"],
+      "required": ["title"],
       "properties": {
         "collectionType": { "type": "string" },
         "title": { "type": "string" },
