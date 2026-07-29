@@ -48,7 +48,68 @@ const requireActorSummary = (
 interface ValidatedFeedRow {
   readonly row: InternalSourceFeedRow
   readonly record: ValidatedFeedRecord
+  readonly endorsedDid: string | undefined
 }
+
+interface ValidatedFeedBatch {
+  readonly rows: readonly ValidatedFeedRow[]
+  readonly requestedDids: ReadonlySet<string>
+}
+
+const collectValidatedFeedRows = (
+  rows: readonly InternalSourceFeedRow[],
+): ValidatedFeedBatch => {
+  const validatedRows: ValidatedFeedRow[] = []
+  const requestedDids = new Set<string>()
+
+  for (const row of rows) {
+    const record = validateFeedRecord(
+      row.kind,
+      row.collection,
+      row.sourceValue,
+    )
+    if (record === undefined) continue
+
+    const endorsedDid = getEndorsedActorDid(record)
+    validatedRows.push({ row, record, endorsedDid })
+    requestedDids.add(row.actorDid)
+    if (endorsedDid !== undefined) requestedDids.add(endorsedDid)
+  }
+
+  return { rows: validatedRows, requestedDids }
+}
+
+const buildHydratedFeedItems = (
+  validatedRows: readonly ValidatedFeedRow[],
+  summaries: ReadonlyMap<string, ActorSummary>,
+): HydratedFeedItem[] =>
+  validatedRows.map(({ row, record, endorsedDid }) => {
+    const actor = summaries.get(row.actorDid)
+    if (actor === undefined || actor.did !== row.actorDid) {
+      throw identityInvariantError()
+    }
+    const endorsedActor =
+      endorsedDid === undefined ? undefined : summaries.get(endorsedDid)
+
+    return {
+      id: row.uri,
+      kind: row.kind,
+      subject: { uri: row.uri, cid: row.cid },
+      feedTimestamp: row.sortValue,
+      actor,
+      view: buildFeedItemView(record, {
+        ...(endorsedActor === undefined ? {} : { endorsedActor }),
+      }),
+    }
+  })
+
+const buildOutput = (
+  items: readonly HydratedFeedItem[],
+  cursor: string | undefined,
+): GetHydratedFeedOutput => ({
+  items,
+  ...(cursor === undefined ? {} : { cursor }),
+})
 
 /** Application seam consumed by the hydrated XRPC transport. */
 export interface HydratedFeedReader {
@@ -67,58 +128,29 @@ export class HydratedFeedService implements HydratedFeedReader {
     input: GetFeedSkeletonInput,
   ): Promise<GetHydratedFeedOutput> {
     const page = await this.pages.loadPage(input, 'with-source')
-    const validatedRows: ValidatedFeedRow[] = []
-    const requestedDids = new Set<string>()
-    for (const row of page.rows) {
-      const record = validateFeedRecord(
-        row.kind,
-        row.collection,
-        row.sourceValue,
-      )
-      if (record === undefined) continue
+    const batch = collectValidatedFeedRows(page.rows)
 
-      validatedRows.push({ row, record })
-      requestedDids.add(row.actorDid)
-      const endorsedDid = getEndorsedActorDid(record)
-      if (endorsedDid !== undefined) requestedDids.add(endorsedDid)
+    if (batch.rows.length === 0) {
+      return buildOutput([], page.cursor)
     }
 
-    if (validatedRows.length === 0) {
-      return {
-        items: [],
-        ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
-      }
-    }
+    const summaries = await this.loadActorSummaries(batch.requestedDids)
+    return buildOutput(
+      buildHydratedFeedItems(batch.rows, summaries),
+      page.cursor,
+    )
+  }
 
+  private async loadActorSummaries(
+    requestedDids: ReadonlySet<string>,
+  ): Promise<ReadonlyMap<string, ActorSummary>> {
     const contexts = await this.identities.getByDids([...requestedDids])
     const summaries = new Map<string, ActorSummary>()
+
     for (const did of requestedDids) {
       summaries.set(did, requireActorSummary(did, contexts))
     }
 
-    const items: HydratedFeedItem[] = validatedRows.map(({ row, record }) => {
-      const actor = summaries.get(row.actorDid)
-      if (actor === undefined || actor.did !== row.actorDid) {
-        throw identityInvariantError()
-      }
-      const endorsedDid = getEndorsedActorDid(record)
-      const endorsedActor =
-        endorsedDid === undefined ? undefined : summaries.get(endorsedDid)
-      return {
-        id: row.uri,
-        kind: row.kind,
-        subject: { uri: row.uri, cid: row.cid },
-        feedTimestamp: row.sortValue,
-        actor,
-        view: buildFeedItemView(record, {
-          ...(endorsedActor === undefined ? {} : { endorsedActor }),
-        }),
-      }
-    })
-
-    return {
-      items,
-      ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
-    }
+    return summaries
   }
 }
