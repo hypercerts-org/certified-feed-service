@@ -1,14 +1,14 @@
 # Certified Feed Service
 
-Standalone, read-only TypeScript service that reads Hyperindex's current PostgreSQL state and serves ordered Hypercerts feeds over XRPC.
+A standalone, read-only TypeScript service. It reads the current PostgreSQL data owned by Hyperindex and serves ordered Hypercerts feeds over XRPC.
 
-> **Pre-release:** This service and its Lexicons have not had their first public release. Wire contracts may change without backward compatibility.
+> **Pre-release:** Neither this service nor its Lexicons has had a first public release. Wire contracts can change without backward compatibility.
 
-Hyperindex is the only supported database owner. The service exposes an exact-reference skeleton and a view-only hydrated feed; it does not ingest or mutate indexed data, import Hyperindex code, call its GraphQL API, authenticate callers, fetch blob bytes, or provide immutable event history.
+Hyperindex is the only supported owner of the database. The service provides a skeleton feed with exact references and a hydrated feed with views only. It does not ingest or change indexed data, import Hyperindex code, call the Hyperindex GraphQL API, authenticate callers, fetch blob bytes, or provide an unchangeable event history.
 
 ## Endpoints
 
-Both endpoints are unauthenticated POST procedures with the same request fields, limits, cursor contract, and stable public errors. The request's `viewerDid` selects the viewer scope and is not verified against an authenticated caller:
+Both endpoints are unauthenticated POST procedures. They use the same request fields, limits, cursor contract, and stable public errors. The request's `viewerDid` chooses the viewer scope. The service does not check it against an authenticated caller:
 
 ```text
 POST /xrpc/app.certified.feed.beta.getFeedSkeleton
@@ -16,7 +16,7 @@ POST /xrpc/app.certified.feed.beta.getFeed
 Content-Type: application/json
 ```
 
-They are app-specific XRPC procedures, not Bluesky's `app.bsky.feed.getFeedSkeleton` query.
+These are app-specific XRPC procedures. They are not Bluesky's `app.bsky.feed.getFeedSkeleton` query.
 
 ### Request
 
@@ -34,7 +34,7 @@ curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeed \
   }'
 ```
 
-Use the same body with `getFeedSkeleton` when a downstream data plane only needs exact source references.
+Use the same body with `getFeedSkeleton` when another data system needs only exact source references.
 
 ### Skeleton response
 
@@ -88,15 +88,27 @@ Use the same body with `getFeedSkeleton` when a downstream data plane only needs
 }
 ```
 
-Hydrated items are view-only:
+Hydrated items contain views only.
 
-- Every returned item has a validated source record and a required kind-specific `view`.
-- Selected source records that fail validation are omitted. The service does not refill the page, so a hydrated page may contain fewer than `limit` items, or no items, while still returning a cursor that advances over the selected source page.
-- The nested feed-view union is open. Clients must tolerate view `$type` values they do not recognize.
-- The response does not expose source JSON or identity provenance.
-- Actor summaries use a valid meaningful Certified profile first, then the current validated `app.bsky.actor.profile`, then a validated stored Hyperindex handle, then the DID alone. A valid stored handle is preserved independently. Bluesky profile blobs come from the deterministic indexed profile record; the service does not call a PDS or AppView.
-- Evaluation, measurement, and update views may include an exact `{ uri, cid }` target. The source record's authoritative validator validates the strong-reference shape. The service does not query, preview, recursively hydrate, or validate the referenced target record or body.
-- Image values use open unions so clients can tolerate future variants. Known values preserve protocol-native `org.hypercerts.defs#uri`, `#smallImage`, `#largeImage`, or `#smallBlob` wrappers and their nested AT Protocol blob refs. The containing actor supplies the repository DID; the service never fetches or proxies bytes.
+#### What you get
+
+Every feed item comes from a valid source record. Each item has a view made for that kind of item.
+
+The service uses an actor's Certified profile for their name and avatar when it can. Otherwise, it uses their Bluesky profile. It adds a valid handle separately. If there is no profile, it shows the actor by their handle or DID.
+
+An evaluation, measurement, or update may point to another record by its exact URI and CID. The service checks that the reference is valid.
+
+Clients must accept image and feed formats they do not know. Known images keep their original Hypercerts and AT Protocol formats.
+
+#### What the service does not do
+
+The service removes invalid feed items and does not replace them. A page may therefore have fewer items than requested, or no items. The cursor still advances past every record the service checked.
+
+The response never contains the original source JSON. It also does not say where actor details came from.
+
+The service does not fetch, preview, or expand linked records. It only checks that the link contains a valid URI and CID.
+
+The service does not contact a PDS or AppView. It does not download or proxy image files. It gets Bluesky profile data from the indexed database.
 
 ## Request flow
 
@@ -136,14 +148,14 @@ sequenceDiagram
 
 ## Request behavior
 
-- Malformed JSON or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`; it never becomes an internal server error.
-- The base scope always comes from the viewer's current `app.certified.graph.follow` records; malformed follow subjects are ignored.
-- `trustedEvaluators` adds subjects of each evaluator's current active endorsement awards.
-- Endorsement definitions without `allowedIssuers` permit any issuer. When present, only listed issuer DIDs qualify; an empty or malformed value permits none.
-- The viewer is removed. Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, so feed selection does not query actor status.
-- Organization-quality policy runs against the final author union before selecting events. Organizations are detected only by exact `app.certified.actor.organization/self` records.
-- Trusted quality labelers come only from service configuration. Quality labels are bare-DID, non-CID `external_label` rows; callers cannot choose label sources.
-- Omitted or empty `kinds` includes all supported kinds. Unknown kinds are rejected.
+- Malformed JSON or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`. It never becomes an internal server error.
+- The base scope always comes from the viewer's current `app.certified.graph.follow` records. The service ignores malformed follow subjects.
+- `trustedEvaluators` adds the subjects of every current, active endorsement award from each evaluator.
+- An endorsement definition with no `allowedIssuers` allows any issuer. When it is present, only its listed issuer DIDs qualify. An empty or malformed value allows no issuers.
+- The service removes the viewer. Hyperindex removes source records for identities that are explicitly deleted, deactivated, suspended, or taken down, so feed selection does not check actor status.
+- The organization-quality rules run against the final combined author list before event selection. Only exact `app.certified.actor.organization/self` records count as organizations.
+- Trusted quality labelers come only from the service configuration. Quality labels are bare-DID, non-CID `external_label` rows. Callers cannot choose label sources.
+- Leaving out `kinds`, or passing an empty list, includes every supported kind. The service rejects unknown kinds.
 
 Supported event kinds:
 
@@ -158,29 +170,48 @@ update.create
 endorsement.award
 ```
 
-Project and activity records fold before kind filtering and pagination. A paired activity cannot leak onto a later page after its collection is returned as `project.created_with_cert`.
+Project and activity records are combined before kind filtering and pagination. After a collection is returned as `project.created_with_cert`, its paired activity cannot appear on a later page.
 
 ## Ordering and current-state behavior
 
-Ordering is:
+The order is:
 
 ```text
 feed timestamp DESC, record URI DESC
 ```
 
-`feedTimestamp` is the timestamp used to place an item in the feed, newest first. It uses the record's valid `createdAt` when available; otherwise, it uses the time Hyperindex indexed the record. The query fetches `limit + 1` events to decide whether to return a next cursor.
+Items appear newest first by `feedTimestamp`. This timestamp uses the record's valid `createdAt`. If that is not available, it uses the time when Hyperindex indexed the record. Pagination moves forward from the last source row chosen before hydration, so removing an invalid hydrated item does not move the cursor.
 
-The opaque cursor stores the timestamp and URI of the last selected source row before hydration. Both endpoints use the same page loader, so ordering and cursor bytes are identical for the same request. Hydration may omit invalid selected sources without changing cursor advancement. Cursor traversal is deterministic for each query but does not provide snapshot isolation across requests.
+### Pagination and database reads
 
-For a skeleton request, the service performs one feed query. A hydrated page with at least one validated source performs one feed/source statement plus one identity batch. An empty or entirely invalid selected page skips identity retrieval. Query count does not grow with page size, and the service does not issue extra queries to refill items omitted during hydration.
+**Pages**
 
-Feed selection and hydrated source retrieval share one PostgreSQL statement snapshot. Identity data is a later current-state read, so actor/profile changes may be reflected after page selection without changing source ordering.
+- The service checks one extra item to see whether another page exists.
+- The cursor marks the last item selected.
+- Both endpoints use the same ordering and cursor rules.
+- Invalid items are removed, not replaced.
 
-A source-aware query count-bounds selected rows to `limit + 1` (at most 51), but it does not byte-bound their source JSON. Large indexed records can increase PostgreSQL transfer, process memory, validation work, and latency. Source JSON remains internal and is never serialized in the view-only hydrated response.
+**Database work**
+
+- A skeleton page uses one database query.
+- A full feed page also loads actor and profile details when it has valid items.
+- The service never makes extra queries to fill gaps left by invalid items.
+
+**Freshness**
+
+Feed items and their source records are read together. Actor and profile details are loaded afterward, so they may be newer.
+
+Each page is a separate database read. Changes made between requests may appear on later pages.
+
+**Record size**
+
+The service reads at most 51 source records per page. Their total size is not limited, so unusually large records may take longer and use more memory.
+
+Source JSON is never returned.
 
 ## Runtime configuration
 
-Copy `.env.example` to `.env` for local development, or copy its values into the deployment's variable configuration. The process loads an optional local `.env` without overriding variables already provided by the environment.
+For local development, copy `.env.example` to `.env`. For deployment, copy its values into the deployment's variable configuration. The process can load a local `.env`, but it never replaces variables already set in the environment.
 
 | Variable | Required | Default | Purpose |
 |---|---:|---:|---|
@@ -196,13 +227,13 @@ Copy `.env.example` to `.env` for local development, or copy its values into the
 | `GRACEFUL_SHUTDOWN_MS` | no | `10000` | Shutdown drain timeout |
 | `TRUSTED_QUALITY_LABELER_DIDS` | no | empty | Comma-separated Orglabeler trust roots |
 
-If no trusted labelers are configured, known organizations are unrated whenever an organization-quality policy is supplied.
+If there are no configured trusted labelers, known organizations count as unrated whenever the request includes an organization-quality policy.
 
 ## Database access
 
-Use a dedicated login with only `SELECT` access. The service also sets `default_transaction_read_only=on` on every pool session, but grants remain the primary boundary.
+Use a dedicated login that has only `SELECT` access. The service also sets `default_transaction_read_only=on` for every connection in the pool, but database grants are still the main security boundary.
 
-Each replica owns a bounded in-process pool. Account for `replica count × DATABASE_MAX_CONNECTIONS` when budgeting database connections; use an external pooler when many replicas share a constrained PostgreSQL server.
+Each service replica has its own limited in-process pool. When planning database connections, allow for `replica count × DATABASE_MAX_CONNECTIONS`. Use an external pooler if many replicas share a PostgreSQL server with few available connections.
 
 Example operator setup:
 
@@ -215,13 +246,13 @@ GRANT SELECT ON TABLE public.record, public.actor, public.external_label
 ALTER ROLE certified_feed_reader SET default_transaction_read_only = on;
 ```
 
-The service owns no migrations or feed tables. `/ready` checks database reachability, PostgreSQL 16 timestamp validation, and read-only session state; it does not inspect Hyperindex tables, migrations, label subscriptions, backfill completion, or ingestion freshness. See [`docs/database-contract.md`](docs/database-contract.md) for the runtime schema contract.
+The service has no migrations or feed tables of its own. `/ready` checks that the database can be reached, PostgreSQL 16 can validate timestamps, and the session is read-only. It does not check Hyperindex tables, migrations, label subscriptions, completed backfills, or ingestion freshness. See [`docs/database-contract.md`](docs/database-contract.md) for the runtime schema contract.
 
-Before cutover, verify trusted quality-label subscriptions are healthy and current, migration-010 timestamp backfill is complete, and Hyperindex filters/backfill include `app.certified.actor.profile`, `app.bsky.actor.profile`, and `org.hyperboards.board`.
+Before cutover, confirm that trusted quality-label subscriptions are healthy and current, the migration-010 timestamp backfill is complete, and the Hyperindex filters and backfill include `app.certified.actor.profile`, `app.bsky.actor.profile`, and `org.hyperboards.board`.
 
 ## Development
 
-Requires Node.js 22+ and PostgreSQL 16+.
+You need Node.js 22+ and PostgreSQL 16+.
 
 ```bash
 npm install
@@ -231,37 +262,37 @@ npm run test:unit
 npm run build
 ```
 
-Committed Lexicon JSON under `lexicons/` is the public wire contract plus installed external dependencies. `lexicons.json` pins installed network Lexicons by AT-URI and CID. Generated TypeScript under `src/lexicons/` is ignored and must not be edited or committed. `codegen`, `check`, tests, and build regenerate it. Codegen stages only the canonical `org.hypercerts.defs#uri`, `#smallBlob`, `#smallImage`, and `#largeImage` fragments from the pinned `@hypercerts-org/lexicon` package so the feed does not commit duplicate definitions. A narrow post-codegen workaround for `@atproto/lex@0.3.0` is documented in `AGENTS.md`.
+The committed Lexicon JSON in `lexicons/` defines the public wire contract and includes installed external dependencies. `lexicons.json` pins installed network Lexicons by AT-URI and CID. The generated TypeScript in `src/lexicons/` is ignored. Do not edit or commit it. The `codegen`, `check`, test, and build commands regenerate it. Codegen stages only the standard `org.hypercerts.defs#uri`, `#smallBlob`, `#smallImage`, and `#largeImage` fragments from the pinned `@hypercerts-org/lexicon` package. This keeps the feed from committing duplicate definitions. `AGENTS.md` explains a small, focused workaround that runs after codegen for `@atproto/lex@0.3.0`.
 
-Verify committed network Lexicons against the manifest with:
+Check the committed network Lexicons against the manifest with:
 
 ```bash
 npx --no-install lex install --ci --lexicons ./lexicons --manifest ./lexicons.json
 ```
 
-Use `lex install --update` only when intentionally refreshing those pinned dependencies.
+Run `lex install --update` only when you mean to update those pinned dependencies.
 
-The canonical feed statement is `src/feed/feed-query.sql`. Development watches it with the TypeScript sources, and build copies it beside `dist/feed/query.js` before smoke-loading production adapters.
+The main feed statement is `src/feed/feed-query.sql`. During development, the watcher watches it along with the TypeScript source. The build copies it next to `dist/feed/query.js` before checking that the production adapters load.
 
 ### PostgreSQL integration tests
 
-Integration tests require an explicitly selected empty disposable PostgreSQL 16+ database:
+Integration tests need a PostgreSQL 16+ database that you explicitly choose and that is empty and safe to discard:
 
 ```bash
 TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/certified_feed_test' \
   npm run test:integration
 ```
 
-The suite creates minimal contractual tables and test rows but does not drop or truncate existing tables. Never point it at a shared, staging, or production database.
+The test suite creates the smallest needed contract tables and test rows. It does not drop or empty existing tables. Never point it at a shared, staging, or production database.
 
-To verify against Hyperindex's migrated schema, first let Hyperindex migrate a separate disposable database that is otherwise empty of application rows:
+To test against Hyperindex's migrated schema, first have Hyperindex migrate a separate disposable database that otherwise contains no application rows:
 
 ```bash
 TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/hyperindex_feed_test' \
   npm run test:integration:hyperindex
 ```
 
-This command requires `psql`, verifies required Hyperindex migrations, record/actor/external-label columns, the generated `record.rkey`, and the external-label lookup index, then runs the same behavior suite. It does not apply Hyperindex migrations.
+This command needs `psql`. It checks the required Hyperindex migrations, the record, actor, and external-label columns, the generated `record.rkey`, and the external-label lookup index. It then runs the same behavior tests. It does not apply Hyperindex migrations.
 
 ## Deployment
 
@@ -273,20 +304,20 @@ docker run --rm -p 3000:3000 \
   certified-feed-service
 ```
 
-Deploy beside Hyperindex with private database networking.
+Deploy the service beside Hyperindex and use private networking for the database.
 
-Apply per-IP rate limiting at the gateway. The initial public policy is 60 feed requests per minute per client IP with a burst of 20, returning HTTP 429 and `Retry-After` when exceeded. Keep health, readiness, and metrics private and outside that public bucket. Tune limits from measured query latency and pool saturation.
+Set per-IP rate limits at the gateway. The first public policy allows 60 feed requests per minute for each client IP, with a burst of 20. When a client exceeds the limit, return HTTP 429 with `Retry-After`. Keep health, readiness, and metrics private and outside this public limit. Adjust the limits using measured query response time and pool saturation.
 
-The process bounds request bodies, HTTP receive time, pool size, connection acquisition, and SQL statement duration. `REQUEST_TIMEOUT_MS` is not an end-to-end handler or query deadline. Do not add inconsistent per-replica rate-limit state to this service.
+The process limits request body size, HTTP request receive time, pool size, connection wait time, and SQL statement duration. `REQUEST_TIMEOUT_MS` is not a deadline for the whole handler or query. Do not add rate-limit state to this service because separate replicas would disagree.
 
 ## Operations
 
-- `GET /health`: process liveness only.
-- `GET /ready`: live database capability and read-only check; runtime schema compatibility is documented separately.
-- `GET /metrics`: Prometheus metrics.
-- `SIGTERM` and `SIGINT`: stop accepting requests, drain, then close the database pool.
+- `GET /health`: checks only whether the process is alive.
+- `GET /ready`: checks current database support and read-only state; the runtime schema contract is documented separately.
+- `GET /metrics`: provides Prometheus metrics.
+- `SIGTERM` and `SIGINT`: stop accepting requests, let current work finish, and then close the database pool.
 
-Metrics use bounded route, status, operation, event-kind, and error labels. DIDs, AT-URIs, CIDs, cursors, and record values are never labels.
+Metrics use a fixed set of route, status, operation, event-kind, and error labels. DIDs, AT-URIs, CIDs, cursors, and record values are never used as labels.
 
 Stable public feed errors:
 
@@ -298,8 +329,8 @@ InvalidCursor
 InternalError
 ```
 
-Public errors never include SQL, database credentials, table contents, internal causes, or stack traces.
+Public errors never show SQL, database credentials, table contents, internal causes, or stack traces.
 
 ## MVP boundaries
 
-The service does not ingest, authenticate, write records, own migrations, cache across requests, call Hyperindex/PDS/AppView APIs, download blobs, hydrate target records, build target previews, recursively hydrate linked records, persist preferences, discover the network, or provide immutable event history. Results reflect Hyperindex's mutable current state and freshness.
+The service does not ingest data, authenticate callers, write records, manage migrations, cache across requests, call Hyperindex/PDS/AppView APIs, download blobs, hydrate target records, build target previews, recursively hydrate linked records, save preferences, discover the network, or provide an unchangeable event history. Results show Hyperindex's current, changeable data and its current freshness.
