@@ -173,7 +173,7 @@ Use a deployment role with `SELECT` only. `default_transaction_read_only=on` is 
 
 Keep errors actionable and stable without exposing SQL, credentials, contents, internal causes, or stacks. Never use DIDs, AT-URIs, CIDs, cursors, or record values as metric labels.
 
-Rate limiting belongs at the gateway. Keep `/health`, `/ready`, and `/metrics` private.
+Rate limiting belongs at the gateway. Keep `/health` and `/ready` private.
 
 ## MVP exclusions
 

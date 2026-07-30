@@ -160,7 +160,7 @@ describe('HTTP application', () => {
     })
   })
 
-  it('handles an allowed feed preflight and allows any local development port', async () => {
+  it('handles feed preflights from any browser origin', async () => {
     const metrics = new Metrics()
     const app = createApp(
       compatibleDatabase,
@@ -171,10 +171,8 @@ describe('HTTP application', () => {
 
     for (const origin of [
       'https://certified.app',
-      'http://localhost:80',
+      'https://untrusted.example',
       'http://localhost:4173',
-      'http://127.0.0.1:61823',
-      'http://[::1]:8080',
     ]) {
       const response = await app.fetch(
         new Request(hydratedPath, {
@@ -188,12 +186,12 @@ describe('HTTP application', () => {
       )
 
       expect(response.status).toBe(204)
-      expect(response.headers.get('access-control-allow-origin')).toBe(origin)
+      expect(response.headers.get('access-control-allow-origin')).toBe('*')
       expect(response.headers.get('access-control-allow-methods')).toBe('POST')
       expect(response.headers.get('access-control-allow-headers')).toBe(
         'content-type',
       )
-      expect(response.headers.get('vary')).toBe('Origin')
+      expect(response.headers.has('vary')).toBe(false)
     }
 
     const metricText = await metrics.registry.metrics()
@@ -237,9 +235,7 @@ describe('HTTP application', () => {
     )
 
     expect(response.status).toBe(400)
-    expect(response.headers.get('access-control-allow-origin')).toBe(
-      'https://certified.app',
-    )
+    expect(response.headers.get('access-control-allow-origin')).toBe('*')
     await expect(response.json()).resolves.toMatchObject({
       error: 'InvalidRequest',
       message: expect.stringContaining(message),
@@ -250,29 +246,6 @@ describe('HTTP application', () => {
     )
   })
 
-  it('rejects localhost preflight when local access is disabled', async () => {
-    const app = createApp(
-      compatibleDatabase,
-      appServices(),
-      new Metrics(),
-      logger,
-      { allowedOrigins: ['https://certified.app'], allowLocalhost: false },
-    )
-
-    const response = await app.fetch(
-      new Request(hydratedPath, {
-        method: 'OPTIONS',
-        headers: {
-          origin: 'http://localhost:4173',
-          'access-control-request-method': 'POST',
-        },
-      }),
-    )
-
-    expect(response.status).toBe(403)
-    expect(response.headers.has('access-control-allow-origin')).toBe(false)
-  })
-
   it('leaves operational endpoints without CORS headers', async () => {
     const app = createApp(
       compatibleDatabase,
@@ -281,7 +254,7 @@ describe('HTTP application', () => {
       logger,
     )
 
-    for (const path of ['/health', '/ready', '/metrics']) {
+    for (const path of ['/health', '/ready']) {
       const response = await app.fetch(
         new Request(`http://localhost${path}`, {
           headers: { origin: 'https://certified.app' },
@@ -292,7 +265,23 @@ describe('HTTP application', () => {
     }
   })
 
-  it('adds CORS headers to an allowed feed response', async () => {
+  it('does not expose the metrics registry over HTTP', async () => {
+    const app = createApp(
+      compatibleDatabase,
+      appServices(),
+      new Metrics(),
+      logger,
+    )
+
+    const response = await app.fetch(new Request('http://localhost/metrics'))
+
+    expect(response.status).toBe(404)
+    expect(response.headers.get('content-type')).not.toContain(
+      'text/plain; version=',
+    )
+  })
+
+  it('adds wildcard CORS headers to a feed response', async () => {
     const app = createApp(
       compatibleDatabase,
       appServices(),
@@ -307,45 +296,13 @@ describe('HTTP application', () => {
           origin: 'https://certified.app',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ viewerDid: viewer }),
+        body: JSON.stringify(feedRequest()),
       }),
     )
 
     expect(response.status).toBe(200)
-    expect(response.headers.get('access-control-allow-origin')).toBe(
-      'https://certified.app',
-    )
-    expect(response.headers.get('vary')).toBe('Origin')
-  })
-
-  it('rejects a disallowed feed preflight without CORS permission', async () => {
-    const getFeed = vi.fn()
-    const metrics = new Metrics()
-    const app = createApp(
-      compatibleDatabase,
-      appServices(emptySkeleton(), { getFeed }),
-      metrics,
-      logger,
-    )
-
-    const response = await app.fetch(
-      new Request(hydratedPath, {
-        method: 'OPTIONS',
-        headers: {
-          origin: 'https://untrusted.example',
-          'access-control-request-method': 'POST',
-          'access-control-request-headers': 'content-type',
-        },
-      }),
-    )
-
-    expect(response.status).toBe(403)
-    expect(response.headers.has('access-control-allow-origin')).toBe(false)
-    expect(getFeed).not.toHaveBeenCalled()
-    const metricText = await metrics.registry.metrics()
-    expect(metricText).toContain(
-      'certified_feed_errors_total{error="InvalidRequest"} 1',
-    )
+    expect(response.headers.get('access-control-allow-origin')).toBe('*')
+    expect(response.headers.has('vary')).toBe(false)
   })
 
   it.each([
@@ -373,9 +330,7 @@ describe('HTTP application', () => {
     )
 
     expect(response.status).toBe(400)
-    expect(response.headers.get('access-control-allow-origin')).toBe(
-      'https://certified.app',
-    )
+    expect(response.headers.get('access-control-allow-origin')).toBe('*')
     expect(getFeedSkeleton).not.toHaveBeenCalled()
     expect(getFeed).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toMatchObject({
@@ -410,9 +365,7 @@ describe('HTTP application', () => {
     )
 
     expect(response.status).toBe(413)
-    expect(response.headers.get('access-control-allow-origin')).toBe(
-      'https://certified.app',
-    )
+    expect(response.headers.get('access-control-allow-origin')).toBe('*')
     expect(getFeedSkeleton).not.toHaveBeenCalled()
     expect(getFeed).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toEqual({
