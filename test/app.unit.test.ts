@@ -235,11 +235,11 @@ describe('HTTP application', () => {
     })
   })
 
-  it('translates expected FeedError details without leaking its internal cause', async () => {
+  it('translates semantic InvalidRequest details without leaking its internal cause', async () => {
     const internalCause = new Error('secret database detail')
     const getFeedSkeleton = vi.fn(async () => {
       throw new FeedError(
-        FeedErrorCode.TrustedEvaluatorsTooLarge,
+        FeedErrorCode.InvalidRequest,
         'Reduce trustedEvaluators before retrying.',
         422,
         { cause: internalCause },
@@ -263,7 +263,7 @@ describe('HTTP application', () => {
     expect(getFeedSkeleton).toHaveBeenCalledOnce()
     expect(response.status).toBe(422)
     expect(JSON.parse(responseText)).toEqual({
-      error: 'TrustedEvaluatorsTooLarge',
+      error: 'InvalidRequest',
       message: 'Reduce trustedEvaluators before retrying.',
     })
     expect(responseText).not.toContain(internalCause.message)

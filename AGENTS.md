@@ -96,7 +96,7 @@ Preserve these unless the public contract is intentionally revised and documente
 - The base scope always resolves from the viewer's current `app.certified.graph.follow` records. There is no caller-supplied author override.
 - Evaluator endorsement subjects are unioned after base-author resolution. The viewer is removed and candidates are deduplicated. Do not query actor status: Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, and actors missing from `actor` remain eligible.
 - Deduplicate request lists before enforcing semantic limits. Current limits are 64 evaluators, 16 kinds, and 1–50 page items.
-- Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with `InvalidKind`.
+- Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with the generic `InvalidRequest` error and an actionable message.
 - Organization-quality policy applies to known certified organizations using only service-configured `TRUSTED_QUALITY_LABELER_DIDS`. Callers never choose label sources.
 - `includeUnrated` applies only when no active trusted quality label exists. An active disallowed label is not unrated.
 - Organization status comes only from the exact `at://<did>/app.certified.actor.organization/self` record. Active quality assertions and negations are trusted bare-DID, non-CID `external_label` rows as documented in `docs/database-contract.md`; malformed text timestamps are ignored safely.

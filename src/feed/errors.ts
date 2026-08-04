@@ -1,14 +1,12 @@
-/** Stable public error names returned by the Certified feed XRPC endpoint. */
+/** Stable public error names returned by the generic feed XRPC endpoints. */
 export const FeedErrorCode = {
   InvalidRequest: 'InvalidRequest',
   UnsupportedFeed: 'UnsupportedFeed',
-  TrustedEvaluatorsTooLarge: 'TrustedEvaluatorsTooLarge',
-  InvalidKind: 'InvalidKind',
   InvalidCursor: 'InvalidCursor',
   InternalError: 'InternalError',
 } as const
 
-/** One stable public error name returned by the Certified feed XRPC endpoint. */
+/** One stable public error name returned by the generic feed XRPC endpoints. */
 export type FeedErrorCode =
   (typeof FeedErrorCode)[keyof typeof FeedErrorCode]
 

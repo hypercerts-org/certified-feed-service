@@ -79,7 +79,7 @@ sequenceDiagram
 
 ## Request behavior
 
-- Malformed JSON, missing required params for the selected feed, a feed/params mismatch, invalid pagination, or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`. A structurally valid request with an unregistered `feedId` returns `UnsupportedFeed`. Dispatch failures that reach the service do not query PostgreSQL.
+- Malformed JSON, missing required params, an invalid nested `viewerDid`, params that do not match the selected feed, or structurally invalid top-level pagination return HTTP 400 with `InvalidRequest`. Semantically invalid selected-feed parameters or pagination beyond that feed's supported range return HTTP 422 with the same generic error name and an actionable message. An unregistered `feedId` returns `UnsupportedFeed`. Dispatch failures that reach the service do not query PostgreSQL.
 - The base scope always comes from the viewer's current `app.certified.graph.follow` records; malformed follow subjects are ignored.
 - `trustedEvaluators` adds subjects of each evaluator's current active endorsement awards.
 - Endorsement definitions without `allowedIssuers` permit any issuer. When present, only listed issuer DIDs qualify; an empty list permits none, and malformed values are ignored safely.
@@ -87,7 +87,7 @@ sequenceDiagram
 - Organization-quality policy runs against the final author union before selecting events. An organization is detected only by its exact `app.certified.actor.organization/self` record.
 - Trusted organization-quality labels are bare-DID, non-CID subjects from Hyperindex's `external_label` table; record-level and CID-specific labels do not count.
 - Omitted or empty `kinds` includes all supported kinds.
-- Unknown kinds are rejected instead of silently ignored.
+- Unknown kinds are rejected as `InvalidRequest` instead of being silently ignored.
 
 Supported event kinds:
 
@@ -226,11 +226,11 @@ Stable public feed errors:
 ```text
 InvalidRequest
 UnsupportedFeed
-TrustedEvaluatorsTooLarge
-InvalidKind
 InvalidCursor
 InternalError
 ```
+
+Feed-specific parameter failures use `InvalidRequest`; their message identifies the invalid parameter and how to correct it.
 
 Public errors do not include SQL, database credentials, table contents, or internal stack traces.
 
