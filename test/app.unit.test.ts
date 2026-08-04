@@ -6,7 +6,11 @@ import { createApp, type AppFeedServices } from '../src/app.js'
 import type { DatabaseCompatibilityChecker } from '../src/database.js'
 import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 import type { FeedSkeletonReader } from '../src/feed/service.js'
-import type { GetFeedSkeletonInput } from '../src/feed/types.js'
+import {
+  CERTIFIED_FEED_ID,
+  CERTIFIED_FEED_PARAMS_TYPE,
+  type GetFeedSkeletonInput,
+} from '../src/feed/types.js'
 import type { HydratedFeedReader } from '../src/hydration/service.js'
 import { Metrics } from '../src/metrics.js'
 
@@ -48,6 +52,11 @@ const appServices = (
   hydrated: HydratedFeedReader = emptyHydrated(),
 ): AppFeedServices => ({ skeleton, hydrated })
 
+const feedRequest = (viewerDid = viewer): GetFeedSkeletonInput => ({
+  feedId: CERTIFIED_FEED_ID,
+  params: { $type: CERTIFIED_FEED_PARAMS_TYPE, viewerDid },
+})
+
 const post = (url: string, body: string): Request =>
   new Request(url, {
     method: 'POST',
@@ -82,11 +91,11 @@ describe('HTTP application', () => {
     )
 
     const response = await app.fetch(
-      post(skeletonPath, JSON.stringify({ viewerDid: viewer })),
+      post(skeletonPath, JSON.stringify(feedRequest())),
     )
 
     expect(response.status).toBe(200)
-    expect(received).toMatchObject({ viewerDid: viewer })
+    expect(received).toMatchObject(feedRequest())
     await expect(response.json()).resolves.toMatchObject({
       items: [{ id: uri, subject: { cid } }],
     })
@@ -130,11 +139,11 @@ describe('HTTP application', () => {
     )
 
     const response = await app.fetch(
-      post(hydratedPath, JSON.stringify({ viewerDid: viewer })),
+      post(hydratedPath, JSON.stringify(feedRequest())),
     )
 
     expect(response.status).toBe(200)
-    expect(received).toMatchObject({ viewerDid: viewer })
+    expect(received).toMatchObject(feedRequest())
     await expect(response.json()).resolves.toMatchObject({
       items: [
         {
@@ -211,7 +220,7 @@ describe('HTTP application', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'InvalidRequest',
       message:
-        'Request body exceeds the 65536-byte limit; remove unnecessary evaluators or other fields before retrying.',
+        'Request body exceeds the 65536-byte limit; remove unnecessary feed parameters or other fields before retrying.',
     })
   })
 
@@ -315,7 +324,7 @@ describe('HTTP application', () => {
     const app = createApp(compatibleDatabase, services, new Metrics(), logger)
 
     const response = await app.fetch(
-      post(url, JSON.stringify({ viewerDid: viewer })),
+      post(url, JSON.stringify(feedRequest())),
     )
 
     expect(response.status).toBe(500)
@@ -358,7 +367,7 @@ describe('HTTP application', () => {
     )
 
     const response = await app.fetch(
-      post(url, JSON.stringify({ viewerDid: 'alice.test' })),
+      post(url, JSON.stringify(feedRequest('alice.test'))),
     )
 
     expect(response.status).toBe(400)
@@ -367,6 +376,50 @@ describe('HTTP application', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: 'InvalidRequest',
       message: expect.stringContaining('Invalid DID'),
+    })
+  })
+
+  it.each([
+    [
+      'skeleton',
+      skeletonPath,
+      appServices({
+        getFeedSkeleton: vi.fn(async () => {
+          throw new FeedError(
+            FeedErrorCode.UnsupportedFeed,
+            'The requested feed is not supported.',
+          )
+        }),
+      }),
+    ],
+    [
+      'hydrated',
+      hydratedPath,
+      appServices(emptySkeleton(), {
+        getFeed: vi.fn(async () => {
+          throw new FeedError(
+            FeedErrorCode.UnsupportedFeed,
+            'The requested feed is not supported.',
+          )
+        }),
+      }),
+    ],
+  ])('exposes UnsupportedFeed from the %s route', async (_label, url, services) => {
+    const app = createApp(compatibleDatabase, services, new Metrics(), logger)
+    const response = await app.fetch(
+      post(
+        url,
+        JSON.stringify({
+          feedId: 'app.example.feed.defs#futureFeed',
+          params: { $type: 'app.example.feed.defs#futureParams' },
+        }),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'UnsupportedFeed',
+      message: 'The requested feed is not supported.',
     })
   })
 
@@ -386,7 +439,7 @@ describe('HTTP application', () => {
     )
 
     const response = await app.fetch(
-      post(skeletonPath, JSON.stringify({ viewerDid: viewer })),
+      post(skeletonPath, JSON.stringify(feedRequest())),
     )
 
     expect(response.status).toBe(422)
@@ -414,7 +467,7 @@ describe('HTTP application', () => {
     )
 
     const response = await app.fetch(
-      post(hydratedPath, JSON.stringify({ viewerDid: viewer })),
+      post(hydratedPath, JSON.stringify(feedRequest())),
     )
     const responseText = await response.text()
 
@@ -440,7 +493,7 @@ describe('HTTP application', () => {
     )
 
     const response = await app.fetch(
-      post(hydratedPath, JSON.stringify({ viewerDid: viewer })),
+      post(hydratedPath, JSON.stringify(feedRequest())),
     )
     const responseText = await response.text()
     const metricText = await metrics.registry.metrics()

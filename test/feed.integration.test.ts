@@ -6,10 +6,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { loadConfig } from '../src/config.js'
 import { Database } from '../src/database.js'
-import { PostgresFeedPageLoader } from '../src/feed/page-loader.js'
-import { FeedRepository } from '../src/feed/query.js'
+import { createCertifiedFeed } from '../src/feed/query.js'
+import { FeedRegistry } from '../src/feed/registry.js'
 import { FeedService } from '../src/feed/service.js'
-import type { GetFeedSkeletonInput } from '../src/feed/types.js'
+import {
+  CERTIFIED_FEED_ID,
+  CERTIFIED_FEED_PARAMS_TYPE,
+  type CertifiedFeedParams,
+  type GetFeedSkeletonInput,
+} from '../src/feed/types.js'
 import { PostgresIdentityReader } from '../src/hydration/identity.js'
 import { Metrics } from '../src/metrics.js'
 
@@ -30,12 +35,12 @@ const randomDid = (): string => {
   return `did:plc:${suffix}`
 }
 
-describe('FeedRepository against Postgres', () => {
+describe('Certified feed definition against Postgres', () => {
   const logger = pino({ enabled: false })
   let admin: Pool
   let database: Database
   let identities: PostgresIdentityReader
-  let pages: PostgresFeedPageLoader
+  let pages: FeedRegistry
   let service: FeedService
   let externalLabelSeq = 0
 
@@ -103,11 +108,7 @@ describe('FeedRepository against Postgres', () => {
     })
     database = new Database(config, logger)
     identities = new PostgresIdentityReader(database)
-    pages = new PostgresFeedPageLoader(
-      new FeedRepository(database),
-      [],
-      new Metrics(),
-    )
+    pages = createPages()
     service = new FeedService(pages)
   })
 
@@ -175,14 +176,41 @@ describe('FeedRepository against Postgres', () => {
     )
   }
 
+  type CertifiedFeedOverrides = Omit<
+    CertifiedFeedParams,
+    '$type' | 'viewerDid'
+  >
+
+  const createPages = (
+    trustedQualityLabelerDids: readonly string[] = [],
+  ): FeedRegistry =>
+    new FeedRegistry([
+      createCertifiedFeed(
+        { database, metrics: new Metrics() },
+        trustedQualityLabelerDids,
+      ),
+    ])
+
+  const feedRequest = (
+    viewerDid: string,
+    input: CertifiedFeedOverrides = {},
+  ): GetFeedSkeletonInput => ({
+    feedId: CERTIFIED_FEED_ID,
+    params: {
+      $type: CERTIFIED_FEED_PARAMS_TYPE,
+      viewerDid,
+      ...input,
+    },
+  })
+
   const getFeedForFollows = async (
     followedDids: readonly string[],
-    input: Omit<GetFeedSkeletonInput, 'viewerDid'> = {},
+    input: CertifiedFeedOverrides = {},
   ) => {
     const viewerDid = randomDid()
     await seedActor(viewerDid)
     await Promise.all(followedDids.map((did) => seedFollow(viewerDid, did)))
-    return service.getFeedSkeleton({ viewerDid, ...input })
+    return service.getFeedSkeleton(feedRequest(viewerDid, input))
   }
 
   const seedOrganization = async (
@@ -281,7 +309,7 @@ describe('FeedRepository against Postgres', () => {
       '2026-07-20T00:00:01Z',
       { cid: staleCid },
     )
-    const request = { viewerDid: viewer, limit: 1 }
+    const request = feedRequest(viewer, { limit: 1 })
 
     const metadata = await pages.loadPage(request, 'metadata')
     const withSource = await pages.loadPage(request, 'with-source')
@@ -650,21 +678,18 @@ describe('FeedRepository against Postgres', () => {
       '2026-07-21T05:01:00Z',
     )
 
-    pages = new PostgresFeedPageLoader(
-      new FeedRepository(database),
-      [trustedLabeler],
-      new Metrics(),
-    )
+    pages = createPages([trustedLabeler])
     service = new FeedService(pages)
-    const output = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      trustedEvaluators: [evaluator],
-      organizationQuality: {
-        allowed: ['high-quality'],
-        includeUnrated: false,
-      },
-      limit: 50,
-    })
+    const output = await service.getFeedSkeleton(
+      feedRequest(viewer, {
+        trustedEvaluators: [evaluator],
+        organizationQuality: {
+          allowed: ['high-quality'],
+          includeUnrated: false,
+        },
+        limit: 50,
+      }),
+    )
 
     expect(output.items.map((item) => item.kind)).toEqual([
       'evaluation.create',
@@ -853,11 +878,7 @@ describe('FeedRepository against Postgres', () => {
       },
     )
 
-    pages = new PostgresFeedPageLoader(
-      new FeedRepository(database),
-      [trustedLabeler],
-      new Metrics(),
-    )
+    pages = createPages([trustedLabeler])
     service = new FeedService(pages)
     const assertions = await getFeedForFollows(
       [malformedCtsAssertion, malformedExpAssertion],
@@ -927,11 +948,7 @@ describe('FeedRepository against Postgres', () => {
       { neg: true, cts: equalCts },
     )
 
-    pages = new PostgresFeedPageLoader(
-      new FeedRepository(database),
-      [trustedLabeler],
-      new Metrics(),
-    )
+    pages = createPages([trustedLabeler])
     service = new FeedService(pages)
     const expired = await getFeedForFollows([expiredAssertionOrg], {
       organizationQuality: {
@@ -1148,10 +1165,9 @@ describe('FeedRepository against Postgres', () => {
     )
 
     await expect(
-      service.getFeedSkeleton({
-        viewerDid: viewer,
-        trustedEvaluators: [disallowedIssuer],
-      }),
+      service.getFeedSkeleton(
+        feedRequest(viewer, { trustedEvaluators: [disallowedIssuer] }),
+      ),
     ).resolves.toEqual({ items: [] })
     await expect(
       getFeedForFollows([disallowedIssuer]),
@@ -1254,10 +1270,9 @@ describe('FeedRepository against Postgres', () => {
     )
 
     await expect(
-      service.getFeedSkeleton({
-        viewerDid: viewer,
-        trustedEvaluators: [evaluator],
-      }),
+      service.getFeedSkeleton(
+        feedRequest(viewer, { trustedEvaluators: [evaluator] }),
+      ),
     ).resolves.toEqual({ items: [] })
 
     await expect(
@@ -1378,21 +1393,18 @@ describe('FeedRepository against Postgres', () => {
     )
 
     await seedFollow(viewer, author)
-    const first = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      limit: 2,
-    })
+    const first = await service.getFeedSkeleton(
+      feedRequest(viewer, { limit: 2 }),
+    )
     expect(first.items.map((item) => item.subject.uri)).toEqual([
       collection,
       standalone,
     ])
     expect(first.items[0]?.kind).toBe('project.created_with_cert')
 
-    const second = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      limit: 2,
-      cursor: first.cursor!,
-    })
+    const second = await service.getFeedSkeleton(
+      feedRequest(viewer, { limit: 2, cursor: first.cursor! }),
+    )
     expect(second.items.map((item) => item.subject.uri)).toEqual([old])
     expect(
       [...first.items, ...second.items].some(
@@ -1420,21 +1432,18 @@ describe('FeedRepository against Postgres', () => {
     }
 
     await seedFollow(viewer, author)
-    const first = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      limit: 2,
-    })
+    const first = await service.getFeedSkeleton(
+      feedRequest(viewer, { limit: 2 }),
+    )
     expect(first.items.map((item) => item.subject.uri)).toEqual([
       uris[2],
       uris[1],
     ])
     expect(first.cursor).toBeDefined()
 
-    const second = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      limit: 2,
-      cursor: first.cursor!,
-    })
+    const second = await service.getFeedSkeleton(
+      feedRequest(viewer, { limit: 2, cursor: first.cursor! }),
+    )
     expect(second.items.map((item) => item.subject.uri)).toEqual([uris[0]])
     expect(second.cursor).toBeUndefined()
   })
@@ -1459,7 +1468,7 @@ describe('FeedRepository against Postgres', () => {
     )
 
     await expect(
-      service.getFeedSkeleton({ viewerDid: viewer }),
+      service.getFeedSkeleton(feedRequest(viewer)),
     ).resolves.toEqual({ items: [] })
   })
 
@@ -1512,10 +1521,9 @@ describe('FeedRepository against Postgres', () => {
     expect(authorOutput.items).toHaveLength(1)
     expect(authorOutput.items[0]?.subject.uri).toBe(awardUri)
 
-    const evaluatorOutput = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      trustedEvaluators: [evaluator],
-    })
+    const evaluatorOutput = await service.getFeedSkeleton(
+      feedRequest(viewer, { trustedEvaluators: [evaluator] }),
+    )
     expect(evaluatorOutput.items).toHaveLength(1)
     expect(evaluatorOutput.items[0]?.subject.uri).toBe(subjectActivity)
   })
@@ -1541,7 +1549,7 @@ describe('FeedRepository against Postgres', () => {
     )
     await seedFollow(viewer, followedAuthor)
 
-    const output = await service.getFeedSkeleton({ viewerDid: viewer })
+    const output = await service.getFeedSkeleton(feedRequest(viewer))
 
     expect(output.items.map((item) => item.subject.uri)).toEqual([
       followedUri,
@@ -1582,7 +1590,7 @@ describe('FeedRepository against Postgres', () => {
       '2026-07-22T11:00:00Z',
     )
 
-    const output = await service.getFeedSkeleton({ viewerDid: viewer })
+    const output = await service.getFeedSkeleton(feedRequest(viewer))
 
     expect(output.items.map((item) => item.subject.uri)).toEqual([selectedUri])
   })

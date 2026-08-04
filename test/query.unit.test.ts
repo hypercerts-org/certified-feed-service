@@ -1,133 +1,161 @@
 import type { QueryResultRow } from 'pg'
 import { describe, expect, it } from 'vitest'
 
-import {
-  type FeedQueryExecutor,
-  FeedRepository,
-} from '../src/feed/query.js'
+import { createCertifiedFeed } from '../src/feed/query.js'
+import type { SqlFeedQueryExecutor } from '../src/feed/sql-feed.js'
+import { FEED_COLLECTIONS } from '../src/feed/types.js'
+import { Metrics } from '../src/metrics.js'
 
-const viewer = 'did:plc:ar7c4by46qjdydhdevvrndac'
-const actor = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
-const uri = `at://${actor}/org.hypercerts.claim.activity/3kpn`
+const feedId = 'app.certified.feed.beta.defs#certifiedFeed'
+const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
+const viewerDid = 'did:plc:ar7c4by46qjdydhdevvrndac'
+const actorDid = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
+const trustedLabeler = 'did:plc:ragtjsm2j2vknwkz3zp4oxrd'
+const uri = `at://${actorDid}/org.hypercerts.claim.activity/3kpn`
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 
-class FakeQueryExecutor implements FeedQueryExecutor {
-  readonly calls: { readonly text: string; readonly values: readonly unknown[] }[] = []
+class FakeQueryExecutor implements SqlFeedQueryExecutor {
+  readonly calls: Array<{
+    readonly text: string
+    readonly values: readonly unknown[]
+  }> = []
 
   constructor(private readonly rows: readonly Record<string, unknown>[]) {}
 
-  async query<T extends QueryResultRow>(
+  async query<Row extends QueryResultRow>(
     text: string,
     values: readonly unknown[] = [],
-  ): Promise<{ readonly rows: readonly T[] }> {
+  ): Promise<{ readonly rows: readonly Row[] }> {
     this.calls.push({ text, values })
-    return { rows: this.rows as unknown as readonly T[] }
+    return { rows: this.rows as unknown as readonly Row[] }
   }
 }
-
-const input = (includeSource: boolean) => ({
-  request: {
-    viewerDid: viewer,
-    trustedEvaluators: [],
-    limit: 2,
-    kinds: [],
-  },
-  trustedQualityLabelerDids: [],
-  includeSource,
-})
 
 const resultRow = (overrides: Record<string, unknown> = {}) => ({
   uri,
   cid,
   collection: 'org.hypercerts.claim.activity',
-  actor_did: actor,
+  actor_did: actorDid,
   kind: 'cert.create',
   sort_value: '2026-07-21T10:00:00.000000Z',
   selected_source_uri: uri,
   selected_source_cid: cid,
   selected_source_collection: 'org.hypercerts.claim.activity',
-  source_json: { marker: 'source' },
+  source_json: { title: 'Source' },
   ...overrides,
 })
 
-describe('FeedRepository page modes', () => {
-  it('appends includeSource=false and maps metadata without exposing source JSON', async () => {
+const params = {
+  $type: paramsType,
+  viewerDid,
+  limit: 2,
+} as const
+
+describe('Certified SQL feed definition', () => {
+  it('binds the current feed contract and maps metadata rows', async () => {
     const database = new FakeQueryExecutor([
       resultRow({
         selected_source_uri: null,
         selected_source_cid: null,
         selected_source_collection: null,
+        source_json: null,
       }),
     ])
-    const repository = new FeedRepository(database)
+    const feed = createCertifiedFeed(
+      { database, metrics: new Metrics() },
+      [trustedLabeler],
+    )
 
-    const result = await repository.getFeed(input(false))
-
-    expect(result).toEqual({
-      includeSource: false,
+    await expect(feed.loadPage(params, 'metadata')).resolves.toEqual({
       rows: [
         {
           uri,
           cid,
-          actorDid: actor,
           collection: 'org.hypercerts.claim.activity',
+          actorDid,
           kind: 'cert.create',
           sortValue: '2026-07-21T10:00:00.000000Z',
         },
       ],
     })
-    expect(result.rows[0]).not.toHaveProperty('sourceValue')
+    expect(feed.id).toBe(feedId)
+    expect(feed.paramsType).toBe(paramsType)
     expect(database.calls).toHaveLength(1)
-    expect(database.calls[0]?.values).toHaveLength(12)
-    expect(database.calls[0]?.values[9]).toBe(3)
-    expect(database.calls[0]?.values[11]).toBe(false)
+    expect(database.calls[0]?.values).toEqual([
+      viewerDid,
+      [],
+      false,
+      [],
+      false,
+      [trustedLabeler],
+      [],
+      null,
+      null,
+      3,
+      FEED_COLLECTIONS,
+      false,
+    ])
   })
 
-  it('joins source JSON only after pagination using exact URI and CID', async () => {
-    const sourceValue = { marker: 'exact-body' }
-    const database = new FakeQueryExecutor([resultRow({ source_json: sourceValue })])
-    const repository = new FeedRepository(database)
+  it('rejects structural and semantic params failures before querying', async () => {
+    const database = new FakeQueryExecutor([])
+    const feed = createCertifiedFeed(
+      { database, metrics: new Metrics() },
+      [],
+    )
 
-    await expect(repository.getFeed(input(true))).resolves.toEqual({
-      includeSource: true,
+    await expect(
+      feed.loadPage({ $type: paramsType }, 'metadata'),
+    ).rejects.toMatchObject({ code: 'InvalidRequest' })
+    await expect(
+      feed.loadPage(
+        {
+          $type: paramsType,
+          viewerDid: 'not-a-did',
+        },
+        'metadata',
+      ),
+    ).rejects.toMatchObject({ code: 'InvalidRequest' })
+    expect(database.calls).toEqual([])
+  })
+
+  it('maps exact selected sources in with-source mode', async () => {
+    const sourceValue = { title: 'Exact source' }
+    const database = new FakeQueryExecutor([
+      resultRow({ source_json: sourceValue }),
+    ])
+    const feed = createCertifiedFeed(
+      { database, metrics: new Metrics() },
+      [],
+    )
+
+    await expect(feed.loadPage(params, 'with-source')).resolves.toEqual({
       rows: [
         {
           uri,
           cid,
-          actorDid: actor,
           collection: 'org.hypercerts.claim.activity',
+          actorDid,
           kind: 'cert.create',
           sortValue: '2026-07-21T10:00:00.000000Z',
           sourceValue,
         },
       ],
     })
-
-    const call = database.calls[0]
-    expect(call).toBeDefined()
-    if (!call) throw new Error('expected one feed query call')
-    expect(call.values[11]).toBe(true)
-    expect(call.text.indexOf('selected_source.json AS source_json')).toBeGreaterThan(
-      call.text.indexOf('paged_events AS'),
+    expect(database.calls[0]?.values[11]).toBe(true)
+    const sql = database.calls[0]?.text ?? ''
+    expect(sql.indexOf('selected_source.json AS source_json')).toBeGreaterThan(
+      sql.indexOf('paged_events AS'),
     )
-    expect(call.text).toContain('ON $12::boolean')
-    expect(call.text).toContain('selected_source.uri = page.uri')
-    expect(call.text).toContain('selected_source.cid = page.cid')
-    const classifiedProjection = call.text.slice(
-      call.text.indexOf('classified_events AS'),
-      call.text.indexOf('filtered_events AS'),
+    expect(sql).toContain('ON $12::boolean')
+    expect(sql).toContain('selected_source.uri = page.uri')
+    expect(sql).toContain('selected_source.cid = page.cid')
+    const classifiedProjection = sql.slice(
+      sql.indexOf('classified_events AS'),
+      sql.indexOf('filtered_events AS'),
     )
     expect(classifiedProjection).toContain('source.collection')
     expect(classifiedProjection).not.toContain('source.json AS source_json')
-  })
-
-  it('returns an empty source-aware page when no events match', async () => {
-    const repository = new FeedRepository(new FakeQueryExecutor([]))
-
-    await expect(repository.getFeed(input(true))).resolves.toEqual({
-      includeSource: true,
-      rows: [],
-    })
   })
 
   it.each([
@@ -137,40 +165,52 @@ describe('FeedRepository page modes', () => {
     { actor_did: null },
     { kind: null },
     { sort_value: null },
-  ])('rejects partially-null page metadata: %o', async (overrides) => {
-    const repository = new FeedRepository(
-      new FakeQueryExecutor([resultRow(overrides)]),
+  ])('fails instead of silently dropping incomplete metadata: %o', async (overrides) => {
+    const feed = createCertifiedFeed(
+      {
+        database: new FakeQueryExecutor([resultRow(overrides)]),
+        metrics: new Metrics(),
+      },
+      [],
     )
 
-    await expect(repository.getFeed(input(false))).rejects.toThrow(
-      /metadata invariant failed.*incomplete URI, CID, collection, actor DID, kind, or sort metadata/i,
+    await expect(feed.loadPage(params, 'metadata')).rejects.toThrow(
+      'metadata invariant failed',
     )
   })
 
-  it('accepts a JSON null source when the exact joined metadata is present', async () => {
-    const repository = new FeedRepository(
-      new FakeQueryExecutor([resultRow({ source_json: null })]),
+  it('preserves a present JSON null source value', async () => {
+    const feed = createCertifiedFeed(
+      {
+        database: new FakeQueryExecutor([resultRow({ source_json: null })]),
+        metrics: new Metrics(),
+      },
+      [],
     )
 
-    const result = await repository.getFeed(input(true))
+    const page = await feed.loadPage(params, 'with-source')
 
-    expect(result.rows[0]).toHaveProperty('sourceValue', null)
+    expect(page.rows[0]).toHaveProperty('sourceValue', null)
   })
 
   it.each([
     { selected_source_uri: null },
     { selected_source_uri: `${uri}-other` },
     { selected_source_cid: null },
-    { selected_source_cid: `${cid}a` },
+    { selected_source_cid: 'bafyreimismatch' },
     { selected_source_collection: null },
     { selected_source_collection: 'org.hypercerts.collection' },
-  ])('rejects a missing or mismatched exact source join: %o', async (overrides) => {
-    const repository = new FeedRepository(
-      new FakeQueryExecutor([resultRow(overrides)]),
+  ])('rejects a missing or mismatched selected source: %o', async (overrides) => {
+    const feed = createCertifiedFeed(
+      {
+        database: new FakeQueryExecutor([resultRow(overrides)]),
+        metrics: new Metrics(),
+      },
+      [],
     )
 
-    await expect(repository.getFeed(input(true))).rejects.toThrow(
-      /source invariant failed.*post-pagination source join/i,
+    await expect(feed.loadPage(params, 'with-source')).rejects.toThrow(
+      'source invariant failed',
     )
   })
 })

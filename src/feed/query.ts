@@ -2,162 +2,161 @@ import { readFileSync } from 'node:fs'
 
 import type { QueryResultRow } from 'pg'
 
-import type { FeedCursor } from './cursor.js'
-import { FEED_COLLECTIONS } from './types.js'
+import { FeedError, FeedErrorCode } from './errors.js'
 import type {
-  FeedKind,
-  NormalizedFeedRequest,
-  OrganizationQuality,
+  InternalFeedRow,
+  InternalSourceFeedRow,
+  RegisteredFeed,
+} from './registry.js'
+import {
+  defineSqlFeed,
+  type FeedRowMapper,
+  type SqlFeedRuntime,
+} from './sql-feed.js'
+import {
+  CERTIFIED_FEED_ID,
+  CERTIFIED_FEED_PARAMS_TYPE,
+  FEED_COLLECTIONS,
+  FEED_KINDS,
+  type CertifiedFeedParams,
+  type FeedKind,
+  type OrganizationQuality,
 } from './types.js'
+import { normalizeFeedRequest } from './validation.js'
+import { timestampUriCursor } from './cursor.js'
+import { certifiedFeedParams as certifiedFeedParamsSchema } from '../lexicons/app/certified/feed/beta/defs.js'
 
-const FEED_QUERY = readFileSync(
+const CERTIFIED_FEED_QUERY = readFileSync(
   new URL('./feed-query.sql', import.meta.url),
   'utf8',
 )
+const FEED_KIND_SET = new Set<string>(FEED_KINDS)
 
-interface FeedQueryRow extends QueryResultRow {
-  uri: string | null
-  cid: string | null
-  collection: string | null
-  actor_did: string | null
-  kind: FeedKind | null
-  sort_value: string | null
-  selected_source_uri: string | null
-  selected_source_cid: string | null
-  selected_source_collection: string | null
-  source_json: unknown
-}
-
-/** Narrow structural query capability used by the feed repository. */
-export interface FeedQueryExecutor {
-  query<T extends QueryResultRow>(
-    text: string,
-    values?: readonly unknown[],
-  ): Promise<{ readonly rows: readonly T[] }>
-}
-
-/** Parameters consumed by the standalone SQL adapter. */
-export interface FeedQueryInput {
-  /** Validated and normalized public request. */
-  readonly request: NormalizedFeedRequest
-  /** Validated keyset cursor, if this is not the first page. */
-  readonly cursor?: FeedCursor
-  /** Trusted service-configured Orglabeler DIDs. */
-  readonly trustedQualityLabelerDids: readonly string[]
-  /** Whether the final page rows must include exact same-statement source values. */
-  readonly includeSource: boolean
-}
-
-/** One classified database row before the loader trims the limit+1 sentinel. */
-export interface FeedQueryMetadataRow {
-  readonly uri: string
-  readonly cid: string
-  readonly actorDid: string
-  readonly collection: string
-  readonly kind: FeedKind
-  readonly sortValue: string
-}
-
-/** One classified database row with its exact selected source value. */
-export interface FeedQuerySourceRow extends FeedQueryMetadataRow {
-  readonly sourceValue: unknown
-}
-
-/** Metadata-only result returned when source values were not requested. */
-export interface MetadataFeedQueryResult {
-  readonly includeSource: false
-  readonly rows: readonly FeedQueryMetadataRow[]
-}
-
-/** Source-aware result returned for hydrated page loading. */
-export interface SourceFeedQueryResult {
-  readonly includeSource: true
-  readonly rows: readonly FeedQuerySourceRow[]
-}
-
-/** One database result before the loader trims the limit+1 sentinel row. */
-export type FeedQueryResult = MetadataFeedQueryResult | SourceFeedQueryResult
-
-/** Seam used by the shared page loader to execute the database-owned feed pipeline. */
-export interface FeedQueryReader {
-  /** Resolves a feed request into limit+1 classified rows. */
-  getFeed(input: FeedQueryInput): Promise<FeedQueryResult>
+interface CertifiedFeedQueryRow extends QueryResultRow {
+  readonly uri: string | null
+  readonly cid: string | null
+  readonly collection: string | null
+  readonly actor_did: string | null
+  readonly kind: string | null
+  readonly sort_value: string | null
+  readonly selected_source_uri: string | null
+  readonly selected_source_cid: string | null
+  readonly selected_source_collection: string | null
+  readonly source_json: unknown
 }
 
 const metadataInvariantError = (): Error =>
   new Error(
-    'Feed query metadata invariant failed: a page row contained incomplete URI, CID, collection, actor DID, kind, or sort metadata; verify the feed SQL projection before serving feed requests.',
+    'Certified feed query metadata invariant failed: a selected row omitted URI, CID, collection, actor DID, kind, or sort value; verify the SQL projection before serving feed requests.',
   )
 
 const sourceInvariantError = (): Error =>
   new Error(
-    'Feed query source invariant failed: a selected page row did not include the exact URI, CID, and collection from the post-pagination source join; verify the feed SQL projection and bind order before serving hydrated pages.',
+    'Certified feed query source invariant failed: a selected source did not match the exact URI, CID, and collection of its feed row; verify the post-pagination source join before serving hydrated requests.',
   )
 
-/** Read-only adapter that owns the complete current-state feed query. */
-export class FeedRepository implements FeedQueryReader {
-  /** Creates the adapter over the service's bounded read-only pool. */
-  constructor(private readonly database: FeedQueryExecutor) {}
+const parseCertifiedFeedParams = (
+  input: { readonly $type: string },
+): CertifiedFeedParams => {
+  let parsed: ReturnType<typeof certifiedFeedParamsSchema.schema.$parse>
+  try {
+    parsed = certifiedFeedParamsSchema.schema.$parse(input)
+  } catch (cause) {
+    throw new FeedError(
+      FeedErrorCode.InvalidRequest,
+      `params does not match ${CERTIFIED_FEED_PARAMS_TYPE}; correct the feed parameters and retry.`,
+      400,
+      { cause },
+    )
+  }
 
-  /** Resolves scope, classifies records, folds pairs, and fetches limit+1 events in one statement. */
-  async getFeed(input: FeedQueryInput): Promise<FeedQueryResult> {
-    const { request, cursor, trustedQualityLabelerDids, includeSource } = input
-    const policy = request.organizationQuality
-    const result = await this.database.query<FeedQueryRow>(FEED_QUERY, [
-      request.viewerDid,
-      request.trustedEvaluators,
-      policy !== undefined,
-      (policy?.allowed ?? []) satisfies readonly OrganizationQuality[],
-      policy?.includeUnrated ?? false,
-      trustedQualityLabelerDids,
-      request.kinds,
-      cursor?.value ?? null,
-      cursor?.uri ?? null,
-      request.limit + 1,
-      FEED_COLLECTIONS,
-      includeSource,
-    ])
-
-    const metadataRows: FeedQueryMetadataRow[] = []
-    const sourceRows: FeedQuerySourceRow[] = []
-
-    for (const row of result.rows) {
-      if (
-        row.uri === null ||
-        row.cid === null ||
-        row.collection === null ||
-        row.actor_did === null ||
-        row.kind === null ||
-        row.sort_value === null
-      ) {
-        throw metadataInvariantError()
-      }
-
-      const metadata = {
-        uri: row.uri,
-        cid: row.cid,
-        actorDid: row.actor_did,
-        collection: row.collection,
-        kind: row.kind,
-        sortValue: row.sort_value,
-      }
-      if (!includeSource) {
-        metadataRows.push(metadata)
-        continue
-      }
-
-      if (
-        row.selected_source_uri !== row.uri ||
-        row.selected_source_cid !== row.cid ||
-        row.selected_source_collection !== row.collection
-      ) {
-        throw sourceInvariantError()
-      }
-      sourceRows.push({ ...metadata, sourceValue: row.source_json })
-    }
-
-    return includeSource
-      ? { includeSource: true, rows: sourceRows }
-      : { includeSource: false, rows: metadataRows }
+  return {
+    $type: CERTIFIED_FEED_PARAMS_TYPE,
+    viewerDid: parsed.viewerDid,
+    ...(parsed.trustedEvaluators === undefined
+      ? {}
+      : { trustedEvaluators: parsed.trustedEvaluators }),
+    ...(parsed.organizationQuality === undefined
+      ? {}
+      : {
+          organizationQuality: {
+            allowed: parsed.organizationQuality.allowed,
+            includeUnrated: parsed.organizationQuality.includeUnrated,
+          },
+        }),
+    ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
+    ...(parsed.cursor === undefined ? {} : { cursor: parsed.cursor }),
+    ...(parsed.kinds === undefined ? {} : { kinds: parsed.kinds }),
   }
 }
+
+const mapCertifiedFeedRow: FeedRowMapper<
+  CertifiedFeedQueryRow,
+  InternalFeedRow
+> = (row, mode): InternalFeedRow | InternalSourceFeedRow => {
+  if (
+    typeof row.uri !== 'string' ||
+    typeof row.cid !== 'string' ||
+    typeof row.collection !== 'string' ||
+    typeof row.actor_did !== 'string' ||
+    typeof row.kind !== 'string' ||
+    !FEED_KIND_SET.has(row.kind) ||
+    typeof row.sort_value !== 'string'
+  ) {
+    throw metadataInvariantError()
+  }
+
+  const metadata: InternalFeedRow = {
+    uri: row.uri,
+    cid: row.cid,
+    collection: row.collection,
+    actorDid: row.actor_did,
+    kind: row.kind as FeedKind,
+    sortValue: row.sort_value,
+  }
+  if (mode === 'metadata') return metadata
+
+  if (
+    row.selected_source_uri !== row.uri ||
+    row.selected_source_cid !== row.cid ||
+    row.selected_source_collection !== row.collection
+  ) {
+    throw sourceInvariantError()
+  }
+
+  return { ...metadata, sourceValue: row.source_json }
+}
+
+/** Builds the current Certified feed definition over one read-only SQL runtime. */
+export const createCertifiedFeed = (
+  runtime: SqlFeedRuntime,
+  trustedQualityLabelerDids: readonly string[],
+): RegisteredFeed =>
+  defineSqlFeed(runtime, {
+    id: CERTIFIED_FEED_ID,
+    params: {
+      type: CERTIFIED_FEED_PARAMS_TYPE,
+      parse: parseCertifiedFeedParams,
+      normalize: normalizeFeedRequest,
+    },
+    sql: CERTIFIED_FEED_QUERY,
+    bind: ({ params, cursor, mode, fetchLimit }) => {
+      const policy = params.organizationQuality
+      return [
+        params.viewerDid,
+        params.trustedEvaluators,
+        policy !== undefined,
+        (policy?.allowed ?? []) satisfies readonly OrganizationQuality[],
+        policy?.includeUnrated ?? false,
+        trustedQualityLabelerDids,
+        params.kinds,
+        cursor?.value ?? null,
+        cursor?.uri ?? null,
+        fetchLimit,
+        FEED_COLLECTIONS,
+        mode === 'with-source',
+      ]
+    },
+    cursor: timestampUriCursor,
+    mapRow: mapCertifiedFeedRow,
+  })

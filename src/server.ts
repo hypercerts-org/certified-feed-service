@@ -4,8 +4,8 @@ import pino from 'pino'
 import { createApp } from './app.js'
 import { loadConfig } from './config.js'
 import { Database } from './database.js'
-import { PostgresFeedPageLoader } from './feed/page-loader.js'
-import { FeedRepository } from './feed/query.js'
+import { createCertifiedFeed } from './feed/query.js'
+import { FeedRegistry } from './feed/registry.js'
 import { FeedService } from './feed/service.js'
 import { loadLocalEnvironment } from './environment.js'
 import { PostgresIdentityReader } from './hydration/identity.js'
@@ -17,15 +17,14 @@ const config = loadConfig()
 const logger = pino({ level: config.logLevel })
 const metrics = new Metrics()
 const database = new Database(config, logger)
-const repository = new FeedRepository(database)
-const pages = new PostgresFeedPageLoader(
-  repository,
+const certifiedFeed = createCertifiedFeed(
+  { database, metrics },
   config.trustedQualityLabelerDids,
-  metrics,
 )
-const feedService = new FeedService(pages)
+const feeds = new FeedRegistry([certifiedFeed])
+const feedService = new FeedService(feeds)
 const identities = new PostgresIdentityReader(database)
-const hydratedFeed = new HydratedFeedService(pages, identities)
+const hydratedFeed = new HydratedFeedService(feeds, identities)
 const app = createApp(
   database,
   { skeleton: feedService, hydrated: hydratedFeed },

@@ -1,7 +1,7 @@
 import type {
   FeedPageLoader,
   InternalSourceFeedRow,
-} from '../feed/page-loader.js'
+} from '../feed/registry.js'
 import type { GetFeedSkeletonInput } from '../feed/types.js'
 import type {
   ActorContext,

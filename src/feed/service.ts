@@ -1,20 +1,18 @@
-import type { FeedPageLoader } from './page-loader.js'
+import type { FeedPageLoader } from './registry.js'
 import type {
   GetFeedSkeletonInput,
   GetFeedSkeletonOutput,
 } from './types.js'
 
-/** Application seam consumed by the skeleton XRPC transport. */
+/** Application boundary consumed by the skeleton XRPC transport. */
 export interface FeedSkeletonReader {
-  /** Generates one current-state skeleton page from a public request body. */
   getFeedSkeleton(input: GetFeedSkeletonInput): Promise<GetFeedSkeletonOutput>
 }
 
-/** Projects the shared metadata page into the public skeleton response. */
+/** Projects one registry-selected metadata page into the public skeleton. */
 export class FeedService implements FeedSkeletonReader {
   constructor(private readonly pages: FeedPageLoader) {}
 
-  /** Generates one current-state skeleton page without hydrating record bodies or actor profiles. */
   async getFeedSkeleton(
     input: GetFeedSkeletonInput,
   ): Promise<GetFeedSkeletonOutput> {

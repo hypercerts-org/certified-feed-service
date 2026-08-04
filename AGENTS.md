@@ -20,8 +20,8 @@ Use **npm**, not pnpm. `package-lock.json` is authoritative. Node.js 22+ is supp
 Before changing feed behavior, read together:
 
 - `src/feed/feed-query.sql` — primary selection, classification, ordering, pagination, and same-statement source contract
-- `src/feed/query.ts` — fixed SQL bind order, row mapping, and source invariants
-- `src/feed/page-loader.ts` — shared request, cursor, scope, pagination, and metrics policy
+- `src/feed/query.ts` — registered Certified feed definition, fixed SQL bind order, row mapping, and source invariants
+- `src/feed/registry.ts` and `src/feed/sql-feed.ts` — feed dispatch plus shared parsing, cursor, execution, pagination, and metrics policy
 - `test/feed.integration.test.ts` — cross-table, source-mode, and pagination invariants
 - `docs/database-contract.md` — external Hyperindex schema contract
 
@@ -67,9 +67,9 @@ src/server.ts
   -> src/app.ts
   -> src/api/get-feed-skeleton.ts
   -> FeedService
-  -> FeedPageLoader.loadPage(metadata)
-  -> FeedRepository
-  -> src/feed/feed-query.sql, includeSource=false
+  -> FeedRegistry.loadPage(metadata)
+  -> registered Certified SQL feed
+  -> src/feed/feed-query.sql, source mode disabled
   -> Database
 ```
 
@@ -80,9 +80,9 @@ src/server.ts
   -> src/app.ts
   -> src/api/get-feed.ts
   -> HydratedFeedService
-  -> FeedPageLoader.loadPage(with-source)
-  -> FeedRepository
-  -> src/feed/feed-query.sql, includeSource=true
+  -> FeedRegistry.loadPage(with-source)
+  -> registered Certified SQL feed
+  -> src/feed/feed-query.sql, source mode enabled
   -> validateFeedRecord(), dropping invalid selected sources
   -> IdentityReader.getByDids()
   -> validateCertifiedProfile() / sanitizeActorRow()
@@ -91,12 +91,13 @@ src/server.ts
 
 Ownership:
 
-- `src/server.ts` is the composition root. It creates one repository, one shared page loader, separate endpoint services, and one identity adapter; it also owns listener settings, initial readiness, and graceful shutdown.
+- `src/server.ts` is the composition root. It creates the registered Certified feed, one shared registry, separate endpoint services, and one identity adapter; it also owns listener settings, initial readiness, and graceful shutdown.
 - `src/app.ts` is the fetch-compatible boundary. It owns fixed route metadata, POST enforcement, the 64 KiB body limit, malformed JSON, routed validation messages, and bounded request metrics.
 - `src/api/get-feed-skeleton.ts` and `src/api/get-feed.ts` register the procedures, run generated output validation inside the error boundary, and translate expected `FeedError` values.
-- `src/feed/service.ts` projects metadata rows into the public skeleton. It does not own cursor or pagination policy.
-- `src/feed/page-loader.ts` owns request normalization, cursor decoding, repository execution/timing, `limit + 1` trimming, result metrics, and next-cursor creation for both endpoints.
-- `src/feed/query.ts` owns SQL bind order, execution, metadata/source result mapping, and explicit query invariants.
+- `src/feed/service.ts` projects registry-selected metadata rows into the public skeleton. It does not own dispatch, cursor, or pagination policy.
+- `src/feed/registry.ts` owns `feedId` dispatch, feed/params compatibility checks, and the shared metadata/source page interface used by both endpoint services.
+- `src/feed/sql-feed.ts` owns feed-specific parameter parsing and normalization calls, feed-scoped cursor decoding, one query execution/timing, `limit + 1` trimming, result metrics, source-mode enforcement, and next-cursor creation.
+- `src/feed/query.ts` registers the current Certified feed and owns its generated parameter parsing, fixed SQL bind order, metadata/source row mapping, and explicit query invariants.
 - `src/feed/feed-query.sql` owns scope resolution, quality and endorsement rules, project pairing, classification, ordering, keyset pagination, and the conditional post-pagination source join.
 - `src/hydration/service.ts` directly coordinates source validation, omission of invalid selected sources, DID discovery, at most one identity batch, identity projection, total view construction, and output ordering. It must not call the public skeleton service.
 - `src/hydration/identity.ts` owns the combined actor, Certified-profile, and Bluesky-profile query and returns one context per requested DID.
@@ -111,8 +112,9 @@ Test at the narrowest owner:
 - app tests fake `FeedSkeletonReader` and `HydratedFeedReader`;
 - skeleton-service tests fake `FeedPageLoader`;
 - hydrated-service tests fake `FeedPageLoader` and `IdentityReader`;
-- page-loader tests fake `FeedQueryReader`;
-- repository unit tests fake the query executor and assert bind/source invariants;
+- registry tests fake registered feeds and assert dispatch invariants;
+- generic SQL-feed tests fake the query executor and assert parsing, cursor, pagination, mode, timing, and metrics policy;
+- Certified-feed query tests fake the query executor and assert bind/source invariants;
 - identity tests fake its query executor;
 - validation and views use pure fixture tests;
 - Lexicon tests inspect committed JSON and generated parsers;
@@ -134,6 +136,7 @@ A request, response, event kind, view, or public-error change normally requires 
 
 Preserve these unless the public contract is intentionally revised and documented:
 
+- Both procedures accept the same `{ feedId, params }` wrapper. The public params union remains open for future feeds, but runtime dispatch rejects an unregistered `feedId` with `UnsupportedFeed` and rejects a params discriminator that does not match the selected feed with `InvalidRequest` before querying.
 - The base scope always resolves from the viewer's current Certified follows. There is no caller-supplied author override.
 - Deduplicate request lists before enforcing semantic limits: 64 evaluators, 16 kinds, and 1–50 page items.
 - Evaluator endorsement subjects are unioned after base-author resolution. Remove the viewer and deduplicate candidates. Do not query actor status: Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, and actors absent from `actor` remain eligible.
@@ -143,8 +146,8 @@ Preserve these unless the public contract is intentionally revised and documente
 - Evaluator expansion and visible endorsement events use the same JSON account-subject, self-endorsement, exact definition URI/CID, badge type, allowed-issuer, and latest exact response rules. Do not use derived endorsement adjacency data.
 - Project/activity pairing happens before kind filtering and pagination. It requires the same actor, exact activity URI/CID, and an effective timestamp gap strictly below 60 seconds. Paired activities remain suppressed across pages.
 - Ordering is `COALESCE(record_created_at, indexed_at)` descending, URI descending. Keep `pg_input_is_valid` guards before casting untrusted `external_label.cts` or `external_label.exp` text.
-- The cursor payload is unpadded base64url JSON with exactly `{ version: 1, value, uri }`. It stores the last selected source row before hydration. Ordering, formatting, tie-break, and cursor payload are one contract; dropping invalid hydrated sources must not change cursor advancement.
-- Metadata and source-aware pages execute the repository once. Source JSON is joined only after `paged_events`; never carry it through candidate sorting.
+- The cursor payload is unpadded base64url JSON with exactly `{ version: 1, feedId, value: { value, uri } }`. It is scoped to the selected feed and stores the last selected source row before hydration. Ordering, formatting, tie-break, and cursor payload are one contract; dropping invalid hydrated sources must not change cursor advancement.
+- Metadata and source-aware pages execute the registered feed statement once. Source JSON is joined only after `paged_events`; never carry it through candidate sorting.
 - Feed selection and exact source retrieval share one PostgreSQL statement snapshot. A missing/mismatched final join is an internal invariant failure.
 - Skeleton pages execute one feed query and expose no source value. Hydrated pages with at least one validated source execute one feed/source statement plus one identity query. Empty or entirely invalid selected pages skip identity retrieval. Do not issue extra queries to refill dropped items; query count never grows with page size.
 - Identity retrieval is a later current-state read. One batch selects only Hyperindex actor DID and handle plus deterministic current Certified and Bluesky profile JSON; feed selection never reads actor status.

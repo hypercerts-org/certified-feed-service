@@ -6,8 +6,13 @@ import type {
   InternalFeedPage,
   InternalFeedRow,
   InternalSourceFeedRow,
-} from '../src/feed/page-loader.js'
-import type { GetFeedSkeletonInput } from '../src/feed/types.js'
+} from '../src/feed/registry.js'
+import {
+  CERTIFIED_FEED_ID,
+  CERTIFIED_FEED_PARAMS_TYPE,
+  type CertifiedFeedParams,
+  type GetFeedSkeletonInput,
+} from '../src/feed/types.js'
 import { HydratedFeedService } from '../src/hydration/service.js'
 import type {
   ActorContext,
@@ -30,6 +35,17 @@ const invalidUri = `at://${invalidAuthorDid}/org.hypercerts.collection/invalid`
 const endorsementUri = `at://${authorDid}/app.certified.badge.award/endorsement`
 const measurementUri = `at://${authorDid}/org.hypercerts.context.measurement/measurement`
 const targetUri = `at://${targetDid}/org.hypercerts.claim.activity/target`
+
+const feedRequest = (
+  overrides: Partial<CertifiedFeedParams> = {},
+): GetFeedSkeletonInput => ({
+  feedId: CERTIFIED_FEED_ID,
+  params: {
+    $type: CERTIFIED_FEED_PARAMS_TYPE,
+    viewerDid,
+    ...overrides,
+  },
+})
 
 const sourceRow = (
   overrides: Partial<InternalSourceFeedRow> = {},
@@ -163,7 +179,7 @@ describe('HydratedFeedService', () => {
     const pages = new FakePages(populatedPage())
     const identities = new FakeIdentities(allContexts())
     const service = new HydratedFeedService(pages, identities)
-    const input = { viewerDid, limit: 3 }
+    const input = feedRequest({ limit: 3 })
 
     const output = await service.getFeed(input)
 
@@ -241,7 +257,7 @@ describe('HydratedFeedService', () => {
     )
     const service = new HydratedFeedService(pages, identities)
 
-    const output = await service.getFeed({ viewerDid })
+    const output = await service.getFeed(feedRequest())
 
     expect(identities.calls).toEqual([[authorDid]])
     expect(output.items[0]).toMatchObject({
@@ -271,7 +287,7 @@ describe('HydratedFeedService', () => {
     const identities = new FakeIdentities(new Map())
     const service = new HydratedFeedService(pages, identities)
 
-    await expect(service.getFeed({ viewerDid })).resolves.toEqual({
+    await expect(service.getFeed(feedRequest())).resolves.toEqual({
       items: [],
       cursor,
     })
@@ -283,7 +299,7 @@ describe('HydratedFeedService', () => {
     const identities = new FakeIdentities(new Map())
     const service = new HydratedFeedService(pages, identities)
 
-    await expect(service.getFeed({ viewerDid })).resolves.toEqual({
+    await expect(service.getFeed(feedRequest())).resolves.toEqual({
       items: [],
       cursor,
     })
@@ -303,7 +319,7 @@ describe('HydratedFeedService', () => {
       new FakeIdentities(contexts),
     )
 
-    await expect(service.getFeed({ viewerDid })).rejects.toThrow(
+    await expect(service.getFeed(feedRequest())).rejects.toThrow(
       /hydrated feed identity invariant failed.*requested DID/i,
     )
   })
@@ -316,14 +332,14 @@ describe('HydratedFeedService', () => {
       new HydratedFeedService(
         new FakePages({ rows: [] }, pageFailure),
         new FakeIdentities(new Map()),
-      ).getFeed({ viewerDid }),
+      ).getFeed(feedRequest()),
     ).rejects.toBe(pageFailure)
 
     await expect(
       new HydratedFeedService(
         new FakePages({ rows: [sourceRow()] }),
         new FakeIdentities(new Map(), identityFailure),
-      ).getFeed({ viewerDid }),
+      ).getFeed(feedRequest()),
     ).rejects.toBe(identityFailure)
   })
 })

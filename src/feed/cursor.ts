@@ -1,28 +1,81 @@
 import { isDatetimeString, isValidAtUri } from '@atproto/syntax'
 
 import { FeedError, FeedErrorCode } from './errors.js'
+
 const CURSOR_VERSION = 1
 const MAX_CURSOR_LENGTH = 4096
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/
 
-/** Decoded keyset position carried between feed pages. */
+/** Feed-owned conversion between an opaque cursor position and one selected row. */
+export interface CursorCodec<Cursor, Row> {
+  decode(value: unknown): Cursor
+  encode(row: Row): unknown
+}
+
+/** Decoded timestamp-and-URI position used by the current Certified feed. */
 export interface FeedCursor {
-  /** Cursor contract version. */
-  readonly version: 1
-  /** Effective RFC3339 timestamp of the last returned item. */
   readonly value: string
-  /** AT-URI tie-breaker of the last returned item. */
   readonly uri: string
 }
 
-/** Encodes one deterministic feed position as unpadded base64url JSON. */
-export const encodeCursor = (value: string, uri: string): string =>
-  Buffer.from(JSON.stringify({ version: CURSOR_VERSION, value, uri }), 'utf8').toString(
-    'base64url',
+const invalidPosition = (message: string): FeedError =>
+  new FeedError(
+    FeedErrorCode.InvalidCursor,
+    `${message}; use the cursor exactly as returned by the previous page.`,
   )
 
-/** Decodes and validates an opaque cursor for descending feed-timestamp pagination. */
-export const decodeCursor = (cursor: string | undefined): FeedCursor | undefined => {
+/** Cursor position for feeds ordered by descending timestamp and URI. */
+export const timestampUriCursor: CursorCodec<
+  FeedCursor,
+  { readonly uri: string; readonly sortValue: string }
+> = {
+  decode(value) {
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      Array.isArray(value) ||
+      Object.keys(value).length !== 2
+    ) {
+      throw invalidPosition('cursor position has the wrong shape')
+    }
+
+    const position = value as Record<string, unknown>
+    if (
+      typeof position.value !== 'string' ||
+      !isDatetimeString(position.value)
+    ) {
+      throw invalidPosition('cursor value must be a valid RFC3339 timestamp')
+    }
+    if (typeof position.uri !== 'string' || !isValidAtUri(position.uri)) {
+      throw invalidPosition('cursor uri must be a valid AT-URI')
+    }
+
+    return { value: position.value, uri: position.uri }
+  },
+  encode: (row) => ({ value: row.sortValue, uri: row.uri }),
+}
+
+/** Encodes one feed-scoped position as unpadded base64url JSON. */
+export const encodeCursor = <Cursor, Row>(
+  feedId: string,
+  row: Row,
+  codec: CursorCodec<Cursor, Row>,
+): string =>
+  Buffer.from(
+    JSON.stringify({
+      version: CURSOR_VERSION,
+      feedId,
+      value: codec.encode(row),
+    }),
+    'utf8',
+  ).toString('base64url')
+
+/** Decodes a cursor and rejects positions issued for another feed. */
+export const decodeCursor = <Cursor, Row>(
+  feedId: string,
+  cursor: string | undefined,
+  codec: CursorCodec<Cursor, Row>,
+): Cursor | undefined => {
   if (cursor === undefined || cursor === '') return undefined
   if (cursor.length > MAX_CURSOR_LENGTH) {
     throw new FeedError(
@@ -55,10 +108,7 @@ export const decodeCursor = (cursor: string | undefined): FeedCursor | undefined
     Array.isArray(value) ||
     Object.keys(value).length !== 3
   ) {
-    throw new FeedError(
-      FeedErrorCode.InvalidCursor,
-      'cursor payload has the wrong shape; use the cursor exactly as returned by the previous page.',
-    )
+    throw invalidPosition('cursor payload has the wrong shape')
   }
 
   const payload = value as Record<string, unknown>
@@ -68,22 +118,12 @@ export const decodeCursor = (cursor: string | undefined): FeedCursor | undefined
       `cursor version must be ${CURSOR_VERSION}; discard this unsupported cursor and request the first page again.`,
     )
   }
-  if (typeof payload.value !== 'string' || !isDatetimeString(payload.value)) {
+  if (payload.feedId !== feedId) {
     throw new FeedError(
       FeedErrorCode.InvalidCursor,
-      'cursor value must be a valid RFC3339 timestamp; use the cursor exactly as returned by the previous page.',
-    )
-  }
-  if (typeof payload.uri !== 'string' || !isValidAtUri(payload.uri)) {
-    throw new FeedError(
-      FeedErrorCode.InvalidCursor,
-      'cursor uri must be a valid AT-URI; use the cursor exactly as returned by the previous page.',
+      `cursor belongs to feedId ${JSON.stringify(payload.feedId)}, not ${JSON.stringify(feedId)}; discard it and request the first page for this feed.`,
     )
   }
 
-  return {
-    version: CURSOR_VERSION,
-    value: payload.value,
-    uri: payload.uri,
-  }
+  return codec.decode(payload.value)
 }

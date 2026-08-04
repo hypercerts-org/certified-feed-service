@@ -4,7 +4,10 @@ import { jsonToLex } from '@atproto/lex'
 import { describe, expect, it } from 'vitest'
 
 import { FeedErrorCode } from '../src/feed/errors.js'
-import { $output as hydratedOutput } from '../src/lexicons/app/certified/feed/beta/getFeed.js'
+import {
+  $input as hydratedInput,
+  $output as hydratedOutput,
+} from '../src/lexicons/app/certified/feed/beta/getFeed.js'
 import {
   $input as skeletonInput,
   $output as skeletonOutput,
@@ -32,6 +35,13 @@ const targetUri = `at://${viewerDid}/org.hypercerts.claim.activity/target`
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 const blobCid = 'bafkreiehxpuhtr5f6v4eu4byjo2j7kkrhjvd7psmfu4imnpdzb3bdqb7vy'
 const createdAt = '2026-07-21T10:00:00.000Z'
+const feedId = 'app.certified.feed.beta.defs#certifiedFeed'
+const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
+
+const feedRequest = {
+  feedId,
+  params: { $type: paramsType, viewerDid },
+}
 
 const uriImage = {
   $type: 'org.hypercerts.defs#uri',
@@ -135,24 +145,48 @@ const feedItem = (
 })
 
 describe('feed Lexicon contract', () => {
-  it('keeps shared input fields and UpperCamelCase public errors identical', () => {
+  it('keeps registered feed inputs and UpperCamelCase public errors identical', () => {
     expect(hydratedMain.input).toEqual(skeletonMain.input)
-    expect(hydratedMain.input.schema.properties).not.toHaveProperty('authors')
-    expect(
-      hydratedMain.input.schema.properties.organizationQuality.ref,
-    ).toBe('app.certified.feed.beta.defs#organizationQualityPolicy')
+    expect(hydratedMain.input.schema.required).toEqual(['feedId', 'params'])
+    expect(hydratedMain.input.schema.properties.feedId).toMatchObject({
+      type: 'string',
+      knownValues: [feedId],
+    })
+    expect(hydratedMain.input.schema.properties.params).toMatchObject({
+      type: 'union',
+      closed: false,
+      refs: [paramsType],
+    })
+    expect(defs.certifiedFeedParams.properties).not.toHaveProperty('authors')
+    expect(defs.certifiedFeedParams.properties.organizationQuality.ref).toBe(
+      'app.certified.feed.beta.defs#organizationQualityPolicy',
+    )
     expect(hydratedMain.errors).toEqual(skeletonMain.errors)
     const errorNames = hydratedMain.errors.map(
       (error: { name: string }) => error.name,
     )
     expect(errorNames).toEqual([
       'InvalidRequest',
+      'UnsupportedFeed',
       'TrustedEvaluatorsTooLarge',
       'InvalidKind',
       'InvalidCursor',
       'InternalError',
     ])
     expect(errorNames).toEqual(Object.values(FeedErrorCode))
+
+    for (const parser of [skeletonInput, hydratedInput]) {
+      expect(() => parser.schema.$parse(feedRequest)).not.toThrow()
+      expect(() =>
+        parser.schema.$parse({
+          feedId: 'app.example.feed.defs#futureFeed',
+          params: {
+            $type: 'app.example.feed.defs#futureParams',
+            future: true,
+          },
+        }),
+      ).not.toThrow()
+    }
   })
 
   it('keeps the original exact-reference skeleton wire shape', () => {
@@ -183,10 +217,14 @@ describe('feed Lexicon contract', () => {
 
     expect(() =>
       skeletonInput.schema.$parse({
-        viewerDid,
-        organizationQuality: {
-          allowed: ['high-quality'],
-          includeUnrated: false,
+        feedId,
+        params: {
+          $type: paramsType,
+          viewerDid,
+          organizationQuality: {
+            allowed: ['high-quality'],
+            includeUnrated: false,
+          },
         },
       }),
     ).not.toThrow()

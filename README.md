@@ -8,7 +8,7 @@ Hyperindex is the only supported owner of the database. The service provides a s
 
 ## Endpoints
 
-Both endpoints are unauthenticated POST procedures. They use the same request fields, limits, cursor contract, and stable public errors. The request's `viewerDid` chooses the viewer scope. The service does not check it against an authenticated caller:
+Both endpoints are unauthenticated POST procedures. They use the same `{ feedId, params }` request wrapper, limits, feed-scoped cursor contract, and stable public errors. The registered feed's `params.viewerDid` chooses the viewer scope. The service does not check it against an authenticated caller:
 
 ```text
 POST /xrpc/app.certified.feed.beta.getFeedSkeleton
@@ -24,17 +24,21 @@ These are app-specific XRPC procedures. They are not Bluesky's `app.bsky.feed.ge
 curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeed \
   -H 'content-type: application/json' \
   --data '{
-    "viewerDid": "did:plc:ar7c4by46qjdydhdevvrndac",
-    "trustedEvaluators": ["did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
-    "organizationQuality": {
-      "allowed": ["high-quality", "standard"],
-      "includeUnrated": false
-    },
-    "limit": 20
+    "feedId": "app.certified.feed.beta.defs#certifiedFeed",
+    "params": {
+      "$type": "app.certified.feed.beta.defs#certifiedFeedParams",
+      "viewerDid": "did:plc:ar7c4by46qjdydhdevvrndac",
+      "trustedEvaluators": ["did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
+      "organizationQuality": {
+        "allowed": ["high-quality", "standard"],
+        "includeUnrated": false
+      },
+      "limit": 20
+    }
   }'
 ```
 
-Use the same body with `getFeedSkeleton` when another data system needs only exact source references.
+Use the same body with `getFeedSkeleton` when another data system needs only exact source references. The public params union is open for future feed algorithms. This service currently registers only `app.certified.feed.beta.defs#certifiedFeed`; an unknown `feedId` returns `UnsupportedFeed`, while a params `$type` that does not match the selected feed returns `InvalidRequest`.
 
 ### Skeleton response
 
@@ -52,7 +56,7 @@ Use the same body with `getFeedSkeleton` when another data system needs only exa
       "feedTimestamp": "2026-07-21T10:00:00.000000Z"
     }
   ],
-  "cursor": "eyJ2ZXJzaW9uIjoxLCJ2YWx1ZSI6IjIwMjYtMDctMjFUMTA6MDA6MDAuMDAwMDAwWiIsInVyaSI6ImF0Oi8vZGlkOnBsYzpld3ZpN254enlvdW42emh4cmhzNjRvaXovb3JnLmh5cGVyY2VydHMuY2xhaW0uYWN0aXZpdHkvM2twbiJ9"
+  "cursor": "eyJ2ZXJzaW9uIjoxLCJmZWVkSWQiOiJhcHAuY2VydGlmaWVkLmZlZWQuYmV0YS5kZWZzI2NlcnRpZmllZEZlZWQiLCJ2YWx1ZSI6eyJ2YWx1ZSI6IjIwMjYtMDctMjFUMTA6MDA6MDAuMDAwMDAwWiIsInVyaSI6ImF0Oi8vZGlkOnBsYzpld3ZpN254enlvdW42emh4cmhzNjRvaXovb3JnLmh5cGVyY2VydHMuY2xhaW0uYWN0aXZpdHkvM2twbiJ9fQ"
 }
 ```
 
@@ -118,20 +122,20 @@ sequenceDiagram
     participant HTTP as HTTP App
     participant XRPC as XRPC Handler
     participant Service as FeedService / HydratedFeedService
-    participant Loader as Feed Page Loader
-    participant Repo as Feed Repository
+    participant Registry as Feed Registry
+    participant Feed as Registered SQL Feed
     participant Identity as Identity Reader
     participant DB as Hyperindex PostgreSQL
 
     Client->>HTTP: POST feed procedure
     HTTP->>XRPC: Bounded, validated JSON
     XRPC->>Service: Endpoint input
-    Service->>Loader: Load metadata or source-aware page
-    Loader->>Repo: One normalized feed query
-    Repo->>DB: Hyperindex selection statement
-    DB-->>Repo: Scope and limit+1 rows
-    Repo-->>Loader: Metadata or exact selected sources
-    Loader-->>Service: Selected page and cursor
+    Service->>Registry: Load metadata or source-aware page
+    Registry->>Feed: Dispatch feedId and typed params
+    Feed->>DB: One normalized Hyperindex selection statement
+    DB-->>Feed: Scope and limit+1 metadata or exact sources
+    Feed-->>Registry: Selected page and feed-scoped cursor
+    Registry-->>Service: Selected page and cursor
     alt Hydrated endpoint
         Service->>Service: Validate sources and omit invalid rows
         Service->>Identity: Requested actor DIDs when needed
@@ -148,7 +152,7 @@ sequenceDiagram
 
 ## Request behavior
 
-- Malformed JSON or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`. It never becomes an internal server error.
+- Malformed JSON, an invalid nested `viewerDid`, or params that do not match the selected registered feed returns HTTP 400 with `InvalidRequest`. An unregistered `feedId` returns `UnsupportedFeed`. These never become internal server errors.
 - The base scope always comes from the viewer's current `app.certified.graph.follow` records. The service ignores malformed follow subjects.
 - `trustedEvaluators` adds the subjects of every current, active endorsement award from each evaluator.
 - An endorsement definition with no `allowedIssuers` allows any issuer. When it is present, only its listed issuer DIDs qualify. An empty or malformed value allows no issuers.
@@ -187,8 +191,8 @@ Items appear newest first by `feedTimestamp`. This timestamp uses the record's v
 **Pages**
 
 - The service checks one extra item to see whether another page exists.
-- The cursor marks the last item selected.
-- Both endpoints use the same ordering and cursor rules.
+- The cursor marks the last item selected and is valid only for the `feedId` that issued it.
+- Both endpoints use the same ordering and feed-scoped cursor rules.
 - Invalid items are removed, not replaced.
 
 **Database work**
@@ -272,7 +276,7 @@ npx --no-install lex install --ci --lexicons ./lexicons --manifest ./lexicons.js
 
 Run `lex install --update` only when you mean to update those pinned dependencies.
 
-The main feed statement is `src/feed/feed-query.sql`. During development, the watcher watches it along with the TypeScript source. The build copies it next to `dist/feed/query.js` before checking that the production adapters load.
+The main feed statement is `src/feed/feed-query.sql`. `src/feed/query.ts` registers its Certified feed definition, while `src/feed/registry.ts` and `src/feed/sql-feed.ts` own dispatch and shared SQL-feed execution policy. During development, the watcher watches the SQL along with the TypeScript source. The build copies it next to `dist/feed/query.js` before checking that the production adapters load.
 
 ### PostgreSQL integration tests
 
@@ -323,6 +327,7 @@ Stable public feed errors:
 
 ```text
 InvalidRequest
+UnsupportedFeed
 TrustedEvaluatorsTooLarge
 InvalidKind
 InvalidCursor

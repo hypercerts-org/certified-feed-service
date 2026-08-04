@@ -43,20 +43,52 @@ export interface OrganizationQualityPolicy {
   readonly includeUnrated: boolean
 }
 
-/** Raw request body accepted by app.certified.feed.beta.getFeedSkeleton. */
-export interface GetFeedSkeletonInput {
+/** Identifier of the Certified viewer-scope feed algorithm. */
+export const CERTIFIED_FEED_ID =
+  'app.certified.feed.beta.defs#certifiedFeed' as const
+
+/** Open-union discriminator for the Certified feed's parameters. */
+export const CERTIFIED_FEED_PARAMS_TYPE =
+  'app.certified.feed.beta.defs#certifiedFeedParams' as const
+
+/** Raw organization-quality policy accepted before semantic value checks. */
+export interface OrganizationQualityPolicyInput {
+  readonly allowed: readonly string[]
+  readonly includeUnrated: boolean
+}
+
+/** Parameters accepted by the Certified viewer-scope feed algorithm. */
+export interface CertifiedFeedParams {
+  readonly $type: typeof CERTIFIED_FEED_PARAMS_TYPE
   /** Viewer whose current Certified outbound follows supply the base scope. */
   readonly viewerDid: string
   /** Evaluators whose active endorsement subjects are added to the base scope. */
   readonly trustedEvaluators?: readonly string[]
   /** Optional organization-quality membership policy. */
-  readonly organizationQuality?: OrganizationQualityPolicy
+  readonly organizationQuality?: OrganizationQualityPolicyInput
   /** Requested page size, defaulting to 20 and capped at 50. */
   readonly limit?: number
   /** Opaque cursor returned by an earlier descending feed-timestamp page. */
   readonly cursor?: string
   /** Final event-kind filter; omitted or empty means every supported kind. */
   readonly kinds?: readonly string[]
+}
+
+/** Discriminator retained when the public open union receives an unknown variant. */
+export interface UnknownFeedParams {
+  /** Lexicon type that selects the parameter validator for this feed. */
+  readonly $type: string
+}
+
+/** Parameters for any feed algorithm accepted by the public open union. */
+export type FeedParams = CertifiedFeedParams | UnknownFeedParams
+
+/** Raw request body shared by the skeleton and hydrated feed procedures. */
+export interface GetFeedSkeletonInput {
+  /** Identifier used to select the feed algorithm. */
+  readonly feedId: string
+  /** Open parameters whose discriminator selects the feed-specific validator. */
+  readonly params: FeedParams
 }
 
 /** Exact indexed record version that a downstream data plane should hydrate. */

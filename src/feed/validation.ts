@@ -4,8 +4,8 @@ import { FeedError, FeedErrorCode } from './errors.js'
 import {
   FEED_KINDS,
   ORGANIZATION_QUALITIES,
+  type CertifiedFeedParams,
   type FeedKind,
-  type GetFeedSkeletonInput,
   type NormalizedFeedRequest,
   type OrganizationQuality,
 } from './types.js'
@@ -31,9 +31,9 @@ const validateEvaluatorDids = (values: readonly string[]): void => {
   }
 }
 
-/** Applies semantic limits and normalizes one public feed request. */
+/** Applies semantic limits and normalizes Certified feed parameters. */
 export const normalizeFeedRequest = (
-  input: GetFeedSkeletonInput,
+  input: CertifiedFeedParams,
 ): NormalizedFeedRequest => {
   if (!isValidDid(input.viewerDid)) {
     throw new FeedError(

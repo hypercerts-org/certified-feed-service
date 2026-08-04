@@ -59,7 +59,7 @@ Missing source-event rows produce a smaller feed. Missing identity rows do not r
 
 ## Query ownership
 
-`src/feed/feed-query.sql` owns one parameterized CTE statement, while `src/feed/query.ts` owns parameter binding, execution, and result mapping. The statement has these stages:
+`src/feed/feed-query.sql` owns one parameterized CTE statement. `src/feed/query.ts` registers the Certified feed's parameter parser, bind order, cursor codec, and row mapping through `src/feed/sql-feed.ts`; `src/feed/registry.ts` dispatches the public `feedId` and typed params before execution. The statement has these stages:
 
 1. Resolve the viewer's current Certified outbound follows.
 2. Resolve current evaluator endorsement subjects from award JSON.
@@ -124,11 +124,11 @@ Hyperindex materializes a valid top-level `createdAt` into `record_created_at` a
 
 The same effective timestamp is used for feed ordering, cursor values, project/activity pairing, and latest endorsement-response ordering. Response ordering uses the effective timestamp first, then `indexed_at`, then URI descending.
 
-Cursor version 1 contains exactly `{ version: 1, value, uri }`. Its descending keyset predicate is:
+Cursor version 1 is unpadded base64url JSON containing exactly `{ version: 1, feedId, value: { value, uri } }`. The registry-selected feed must match `feedId` before the Certified feed decodes the nested position. Its descending keyset predicate is:
 
 ```sql
-effective_at < cursor.value
-OR (effective_at = cursor.value AND uri < cursor.uri)
+effective_at < position.value
+OR (effective_at = position.value AND uri < position.uri)
 ```
 
 Cursor traversal is deterministic for a query but does not provide snapshot isolation while Hyperindex state changes.
