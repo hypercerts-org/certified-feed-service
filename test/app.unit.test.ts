@@ -8,11 +8,18 @@ import type { FeedSkeletonReader } from '../src/feed/service.js'
 import type { GetFeedSkeletonInput } from '../src/feed/types.js'
 import { Metrics } from '../src/metrics.js'
 
+const feedId = 'app.certified.feed.beta.defs#certifiedFeed'
+const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
 const viewer = 'did:plc:ar7c4by46qjdydhdevvrndac'
 const actor = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 const uri = `at://${actor}/org.hypercerts.claim.activity/3kpn`
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 const logger = pino({ enabled: false })
+
+const feedRequest = (viewerDid = viewer): GetFeedSkeletonInput => ({
+  feedId,
+  params: { $type: paramsType, viewerDid },
+})
 
 const compatibleDatabase: DatabaseCompatibilityChecker = {
   checkCompatibility: vi.fn(async () => ({ compatible: true })),
@@ -45,13 +52,16 @@ describe('HTTP application', () => {
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ viewerDid: viewer }),
+          body: JSON.stringify(feedRequest()),
         },
       ),
     )
 
     expect(response.status).toBe(200)
-    expect(received).toMatchObject({ viewerDid: viewer })
+    expect(received).toMatchObject({
+      feedId,
+      params: { $type: paramsType, viewerDid: viewer },
+    })
     await expect(response.json()).resolves.toMatchObject({
       items: [{ id: uri, subject: { cid } }],
     })
@@ -105,7 +115,7 @@ describe('HTTP application', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'InvalidRequest',
       message:
-        'Request body exceeds the 65536-byte limit; remove unnecessary evaluators or other fields before retrying.',
+        'Request body exceeds the 65536-byte limit; remove unnecessary feed parameters or other fields before retrying.',
     })
   })
 
@@ -140,7 +150,7 @@ describe('HTTP application', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'InvalidRequest',
       message:
-        'Request body exceeds the 65536-byte limit; remove unnecessary evaluators or other fields before retrying.',
+        'Request body exceeds the 65536-byte limit; remove unnecessary feed parameters or other fields before retrying.',
     })
   })
 
@@ -184,7 +194,7 @@ describe('HTTP application', () => {
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ viewerDid: viewer }),
+          body: JSON.stringify(feedRequest()),
         },
       ),
     )
@@ -229,7 +239,7 @@ describe('HTTP application', () => {
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ viewerDid: 'alice.test' }),
+          body: JSON.stringify(feedRequest('alice.test')),
         },
       ),
     )
@@ -261,7 +271,7 @@ describe('HTTP application', () => {
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ viewerDid: viewer }),
+          body: JSON.stringify(feedRequest()),
         },
       ),
     )

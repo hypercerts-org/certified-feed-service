@@ -11,21 +11,27 @@ POST /xrpc/app.certified.feed.beta.getFeedSkeleton
 Content-Type: application/json
 ```
 
-This is an unauthenticated, app-specific XRPC procedure, not the Bluesky `app.bsky.feed.getFeedSkeleton` query. The request's `viewerDid` selects the viewer scope and is not verified against an authenticated caller. `certified.app` or the Hypercerts data plane calls it directly, then hydrates each returned URI and CID.
+This is an unauthenticated, app-specific XRPC procedure, not the Bluesky `app.bsky.feed.getFeedSkeleton` query. `feedId` selects a registered algorithm, while the open-union `params` object selects its parameter contract through `$type`. The current algorithm's `viewerDid` selects the viewer scope and is not verified against an authenticated caller. `certified.app` or the Hypercerts data plane calls the procedure directly, then hydrates each returned URI and CID.
 
 ```bash
 curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeedSkeleton \
   -H 'content-type: application/json' \
   --data '{
-    "viewerDid": "did:plc:ar7c4by46qjdydhdevvrndac",
-    "trustedEvaluators": ["did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
-    "organizationQuality": {
-      "allowed": ["high-quality", "standard"],
-      "includeUnrated": false
-    },
-    "limit": 20
+    "feedId": "app.certified.feed.beta.defs#certifiedFeed",
+    "params": {
+      "$type": "app.certified.feed.beta.defs#certifiedFeedParams",
+      "viewerDid": "did:plc:ar7c4by46qjdydhdevvrndac",
+      "trustedEvaluators": ["did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
+      "organizationQuality": {
+        "allowed": ["high-quality", "standard"],
+        "includeUnrated": false
+      },
+      "limit": 20
+    }
   }'
 ```
+
+The current registration accepts only the `app.certified.feed.beta.defs#certifiedFeed` feed identifier paired with `app.certified.feed.beta.defs#certifiedFeedParams`. After structural Lexicon validation, an unknown feed identifier returns `UnsupportedFeed`, while a known feed paired with the wrong params `$type` returns `InvalidRequest`. The union remains open so future feed definitions can be added without introducing another procedure.
 
 Example response:
 
@@ -43,11 +49,11 @@ Example response:
       "feedTimestamp": "2026-07-21T10:00:00.000000Z"
     }
   ],
-  "cursor": "eyJ2ZXJzaW9uIjoxLCJ2YWx1ZSI6IjIwMjYtMDctMjFUMTA6MDA6MDAuMDAwMDAwWiIsInVyaSI6ImF0Oi8vZGlkOnBsYzpld3ZpN254enlvdW42emh4cmhzNjRvaXovb3JnLmh5cGVyY2VydHMuY2xhaW0uYWN0aXZpdHkvM2twbiJ9"
+  "cursor": "eyJ2ZXJzaW9uIjoxLCJmZWVkSWQiOiJhcHAuY2VydGlmaWVkLmZlZWQuYmV0YS5kZWZzI2NlcnRpZmllZEZlZWQiLCJ2YWx1ZSI6eyJ2YWx1ZSI6IjIwMjYtMDctMjFUMTA6MDA6MDAuMDAwMDAwWiIsInVyaSI6ImF0Oi8vZGlkOnBsYzpld3ZpN254enlvdW42emh4cmhzNjRvaXovb3JnLmh5cGVyY2VydHMuY2xhaW0uYWN0aXZpdHkvM2twbiJ9fQ"
 }
 ```
 
-The cursor is opaque to callers and is valid only for descending feed-timestamp pagination.
+The cursor is opaque to callers, scoped to the selected `feedId`, and interpreted by that feed's registered cursor implementation.
 
 ## Request flow
 
@@ -57,18 +63,20 @@ sequenceDiagram
     participant HTTP as HTTP App
     participant XRPC as XRPC Handler
     participant Service as Feed Service
-    participant Repo as Feed Repository
+    participant Registry as Feed Registry
+    participant Feed as Registered SQL Feed
     participant DB as Hyperindex PostgreSQL
 
     Client->>HTTP: POST getFeedSkeleton
     HTTP->>XRPC: Validated request
     XRPC->>Service: getFeedSkeleton(input)
-    Service->>Service: Normalize request and decode cursor
-    Service->>Repo: getFeed(request)
-    Repo->>DB: Execute parameterized feed query
-    DB-->>Repo: Classified feed rows
-    Repo-->>Service: Mapped query result
-    Service->>Service: Paginate and create cursor
+    Service->>Registry: loadPage(input, metadata)
+    Registry->>Feed: Match feedId and params type
+    Feed->>Feed: Parse params and decode feed-scoped cursor
+    Feed->>DB: Execute parameterized feed query
+    DB-->>Feed: Selected rows
+    Feed->>Feed: Map, trim, and create cursor
+    Feed-->>Service: Metadata page
     Service-->>XRPC: Feed skeleton
     XRPC-->>HTTP: XRPC response
     HTTP-->>Client: Items and optional cursor
@@ -76,7 +84,7 @@ sequenceDiagram
 
 ## Request behavior
 
-- Malformed JSON or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`; it never becomes an internal server error.
+- Malformed JSON, a feed/params mismatch, or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`. A structurally valid request with an unregistered `feedId` returns `UnsupportedFeed`. Dispatch failures that reach the service do not query PostgreSQL.
 - The base scope always comes from the viewer's current `app.certified.graph.follow` records; malformed follow subjects are ignored.
 - `trustedEvaluators` adds subjects of each evaluator's current active endorsement awards.
 - Endorsement definitions without `allowedIssuers` permit any issuer. When present, only listed issuer DIDs qualify; an empty list permits none, and malformed values are ignored safely.
@@ -169,9 +177,9 @@ npm run test:unit
 npm run build
 ```
 
-Generated Lexicon TypeScript lives under `src/lexicons/` and is intentionally ignored. The canonical `com.atproto.repo.strongRef` schema is vendored under `lexicons/com/atproto/repo/strongRef.json`. `codegen`, `build`, `check`, and test scripts regenerate ignored output from the committed JSON Lexicons; run `npm run codegen` after changing them.
+Generated Lexicon TypeScript lives under `src/lexicons/` and is intentionally ignored. The canonical `com.atproto.repo.strongRef` schema is vendored under `lexicons/com/atproto/repo/strongRef.json`. `codegen`, `build`, `check`, and test scripts regenerate ignored output from the committed JSON Lexicons; run `npm run codegen` after changing them. `@atproto/lex@0.3.0` emits an explicit `CertifiedFeedParams` schema generic that conflicts with this repository's exact optional-property checks, so codegen removes that one generated generic through `scripts/fix-generated-feed-defs.mjs` without changing the runtime validator or public generated type.
 
-The canonical feed statement lives in `src/feed/feed-query.sql`. `npm run dev` watches it alongside the TypeScript sources, and the build copies it beside `dist/feed/query.js` before smoke-testing that the production adapter loads.
+The canonical Certified feed statement lives in `src/feed/feed-query.sql`. Its plain definition in `src/feed/query.ts` supplies parameter parsing, normalization, binds, cursor behavior, and row mapping to `defineSqlFeed()`. `src/feed/registry.ts` selects that finished definition by `feedId`; adding another feed requires an explicit registration rather than filesystem discovery. `npm run dev` watches the current SQL alongside the TypeScript sources, and the build copies it beside `dist/feed/query.js` before smoke-testing that the production adapter loads.
 
 ### Postgres integration tests
 
@@ -222,6 +230,7 @@ Stable public feed errors:
 
 ```text
 InvalidRequest
+UnsupportedFeed
 TrustedEvaluatorsTooLarge
 InvalidKind
 InvalidCursor

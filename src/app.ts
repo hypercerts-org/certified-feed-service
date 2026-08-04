@@ -24,7 +24,7 @@ const requestTooLargeResponse = (): Response =>
   jsonResponse(
     {
       error: FeedErrorCode.InvalidRequest,
-      message: `Request body exceeds the ${MAX_REQUEST_BODY_BYTES}-byte limit; remove unnecessary evaluators or other fields before retrying.`,
+      message: `Request body exceeds the ${MAX_REQUEST_BODY_BYTES}-byte limit; remove unnecessary feed parameters or other fields before retrying.`,
     },
     413,
   )

@@ -4,7 +4,8 @@ import pino from 'pino'
 import { createApp } from './app.js'
 import { loadConfig } from './config.js'
 import { Database } from './database.js'
-import { FeedRepository } from './feed/query.js'
+import { createCertifiedFeed } from './feed/query.js'
+import { FeedRegistry } from './feed/registry.js'
 import { FeedService } from './feed/service.js'
 import { loadLocalEnvironment } from './environment.js'
 import { Metrics } from './metrics.js'
@@ -14,12 +15,12 @@ const config = loadConfig()
 const logger = pino({ level: config.logLevel })
 const metrics = new Metrics()
 const database = new Database(config, logger)
-const repository = new FeedRepository(database)
-const feedService = new FeedService(
-  repository,
+const certifiedFeed = createCertifiedFeed(
+  { database, metrics },
   config.trustedQualityLabelerDids,
-  metrics,
 )
+const feeds = new FeedRegistry([certifiedFeed])
+const feedService = new FeedService(feeds)
 const app = createApp(database, feedService, metrics, logger)
 
 metrics.setReady(false)

@@ -245,6 +245,7 @@ classified_events AS (
   SELECT
     source.uri,
     source.cid,
+    source.collection,
     source.did AS actor_did,
     CASE source.collection
       WHEN 'org.hypercerts.claim.activity' THEN 'cert.create'
@@ -284,11 +285,20 @@ paged_events AS (
 SELECT
   page.uri,
   page.cid,
+  page.collection,
   page.actor_did,
   page.kind,
   to_char(
     page.effective_at AT TIME ZONE 'UTC',
     'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
-  ) AS sort_value
+  ) AS sort_value,
+  selected_source.uri AS selected_source_uri,
+  selected_source.cid AS selected_source_cid,
+  selected_source.collection AS selected_source_collection,
+  selected_source.json AS source_json
 FROM paged_events AS page
+LEFT JOIN record AS selected_source
+  ON $12::boolean
+ AND selected_source.uri = page.uri
+ AND selected_source.cid = page.cid
 ORDER BY page.effective_at DESC, page.uri DESC

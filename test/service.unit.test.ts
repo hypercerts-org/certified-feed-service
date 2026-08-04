@@ -1,78 +1,103 @@
 import { describe, expect, it } from 'vitest'
 
-import { decodeCursor } from '../src/feed/cursor.js'
+import { encodeCursor, timestampUriCursor } from '../src/feed/cursor.js'
 import type {
-  FeedQueryInput,
-  FeedQueryReader,
-  FeedQueryResult,
-} from '../src/feed/query.js'
+  FeedPageLoader,
+  FeedPageMode,
+  InternalFeedPage,
+  InternalFeedRow,
+  InternalSourceFeedRow,
+} from '../src/feed/registry.js'
 import { FeedService } from '../src/feed/service.js'
-import { Metrics } from '../src/metrics.js'
+import type { GetFeedSkeletonInput } from '../src/feed/types.js'
 
-const viewer = 'did:plc:ar7c4by46qjdydhdevvrndac'
-const actor = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
-const baseUri = `at://${actor}/org.hypercerts.claim.activity/`
+const feedId = 'app.certified.feed.beta.defs#certifiedFeed'
+const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
+const viewerDid = 'did:plc:ar7c4by46qjdydhdevvrndac'
+const actorDid = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
+const baseUri = `at://${actorDid}/org.hypercerts.claim.activity/`
+const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 
-class FakeFeedReader implements FeedQueryReader {
-  lastInput: FeedQueryInput | undefined
-
-  constructor(private readonly result: FeedQueryResult) {}
-
-  async getFeed(input: FeedQueryInput): Promise<FeedQueryResult> {
-    this.lastInput = input
-    return this.result
-  }
+const input: GetFeedSkeletonInput = {
+  feedId,
+  params: { $type: paramsType, viewerDid },
 }
 
-const row = (suffix: string, sortValue: string) => ({
+const row = (suffix: string, sortValue: string): InternalFeedRow => ({
   uri: `${baseUri}${suffix}`,
-  cid: 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u',
-  actorDid: actor,
-  kind: 'cert.create' as const,
+  cid,
+  collection: 'org.hypercerts.claim.activity',
+  actorDid,
+  kind: 'cert.create',
   sortValue,
 })
 
+class FakePageLoader implements FeedPageLoader {
+  readonly calls: Array<{
+    readonly input: GetFeedSkeletonInput
+    readonly mode: FeedPageMode
+  }> = []
+
+  constructor(private readonly page: InternalFeedPage<InternalFeedRow>) {}
+
+  loadPage(
+    input: GetFeedSkeletonInput,
+    mode: 'metadata',
+  ): Promise<InternalFeedPage<InternalFeedRow>>
+  loadPage(
+    input: GetFeedSkeletonInput,
+    mode: 'with-source',
+  ): Promise<InternalFeedPage<InternalSourceFeedRow>>
+  async loadPage(
+    input: GetFeedSkeletonInput,
+    mode: FeedPageMode,
+  ): Promise<InternalFeedPage<InternalFeedRow | InternalSourceFeedRow>> {
+    this.calls.push({ input, mode })
+    if (mode === 'with-source') {
+      return {
+        rows: this.page.rows.map((item) => ({
+          ...item,
+          sourceValue: {},
+        })),
+        ...(this.page.cursor === undefined ? {} : { cursor: this.page.cursor }),
+      }
+    }
+    return this.page
+  }
+}
+
 describe('FeedService', () => {
-  it('trims limit+1 and emits a cursor only when another page may exist', async () => {
-    const reader = new FakeFeedReader({
-      rows: [
-        row('3', '2026-07-21T10:00:03.000000Z'),
-        row('2', '2026-07-21T10:00:02.000000Z'),
-        row('1', '2026-07-21T10:00:01.000000Z'),
-      ],
-    })
-    const service = new FeedService(reader, [viewer], new Metrics())
+  it('projects one registry-selected metadata page into the skeleton', async () => {
+    const rows = [
+      row('2', '2026-07-21T10:00:02.000000Z'),
+      row('1', '2026-07-21T10:00:01.000000Z'),
+    ]
+    const cursor = encodeCursor(feedId, rows[1]!, timestampUriCursor)
+    const pages = new FakePageLoader({ rows, cursor })
+    const service = new FeedService(pages)
 
-    const output = await service.getFeedSkeleton({
-      viewerDid: viewer,
-      limit: 2,
+    await expect(service.getFeedSkeleton(input)).resolves.toEqual({
+      items: rows.map((item) => ({
+        id: item.uri,
+        kind: item.kind,
+        subject: { uri: item.uri, cid: item.cid },
+        actorDid: item.actorDid,
+        feedTimestamp: item.sortValue,
+      })),
+      cursor,
     })
-
-    expect(output.items).toHaveLength(2)
-    expect(output.items[1]?.subject.uri).toBe(`${baseUri}2`)
-    expect(output.cursor).toBeDefined()
-    expect(decodeCursor(output.cursor)).toMatchObject({
-      version: 1,
-      value: '2026-07-21T10:00:02.000000Z',
-      uri: `${baseUri}2`,
-    })
-    expect(reader.lastInput?.trustedQualityLabelerDids).toEqual([viewer])
+    expect(pages.calls).toEqual([{ input, mode: 'metadata' }])
   })
 
-  it('omits the cursor on a known final page', async () => {
+  it('omits the cursor when the selected page has none', async () => {
     const service = new FeedService(
-      new FakeFeedReader({
+      new FakePageLoader({
         rows: [row('1', '2026-07-21T10:00:01.000000Z')],
       }),
-      [],
-      new Metrics(),
     )
 
-    await expect(
-      service.getFeedSkeleton({ viewerDid: viewer }),
-    ).resolves.toEqual(
+    await expect(service.getFeedSkeleton(input)).resolves.toEqual(
       expect.not.objectContaining({ cursor: expect.anything() }),
     )
   })
-
 })

@@ -18,29 +18,47 @@ const skeletonLexicon = readLexicon(
 )
 const defsLexicon = readLexicon('app/certified/feed/beta/defs.json')
 
+const feedId = 'app.certified.feed.beta.defs#certifiedFeed'
+const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
 const viewerDid = 'did:plc:ar7c4by46qjdydhdevvrndac'
 const actorDid = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 const uri = `at://${actorDid}/org.hypercerts.claim.activity/3kpn`
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 
 describe('feed skeleton Lexicon contract', () => {
-  it('uses the shared organization-quality policy and UpperCamelCase errors', () => {
+  it('uses a feed identifier and open params union to select a feed contract', () => {
     const main = skeletonLexicon.defs.main
 
-    expect(main.input.schema.properties.organizationQuality).toEqual({
+    expect(main.input.schema.required).toEqual(['feedId', 'params'])
+    expect(main.input.schema.properties.feedId).toEqual({
+      type: 'string',
+      maxLength: 512,
+      knownValues: [feedId],
+      description: 'Identifier of the feed algorithm to execute.',
+    })
+    expect(main.input.schema.properties.params).toEqual({
+      type: 'union',
+      closed: false,
+      refs: [paramsType],
+      description: 'Parameters for the selected feed algorithm.',
+    })
+    expect(defsLexicon.defs.certifiedFeed).toMatchObject({ type: 'token' })
+    expect(
+      defsLexicon.defs.certifiedFeedParams.properties.organizationQuality,
+    ).toEqual({
       type: 'ref',
       ref: 'app.certified.feed.beta.defs#organizationQualityPolicy',
     })
-    expect(main.input.schema.properties).not.toHaveProperty('authors')
-    expect(defsLexicon.defs).toHaveProperty('organizationQualityPolicy')
-    expect(skeletonLexicon.defs).not.toHaveProperty(
-      'organizationQualityPolicy',
+    expect(defsLexicon.defs.certifiedFeedParams.properties).not.toHaveProperty(
+      'authors',
     )
+    expect(skeletonLexicon.defs).not.toHaveProperty('certifiedFeedParams')
     const errorNames = main.errors.map(
       (error: { name: string }) => error.name,
     )
     expect(errorNames).toEqual([
       'InvalidRequest',
+      'UnsupportedFeed',
       'TrustedEvaluatorsTooLarge',
       'InvalidKind',
       'InvalidCursor',
@@ -49,13 +67,29 @@ describe('feed skeleton Lexicon contract', () => {
     expect(errorNames).toEqual(Object.values(FeedErrorCode))
   })
 
-  it('accepts the shared request object without an object discriminator', () => {
+  it('accepts the registered feed params with their union discriminator', () => {
     expect(() =>
       $input.schema.$parse({
-        viewerDid,
-        organizationQuality: {
-          allowed: ['high-quality'],
-          includeUnrated: false,
+        feedId,
+        params: {
+          $type: paramsType,
+          viewerDid,
+          organizationQuality: {
+            allowed: ['high-quality'],
+            includeUnrated: false,
+          },
+        },
+      }),
+    ).not.toThrow()
+  })
+
+  it('keeps the params union open for future feed contracts', () => {
+    expect(() =>
+      $input.schema.$parse({
+        feedId: 'app.certified.feed.beta.defs#futureFeed',
+        params: {
+          $type: 'app.certified.feed.beta.defs#futureFeedParams',
+          topic: 'regeneration',
         },
       }),
     ).not.toThrow()

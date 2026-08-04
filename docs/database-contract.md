@@ -55,7 +55,7 @@ Missing rows produce a smaller feed. They do not make readiness fail, and readin
 
 ## Query ownership
 
-`src/feed/feed-query.sql` owns one parameterized CTE statement, while `src/feed/query.ts` owns parameter binding, execution, and result mapping. The statement has these stages:
+`src/feed/feed-query.sql` owns the current Certified parameterized CTE statement. Its plain definition in `src/feed/query.ts` owns generated parameter parsing, semantic normalization selection, fixed bind order, and fail-fast result mapping; `src/feed/sql-feed.ts` executes registered definitions and owns shared pagination mechanics. The statement has these stages:
 
 1. Resolve the viewer's current Certified outbound follows.
 2. Resolve current evaluator endorsement subjects from award JSON.
@@ -66,6 +66,7 @@ Missing rows produce a smaller feed. They do not make readiness fail, and readin
 7. Select and classify eligible source records.
 8. Apply final kind and keyset filters.
 9. Order by `COALESCE(record_created_at, indexed_at)` descending with URI descending as the tie-breaker, then fetch `limit + 1`.
+10. When source-aware mode is requested, join the exact selected URI and CID only after pagination in the same statement.
 
 Only fixed collection and event-kind constants appear in SQL text. Every request-controlled value is a bind parameter.
 
@@ -115,7 +116,7 @@ Hyperindex materializes a valid top-level `createdAt` into `record_created_at` a
 
 The same effective timestamp is used for feed ordering, cursor values, project/activity pairing, and latest endorsement-response ordering. Response ordering uses the effective timestamp first, then `indexed_at`, then URI descending.
 
-Cursor version 1 contains exactly `{ version: 1, value, uri }`. Its descending keyset predicate is:
+Cursor version 1 is an unpadded base64url JSON envelope containing exactly `{ version: 1, feedId, value }`. The current codec stores `{ value, uri }` as the nested position. The service rejects cursors issued for another feed before executing SQL. Its descending keyset predicate is:
 
 ```sql
 effective_at < cursor.value

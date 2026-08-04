@@ -55,6 +55,8 @@ src/server.ts
   -> src/app.ts
   -> src/api/get-feed-skeleton.ts
   -> src/feed/service.ts
+  -> src/feed/registry.ts
+  -> src/feed/sql-feed.ts
   -> src/feed/query.ts
   -> src/feed/feed-query.sql
   -> src/database.ts
@@ -63,20 +65,24 @@ src/server.ts
 - `src/server.ts` is the composition root. It owns configuration loading, listener settings, initial readiness, and graceful shutdown.
 - `src/app.ts` is the fetch-compatible HTTP boundary. It owns operational routes, method checks, the 64 KiB body limit, malformed-JSON handling, and request metrics.
 - `src/api/get-feed-skeleton.ts` registers the Lexicon procedure and translates expected `FeedError` values into stable public responses.
-- `src/feed/service.ts` owns semantic validation, cursor decoding, repository coordination, scope-cap enforcement, `limit + 1` trimming, output shaping, and next-cursor creation.
-- `src/feed/query.ts` owns the fixed SQL parameter order, execution, and database-row mapping.
-- `src/feed/feed-query.sql` owns scope resolution, quality and endorsement policy, event folding/classification, ordering, and keyset pagination.
+- `src/feed/service.ts` projects one registry-selected metadata page into the public skeleton.
+- `src/feed/registry.ts` owns static feed lookup, duplicate-ID rejection, feed/params compatibility, and the shared metadata/source page interface.
+- `src/feed/sql-feed.ts` owns the generic SQL-feed execution order: parse and normalize registered params, decode the feed-scoped cursor, bind and time one query, map rows, trim `limit + 1`, record result metrics, and encode the next cursor.
+- `src/feed/query.ts` owns the current Certified feed definition, generated structural parser, semantic normalizer selection, fixed SQL bind order, and fail-fast metadata/source row mapping.
+- `src/feed/cursor.ts` owns the versioned feed-scoped envelope and reusable or feed-specific cursor codecs.
+- `src/feed/feed-query.sql` owns current Certified scope resolution, quality and endorsement policy, event folding/classification, ordering, keyset pagination, and the conditional exact-source join after pagination.
 - `src/database.ts` is the only PostgreSQL pool owner. Keep database access behind the existing seams.
 - `src/metrics.ts` owns an isolated Prometheus registry with bounded labels.
 
-Prefer tests at the seam being changed: app tests fake `FeedSkeletonReader`, service tests fake `FeedQueryReader`, pure rules have unit tests, and SQL/cross-table behavior belongs in the PostgreSQL integration suite.
+Prefer tests at the narrowest owner: app tests fake `FeedSkeletonReader`; service tests fake `FeedPageLoader`; registry tests fake `RegisteredFeed`; `defineSqlFeed` and current-definition tests fake the query executor; pure rules have unit tests; SQL/cross-table behavior belongs in the PostgreSQL integration suite.
 
 ## Canonical and generated files
 
 - `lexicons/**/*.json` is the committed public wire contract.
 - `src/lexicons/` is generated and gitignored. Never hand-edit or commit it.
-- `src/feed/feed-query.sql` is the canonical SQL statement.
+- `src/feed/feed-query.sql` is the canonical current Certified feed statement. SQL assets are explicitly registered; never discover executable feed SQL from caller input or the filesystem.
 - `dist/` and `coverage/` are generated and gitignored.
+- `@atproto/lex@0.3.0` emits an explicit `CertifiedFeedParams` schema generic that conflicts with `exactOptionalPropertyTypes`. `npm run codegen` therefore runs `scripts/fix-generated-feed-defs.mjs` to remove exactly that generated generic. Keep this workaround narrow and remove it when the generator supports exact optional properties.
 - `npm run build` must continue to copy the SQL beside `dist/feed/query.js` and smoke-test that the production adapter can load it.
 
 A request, response, event-kind, or public-error change usually requires coordinated updates to the Lexicon JSON, domain types, validation/service behavior, tests, and README. Run codegen rather than editing generated output. A schema-dependent change usually requires coordinated updates to SQL, its bind mapping, integration tests, and `docs/database-contract.md`.
@@ -85,6 +91,8 @@ A request, response, event-kind, or public-error change usually requires coordin
 
 Preserve these unless the public contract is intentionally revised and documented:
 
+- The public request requires `feedId` and open-union `params`. The current static registration pairs `app.certified.feed.beta.defs#certifiedFeed` with `app.certified.feed.beta.defs#certifiedFeedParams`; reject duplicate configured IDs at startup and unknown feeds, feed/params mismatches, structural failures, semantic failures, and cursor failures before database access.
+- Feed definitions are plain `defineSqlFeed()` objects, not mandatory classes. A definition owns its params parser/normalizer, SQL binder, cursor codec, and row mapper; definitions may reuse those functions but the registry stores only the finished `RegisteredFeed` execution closure.
 - The base scope always resolves from the viewer's current `app.certified.graph.follow` records. There is no caller-supplied author override.
 - Evaluator endorsement subjects are unioned after base-author resolution. The viewer is removed and candidates are deduplicated. Do not query actor status: Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, and actors missing from `actor` remain eligible.
 - Deduplicate request lists before enforcing semantic limits. Current limits are 64 evaluators, 16 kinds, and 1–50 page items.
@@ -109,7 +117,7 @@ effective timestamp DESC, record URI DESC
 
 The effective timestamp is `COALESCE(record.record_created_at, record.indexed_at)`. Hyperindex materializes valid top-level `createdAt` values and preserves them across updates. Keep `pg_input_is_valid` guards around every cast of untrusted `external_label.cts` and `external_label.exp` text.
 
-Pagination must use the matching descending predicate and fetch `limit + 1`. The opaque cursor is unpadded base64url JSON with exactly `{ version: 1, value, uri }`. It stores the last emitted timestamp and URI. If timestamp derivation, formatting, tie-break direction, or payload shape changes, treat that as a cursor-contract change and bump the version; old incompatible cursors must fail rather than paginate incorrectly.
+Pagination must use the matching descending predicate and fetch `limit + 1`. The opaque cursor is unpadded base64url JSON with exactly `{ version: 1, feedId, value }`; the current timestamp/URI codec stores `{ value, uri }` inside the envelope's `value`. Decode must reject another feed's cursor before database access. Because this contract is still pre-release, version 1 begins with this feed-scoped shape. After release, any incompatible envelope or position change requires a version bump.
 
 ## Database and operational safety
 
