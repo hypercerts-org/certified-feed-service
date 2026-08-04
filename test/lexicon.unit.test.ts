@@ -28,7 +28,7 @@ describe('feed skeleton Lexicon contract', () => {
   it('uses a feed identifier and open params union to select a feed contract', () => {
     const main = skeletonLexicon.defs.main
 
-    expect(main.input.schema.required).toEqual(['feedId', 'params'])
+    expect(main.input.schema.required).toEqual(['feedId'])
     expect(main.input.schema.properties.feedId).toEqual({
       type: 'string',
       maxLength: 512,
@@ -39,7 +39,20 @@ describe('feed skeleton Lexicon contract', () => {
       type: 'union',
       closed: false,
       refs: [paramsType],
-      description: 'Parameters for the selected feed algorithm.',
+      description:
+        'Algorithm-specific parameters. Omit when the selected feed accepts none.',
+    })
+    expect(main.input.schema.properties.limit).toEqual({
+      type: 'integer',
+      minimum: 1,
+      maximum: 100,
+      description:
+        'Maximum number of feed subjects to return. The selected feed determines the default and may enforce a lower maximum.',
+    })
+    expect(main.input.schema.properties.cursor).toEqual({
+      type: 'string',
+      maxLength: 4096,
+      description: 'Opaque cursor returned by a previous request for this feed.',
     })
     expect(defsLexicon.defs.certifiedFeed).toMatchObject({ type: 'token' })
     expect(
@@ -50,6 +63,12 @@ describe('feed skeleton Lexicon contract', () => {
     })
     expect(defsLexicon.defs.certifiedFeedParams.properties).not.toHaveProperty(
       'authors',
+    )
+    expect(defsLexicon.defs.certifiedFeedParams.properties).not.toHaveProperty(
+      'limit',
+    )
+    expect(defsLexicon.defs.certifiedFeedParams.properties).not.toHaveProperty(
+      'cursor',
     )
     expect(skeletonLexicon.defs).not.toHaveProperty('certifiedFeedParams')
     const errorNames = main.errors.map(
@@ -66,7 +85,7 @@ describe('feed skeleton Lexicon contract', () => {
     expect(errorNames).toEqual(Object.values(FeedErrorCode))
   })
 
-  it('accepts the registered feed params with their union discriminator', () => {
+  it('accepts the registered feed params with generic pagination', () => {
     expect(() =>
       $input.schema.$parse({
         feedId,
@@ -78,7 +97,15 @@ describe('feed skeleton Lexicon contract', () => {
             includeUnrated: false,
           },
         },
+        limit: 25,
+        cursor: 'next-page',
       }),
+    ).not.toThrow()
+  })
+
+  it('accepts a feed request without algorithm-specific params', () => {
+    expect(() =>
+      $input.schema.$parse({ feedId }),
     ).not.toThrow()
   })
 

@@ -66,10 +66,6 @@ export interface CertifiedFeedParams {
   readonly trustedEvaluators?: readonly string[]
   /** Optional organization-quality membership policy. */
   readonly organizationQuality?: OrganizationQualityPolicyInput
-  /** Requested page size, defaulting to 20 and capped at 50. */
-  readonly limit?: number
-  /** Opaque cursor returned by an earlier descending feed-timestamp page. */
-  readonly cursor?: string
   /** Final event-kind filter; omitted or empty means every supported kind. */
   readonly kinds?: readonly string[]
 }
@@ -87,8 +83,12 @@ export type FeedParams = CertifiedFeedParams | UnknownFeedParams
 export interface GetFeedSkeletonInput {
   /** Identifier used to select the feed algorithm. */
   readonly feedId: string
-  /** Open parameters whose discriminator selects the feed-specific validator. */
-  readonly params: FeedParams
+  /** Optional algorithm-specific parameters selected by their discriminator. */
+  readonly params?: FeedParams
+  /** Requested page size; the selected feed owns its default and supported maximum. */
+  readonly limit?: number
+  /** Opaque cursor returned by an earlier page of this feed. */
+  readonly cursor?: string
 }
 
 /** One unhydrated record selected for the feed. */

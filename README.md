@@ -11,7 +11,7 @@ POST /xrpc/app.certified.feed.beta.getFeedSkeleton
 Content-Type: application/json
 ```
 
-This is an unauthenticated, app-specific XRPC procedure, not the Bluesky `app.bsky.feed.getFeedSkeleton` query. `feedId` selects a registered algorithm, while the open-union `params` object selects its parameter contract through `$type`. The current algorithm's `viewerDid` selects the viewer scope and is not verified against an authenticated caller. `certified.app` or the Hypercerts data plane calls the procedure directly, then hydrates each returned AT-URI.
+This is an unauthenticated, app-specific XRPC procedure, not the Bluesky `app.bsky.feed.getFeedSkeleton` query. `feedId` selects a registered algorithm. The optional open-union `params` object carries only algorithm-specific parameters through its `$type`; `limit` and `cursor` are generic top-level pagination controls. The current algorithm requires `params.viewerDid` to select the viewer scope and does not verify it against an authenticated caller. `certified.app` or the Hypercerts data plane calls the procedure directly, then hydrates each returned AT-URI.
 
 ```bash
 curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeedSkeleton \
@@ -25,13 +25,13 @@ curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeedSkeleton \
       "organizationQuality": {
         "allowed": ["high-quality", "standard"],
         "includeUnrated": false
-      },
-      "limit": 20
-    }
+      }
+    },
+    "limit": 20
   }'
 ```
 
-The current registration accepts only the `app.certified.feed.beta.defs#certifiedFeed` feed identifier paired with `app.certified.feed.beta.defs#certifiedFeedParams`. After structural Lexicon validation, an unknown feed identifier returns `UnsupportedFeed`, while a known feed paired with the wrong params `$type` returns `InvalidRequest`. The union remains open so future feed definitions can be added without introducing another procedure.
+The current registration accepts only the `app.certified.feed.beta.defs#certifiedFeed` feed identifier and requires `app.certified.feed.beta.defs#certifiedFeedParams`. After structural Lexicon validation, an unknown feed identifier returns `UnsupportedFeed`; missing params or a wrong params `$type` for this feed returns `InvalidRequest`. Other registrations may omit params entirely. The union remains open so future parameterized feed definitions can be added without introducing another procedure.
 
 Example response:
 
@@ -48,7 +48,7 @@ Example response:
 
 Each skeleton entry intentionally contains only the record AT-URI. The downstream hydrator resolves the current indexed record version; the skeleton does not pin hydration to a CID or expose feed-specific classification metadata.
 
-The cursor is opaque to callers, scoped to the selected `feedId`, and interpreted by that feed's registered cursor implementation.
+The cursor is opaque to callers, scoped to the selected `feedId`, and interpreted by that feed's registered cursor implementation. Send it back as the top-level request `cursor`; do not place it inside algorithm-specific `params`.
 
 ## Request flow
 
@@ -66,8 +66,8 @@ sequenceDiagram
     HTTP->>XRPC: Validated request
     XRPC->>Service: getFeedSkeleton(input)
     Service->>Registry: loadPage(input, metadata)
-    Registry->>Feed: Match feedId and params type
-    Feed->>Feed: Parse params and decode feed-scoped cursor
+    Registry->>Feed: Match feedId and optional params contract
+    Feed->>Feed: Normalize pagination and decode feed-scoped cursor
     Feed->>DB: Execute parameterized feed query
     DB-->>Feed: Selected rows
     Feed->>Feed: Map, trim, and create cursor
@@ -79,7 +79,7 @@ sequenceDiagram
 
 ## Request behavior
 
-- Malformed JSON, a feed/params mismatch, or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`. A structurally valid request with an unregistered `feedId` returns `UnsupportedFeed`. Dispatch failures that reach the service do not query PostgreSQL.
+- Malformed JSON, missing required params for the selected feed, a feed/params mismatch, invalid pagination, or an invalid `viewerDid` returns HTTP 400 with `InvalidRequest`. A structurally valid request with an unregistered `feedId` returns `UnsupportedFeed`. Dispatch failures that reach the service do not query PostgreSQL.
 - The base scope always comes from the viewer's current `app.certified.graph.follow` records; malformed follow subjects are ignored.
 - `trustedEvaluators` adds subjects of each evaluator's current active endorsement awards.
 - Endorsement definitions without `allowedIssuers` permit any issuer. When present, only listed issuer DIDs qualify; an empty list permits none, and malformed values are ignored safely.

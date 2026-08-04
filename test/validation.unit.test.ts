@@ -73,7 +73,10 @@ describe('feed request validation', () => {
       }),
     )
     expect(() =>
-      normalizeFeedRequest(feedParams({ viewerDid: viewer, limit: 51 })),
+      normalizeFeedRequest(
+        feedParams({ viewerDid: viewer }),
+        { limit: 51 },
+      ),
     ).toThrowError(
       expect.objectContaining<Partial<FeedError>>({
         code: FeedErrorCode.InvalidRequest,

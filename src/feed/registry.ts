@@ -3,6 +3,12 @@ import type { FeedKind, FeedParams, GetFeedSkeletonInput } from './types.js'
 
 export type FeedPageMode = 'metadata' | 'with-source'
 
+/** Pagination controls shared by every registered feed. */
+export interface FeedPagination {
+  readonly limit?: number
+  readonly cursor?: string
+}
+
 export interface InternalFeedRow {
   readonly uri: string
   readonly cid: string
@@ -34,14 +40,17 @@ export interface FeedPageLoader {
 
 export interface RegisteredFeed {
   readonly id: string
-  readonly paramsType: string
+  /** Required params discriminator, or undefined when the feed accepts no params. */
+  readonly paramsType: string | undefined
 
   loadPage(
-    params: FeedParams,
+    params: FeedParams | undefined,
+    pagination: FeedPagination,
     mode: 'metadata',
   ): Promise<InternalFeedPage<InternalFeedRow>>
   loadPage(
-    params: FeedParams,
+    params: FeedParams | undefined,
+    pagination: FeedPagination,
     mode: 'with-source',
   ): Promise<InternalFeedPage<InternalSourceFeedRow>>
 }
@@ -79,15 +88,31 @@ export class FeedRegistry implements FeedPageLoader {
         `feedId ${JSON.stringify(input.feedId)} is not registered by this service; use a supported feed identifier and retry.`,
       )
     }
-    if (input.params.$type !== feed.paramsType) {
+    if (feed.paramsType === undefined) {
+      if (input.params !== undefined) {
+        throw new FeedError(
+          FeedErrorCode.InvalidRequest,
+          `feedId ${JSON.stringify(input.feedId)} does not accept algorithm-specific params; omit params and retry.`,
+        )
+      }
+    } else if (input.params === undefined) {
+      throw new FeedError(
+        FeedErrorCode.InvalidRequest,
+        `feedId ${JSON.stringify(input.feedId)} requires params with $type ${JSON.stringify(feed.paramsType)}; provide those params and retry.`,
+      )
+    } else if (input.params.$type !== feed.paramsType) {
       throw new FeedError(
         FeedErrorCode.InvalidRequest,
         `params.$type ${JSON.stringify(input.params.$type)} does not match feedId ${JSON.stringify(input.feedId)}; use ${JSON.stringify(feed.paramsType)} and retry.`,
       )
     }
 
+    const pagination: FeedPagination = {
+      ...(input.limit === undefined ? {} : { limit: input.limit }),
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+    }
     return mode === 'metadata'
-      ? feed.loadPage(input.params, 'metadata')
-      : feed.loadPage(input.params, 'with-source')
+      ? feed.loadPage(input.params, pagination, 'metadata')
+      : feed.loadPage(input.params, pagination, 'with-source')
   }
 }

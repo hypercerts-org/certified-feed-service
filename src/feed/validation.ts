@@ -1,6 +1,7 @@
 import { isValidDid } from '@atproto/syntax'
 
 import { FeedError, FeedErrorCode } from './errors.js'
+import type { FeedPagination } from './registry.js'
 import {
   FEED_KINDS,
   ORGANIZATION_QUALITIES,
@@ -31,9 +32,10 @@ const validateEvaluatorDids = (values: readonly string[]): void => {
   }
 }
 
-/** Applies semantic limits and normalizes Certified feed parameters. */
+/** Normalizes Certified params with the shared pagination controls. */
 export const normalizeFeedRequest = (
   input: CertifiedFeedParams,
+  pagination: FeedPagination = {},
 ): NormalizedFeedRequest => {
   if (!isValidDid(input.viewerDid)) {
     throw new FeedError(
@@ -83,7 +85,7 @@ export const normalizeFeedRequest = (
     }
   }
 
-  const limit = input.limit ?? DEFAULT_LIMIT
+  const limit = pagination.limit ?? DEFAULT_LIMIT
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
     throw new FeedError(
       FeedErrorCode.InvalidRequest,
@@ -97,6 +99,6 @@ export const normalizeFeedRequest = (
     ...(organizationQuality ? { organizationQuality } : {}),
     limit,
     kinds: rawKinds as FeedKind[],
-    ...(input.cursor !== undefined ? { cursor: input.cursor } : {}),
+    ...(pagination.cursor !== undefined ? { cursor: pagination.cursor } : {}),
   }
 }

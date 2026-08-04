@@ -9,7 +9,10 @@ import { Database } from '../src/database.js'
 import { createCertifiedFeed } from '../src/feed/query.js'
 import { FeedRegistry } from '../src/feed/registry.js'
 import { FeedService } from '../src/feed/service.js'
-import type { CertifiedFeedParams } from '../src/feed/types.js'
+import type {
+  CertifiedFeedParams,
+  GetFeedSkeletonInput,
+} from '../src/feed/types.js'
 import { Metrics } from '../src/metrics.js'
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL
@@ -179,17 +182,27 @@ describe('Certified feed definition against Postgres', () => {
     )
   }
 
-  const getFeedSkeleton = (
-    params: Omit<CertifiedFeedParams, '$type'>,
-  ) =>
-    service.getFeedSkeleton({
+  type CertifiedFeedRequest = Omit<CertifiedFeedParams, '$type'> &
+    Pick<GetFeedSkeletonInput, 'limit' | 'cursor'>
+
+  const createFeedRequest = (
+    input: CertifiedFeedRequest,
+  ): GetFeedSkeletonInput => {
+    const { limit, cursor, ...params } = input
+    return {
       feedId,
       params: { $type: paramsType, ...params },
-    })
+      ...(limit === undefined ? {} : { limit }),
+      ...(cursor === undefined ? {} : { cursor }),
+    }
+  }
+
+  const getFeedSkeleton = (input: CertifiedFeedRequest) =>
+    service.getFeedSkeleton(createFeedRequest(input))
 
   const getFeedForFollows = async (
     followedDids: readonly string[],
-    input: Omit<CertifiedFeedParams, '$type' | 'viewerDid'> = {},
+    input: Omit<CertifiedFeedRequest, 'viewerDid'> = {},
   ) => {
     const viewerDid = randomDid()
     await seedActor(viewerDid)
@@ -527,7 +540,7 @@ describe('Certified feed definition against Postgres', () => {
     )
 
     service = createService([trustedLabeler])
-    const requestParams: Omit<CertifiedFeedParams, '$type'> = {
+    const requestParams: CertifiedFeedRequest = {
       viewerDid: viewer,
       trustedEvaluators: [evaluator],
       organizationQuality: {
@@ -538,10 +551,7 @@ describe('Certified feed definition against Postgres', () => {
     }
     const output = await getFeedSkeleton(requestParams)
     const metadata = await createPages([trustedLabeler]).loadPage(
-      {
-        feedId,
-        params: { $type: paramsType, ...requestParams },
-      },
+      createFeedRequest(requestParams),
       'metadata',
     )
 
