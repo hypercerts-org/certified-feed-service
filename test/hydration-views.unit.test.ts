@@ -597,12 +597,16 @@ describe('feed-card view builders', () => {
     })
     expect(() =>
       buildFeedItemView(record),
-    ).toThrow(/endorsement view invariant failed.*subject summary/i)
+    ).toThrow(
+      'Endorsement view failed because the endorsed account could not be matched to its discovered identity; verify endorsement DID discovery and identity mapping before serving hydrated pages.',
+    )
     expect(() =>
       buildFeedItemView(record, {
         endorsedActor: { ...endorsedActor, did: actorDid },
       }),
-    ).toThrow(/endorsement view invariant failed.*subject summary/i)
+    ).toThrow(
+      'Endorsement view failed because the endorsed account could not be matched to its discovered identity; verify endorsement DID discovery and identity mapping before serving hydrated pages.',
+    )
   })
 
   it('returns exact targets for evaluation and measurement while keeping Hyperboard lean', () => {

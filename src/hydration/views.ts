@@ -132,7 +132,7 @@ const targetReference = (
 
 const endorsementViewInvariantError = (): Error =>
   new Error(
-    'Endorsement view invariant failed: the validated account subject did not have its exact discovered subject summary; verify endorsement DID discovery and identity mapping before serving hydrated pages.',
+    'Endorsement view failed because the endorsed account could not be matched to its discovered identity; verify endorsement DID discovery and identity mapping before serving hydrated pages.',
   )
 
 type FeedRecordValue<
