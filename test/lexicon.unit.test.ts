@@ -135,14 +135,28 @@ const viewsByKind = {
 
 const feedItem = (
   kind: keyof typeof viewsByKind = 'cert.create',
-): Record<string, unknown> => ({
-  id: uri,
-  kind,
-  subject: { uri, cid },
-  feedTimestamp: createdAt,
-  actor,
-  view: viewsByKind[kind],
+): Record<string, any> => ({
+  subject: uri,
+  view: {
+    $type: 'app.certified.feed.beta.defs#certifiedFeedView',
+    kind,
+    actor,
+    content: viewsByKind[kind],
+  },
 })
+
+const withFeedView = (
+  item: Record<string, any>,
+  overrides: Record<string, unknown>,
+): Record<string, any> => ({
+  ...item,
+  view: { ...item.view, ...overrides },
+})
+
+const withContent = (
+  item: Record<string, any>,
+  content: Record<string, unknown>,
+): Record<string, any> => withFeedView(item, { content })
 
 describe('feed Lexicon contract', () => {
   it('keeps registered feed inputs and UpperCamelCase public errors identical', () => {
@@ -168,8 +182,6 @@ describe('feed Lexicon contract', () => {
     expect(errorNames).toEqual([
       'InvalidRequest',
       'UnsupportedFeed',
-      'TrustedEvaluatorsTooLarge',
-      'InvalidKind',
       'InvalidCursor',
       'InternalError',
     ])
@@ -189,26 +201,20 @@ describe('feed Lexicon contract', () => {
     }
   })
 
-  it('keeps the original exact-reference skeleton wire shape', () => {
-    expect(skeletonMain.output.schema.required).toEqual(['items'])
+  it('defines the generic URI-only skeleton wire shape', () => {
+    expect(skeletonMain.output.schema.required).toEqual(['feed'])
     expect(skeletonMain.output.schema.properties.cursor).toMatchObject({
       type: 'string',
       maxLength: 4096,
     })
-    expect(skeletonLexicon.defs.feedSkeletonItem.required).toEqual([
-      'id',
-      'kind',
-      'subject',
-      'actorDid',
-      'feedTimestamp',
-    ])
-    expect(Object.keys(skeletonLexicon.defs.feedSkeletonItem.properties)).toEqual([
-      'id',
-      'kind',
-      'subject',
-      'actorDid',
-      'feedTimestamp',
-    ])
+    expect(skeletonLexicon.defs.feedSkeletonItem.required).toEqual(['subject'])
+    expect(skeletonLexicon.defs.feedSkeletonItem.properties).toEqual({
+      subject: {
+        type: 'string',
+        format: 'at-uri',
+        description: 'AT-URI of the record to hydrate.',
+      },
+    })
     expect(defs).toHaveProperty('organizationQualityPolicy')
     expect(skeletonLexicon.defs).not.toHaveProperty(
       'organizationQualityPolicy',
@@ -229,17 +235,7 @@ describe('feed Lexicon contract', () => {
       }),
     ).not.toThrow()
     expect(() =>
-      skeletonOutput.schema.$parse({
-        items: [
-          {
-            id: uri,
-            kind: 'cert.create',
-            subject: { uri, cid },
-            actorDid,
-            feedTimestamp: createdAt,
-          },
-        ],
-      }),
+      skeletonOutput.schema.$parse({ feed: [{ subject: uri }] }),
     ).not.toThrow()
   })
 
@@ -249,39 +245,52 @@ describe('feed Lexicon contract', () => {
     }
   })
 
-  it('defines one hydrated feed item with a required open view', () => {
-    expect(hydratedMain.output.schema.properties.items.items).toEqual({
+  it('defines a generic hydrated item with a required open feed view', () => {
+    expect(hydratedMain.output.schema.required).toEqual(['feed'])
+    expect(hydratedMain.output.schema.properties.feed.items).toEqual({
       type: 'ref',
-      ref: 'app.certified.feed.beta.defs#feedItem',
+      ref: '#feedItem',
     })
-    expect(defs.feedItem.required).toEqual([
-      'id',
+    expect(hydratedLexicon.defs.feedItem.required).toEqual(['subject', 'view'])
+    expect(hydratedLexicon.defs.feedItem.properties.subject).toMatchObject({
+      type: 'string',
+      format: 'at-uri',
+    })
+    expect(hydratedLexicon.defs.feedItem.properties.view).toMatchObject({
+      type: 'union',
+      closed: false,
+      refs: ['app.certified.feed.beta.defs#certifiedFeedView'],
+    })
+    expect(defs.certifiedFeedView.required).toEqual([
       'kind',
-      'subject',
-      'feedTimestamp',
       'actor',
-      'view',
+      'content',
     ])
-    expect(defs.feedItem.properties.view).not.toHaveProperty('closed')
-    expect(defs.feedItem.properties.view.refs).toEqual([
-      '#activityView',
-      '#collectionView',
-      '#endorsementView',
-      '#evaluationView',
-      '#measurementView',
-      '#hyperboardView',
-      '#updateView',
-    ])
-    expect(defs).not.toHaveProperty('availableFeedItem')
-    expect(defs).not.toHaveProperty('invalidFeedItem')
-    expect(defs).not.toHaveProperty('hydratedFeedItem')
+    expect(defs.certifiedFeedView.properties.content).toMatchObject({
+      type: 'union',
+      closed: false,
+      refs: [
+        '#activityView',
+        '#collectionView',
+        '#endorsementView',
+        '#evaluationView',
+        '#measurementView',
+        '#hyperboardView',
+        '#updateView',
+      ],
+    })
+    expect(defs).not.toHaveProperty('feedItem')
 
-    const serialized = JSON.stringify(defs.feedItem)
+    const serialized = JSON.stringify({
+      feedItem: hydratedLexicon.defs.feedItem,
+      certifiedFeedView: defs.certifiedFeedView,
+    })
     for (const forbidden of [
       'record',
       'recordState',
       'profileSource',
       'actorDid',
+      'feedTimestamp',
       'notFound',
       'cidMismatch',
     ]) {
@@ -312,9 +321,9 @@ describe('feed Lexicon contract', () => {
 
     expect(() =>
       hydratedOutput.schema.$parse({
-        items: [
-          { ...feedItem('cert.create'), view: activityWithoutCount },
-          { ...feedItem('collection.create'), view: collectionWithoutCount },
+        feed: [
+          withContent(feedItem('cert.create'), activityWithoutCount),
+          withContent(feedItem('collection.create'), collectionWithoutCount),
         ],
       }),
     ).not.toThrow()
@@ -366,7 +375,7 @@ describe('feed Lexicon contract', () => {
     )
 
     expect(() =>
-      hydratedOutput.schema.$parse({ items, cursor: 'opaque-cursor' }),
+      hydratedOutput.schema.$parse({ feed: items, cursor: 'opaque-cursor' }),
     ).not.toThrow()
   })
 
@@ -377,21 +386,20 @@ describe('feed Lexicon contract', () => {
     }
     expect(() =>
       hydratedOutput.schema.$parse({
-        items: [
-          {
-            ...feedItem(),
+        feed: [
+          withFeedView(feedItem(), {
             actor: { did: actorDid, avatar: unknownImage },
-          },
+          }),
+          withContent(feedItem(), {
+            ...viewsByKind['cert.create'],
+            image: unknownImage,
+          }),
+          withContent(feedItem(), {
+            $type: 'example.feed#unknownContent',
+          }),
           {
             ...feedItem(),
-            view: {
-              ...viewsByKind['cert.create'],
-              image: unknownImage,
-            },
-          },
-          {
-            ...feedItem(),
-            view: { $type: 'example.feed#unknownView' },
+            view: { $type: 'example.feed#unknownFeedView' },
           },
         ],
       }),
@@ -401,7 +409,7 @@ describe('feed Lexicon contract', () => {
   it.each([
     [
       'missing view discriminator',
-      { ...feedItem(), view: { title: 'Missing type', locationCount: 0 } },
+      { ...feedItem(), view: { kind: 'cert.create', actor, content: {} } },
     ],
     [
       'missing required view',
@@ -413,19 +421,20 @@ describe('feed Lexicon contract', () => {
     ],
     [
       'missing image discriminator',
-      {
-        ...feedItem(),
+      withFeedView(feedItem(), {
         actor: {
           did: actorDid,
           avatar: { uri: 'https://example.com/image.png' },
         },
-      },
+      }),
     ],
-    ['malformed actor DID', { ...feedItem(), actor: { did: 'not-a-did' } }],
+    [
+      'malformed actor DID',
+      withFeedView(feedItem(), { actor: { did: 'not-a-did' } }),
+    ],
     [
       'malformed blob CID',
-      {
-        ...feedItem(),
+      withFeedView(feedItem(), {
         actor: {
           did: actorDid,
           avatar: {
@@ -433,22 +442,20 @@ describe('feed Lexicon contract', () => {
             image: blobWith({ ref: 'not-a-cid' }),
           },
         },
-      },
+      }),
     ],
     [
       'malformed image URI',
-      {
-        ...feedItem(),
+      withFeedView(feedItem(), {
         actor: {
           did: actorDid,
           avatar: { ...uriImage, uri: 'not a URI' },
         },
-      },
+      }),
     ],
     [
       'negative image size',
-      {
-        ...feedItem(),
+      withFeedView(feedItem(), {
         actor: {
           did: actorDid,
           avatar: {
@@ -456,19 +463,16 @@ describe('feed Lexicon contract', () => {
             image: blobWith({ size: -1 }),
           },
         },
-      },
+      }),
     ],
     [
       'malformed target reference',
-      {
-        ...feedItem('evaluation.create'),
-        view: {
-          ...viewsByKind['evaluation.create'],
-          target: { uri: 'not-an-at-uri', cid: 'not-a-cid' },
-        },
-      },
+      withContent(feedItem('evaluation.create'), {
+        ...viewsByKind['evaluation.create'],
+        target: { uri: 'not-an-at-uri', cid: 'not-a-cid' },
+      }),
     ],
   ])('rejects %s', (_label, item) => {
-    expect(() => hydratedOutput.schema.$parse({ items: [item] })).toThrow()
+    expect(() => hydratedOutput.schema.$parse({ feed: [item] })).toThrow()
   })
 })

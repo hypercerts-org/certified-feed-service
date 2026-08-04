@@ -4,7 +4,7 @@ A standalone, read-only TypeScript service. It reads the current PostgreSQL data
 
 > **Pre-release:** Neither this service nor its Lexicons has had a first public release. Wire contracts can change without backward compatibility.
 
-Hyperindex is the only supported owner of the database. The service provides a skeleton feed with exact references and a hydrated feed with views only. It does not ingest or change indexed data, import Hyperindex code, call the Hyperindex GraphQL API, authenticate callers, fetch blob bytes, or provide an unchangeable event history.
+Hyperindex is the only supported owner of the database. The service provides a URI-only skeleton and a hydrated feed with generic entries and feed-specific views. It does not ingest or change indexed data, import Hyperindex code, call the Hyperindex GraphQL API, authenticate callers, fetch blob bytes, or provide an unchangeable event history.
 
 ## Endpoints
 
@@ -38,53 +38,46 @@ curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeed \
   }'
 ```
 
-Use the same body with `getFeedSkeleton` when another data system needs only exact source references. The public params union is open for future feed algorithms. This service currently registers only `app.certified.feed.beta.defs#certifiedFeed`; an unknown `feedId` returns `UnsupportedFeed`, while a params `$type` that does not match the selected feed returns `InvalidRequest`.
+Use the same body with `getFeedSkeleton` when another data system needs only ordered source AT-URIs. The public params union is open for future feed algorithms. This service currently registers only `app.certified.feed.beta.defs#certifiedFeed`; an unknown `feedId` returns `UnsupportedFeed`, while a params `$type` that does not match the selected feed returns `InvalidRequest`.
 
 ### Skeleton response
 
 ```json
 {
-  "items": [
+  "feed": [
     {
-      "id": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.claim.activity/3kpn",
-      "kind": "cert.create",
-      "subject": {
-        "uri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.claim.activity/3kpn",
-        "cid": "bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u"
-      },
-      "actorDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
-      "feedTimestamp": "2026-07-21T10:00:00.000000Z"
+      "subject": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.claim.activity/3kpn"
     }
   ],
   "cursor": "eyJ2ZXJzaW9uIjoxLCJmZWVkSWQiOiJhcHAuY2VydGlmaWVkLmZlZWQuYmV0YS5kZWZzI2NlcnRpZmllZEZlZWQiLCJ2YWx1ZSI6eyJ2YWx1ZSI6IjIwMjYtMDctMjFUMTA6MDA6MDAuMDAwMDAwWiIsInVyaSI6ImF0Oi8vZGlkOnBsYzpld3ZpN254enlvdW42emh4cmhzNjRvaXovb3JnLmh5cGVyY2VydHMuY2xhaW0uYWN0aXZpdHkvM2twbiJ9fQ"
 }
 ```
 
+Each skeleton entry intentionally contains only the source record AT-URI. A downstream hydrator resolves the current indexed record version; the skeleton does not pin hydration to a CID or expose feed-specific classification metadata.
+
 ### Hydrated response
 
 ```json
 {
-  "items": [
+  "feed": [
     {
-      "id": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.context.evaluation/3kpn",
-      "kind": "evaluation.create",
-      "subject": {
-        "uri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.context.evaluation/3kpn",
-        "cid": "bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u"
-      },
-      "feedTimestamp": "2026-07-21T10:00:00.000000Z",
-      "actor": {
-        "did": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
-        "handle": "evaluator.example",
-        "displayName": "Evaluator"
-      },
+      "subject": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.context.evaluation/3kpn",
       "view": {
-        "$type": "app.certified.feed.beta.defs#evaluationView",
-        "summary": "Strong evidence",
-        "createdAt": "2026-07-21T10:00:00.000Z",
-        "target": {
-          "uri": "at://did:plc:ar7c4by46qjdydhdevvrndac/org.hypercerts.claim.activity/target",
-          "cid": "bafyreifxcn6ts5hr6oequ5w5jyrpwrdl6p5lq46jasnxmcw3h3sme6asru"
+        "$type": "app.certified.feed.beta.defs#certifiedFeedView",
+        "kind": "evaluation.create",
+        "actor": {
+          "did": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
+          "handle": "evaluator.example",
+          "displayName": "Evaluator"
+        },
+        "content": {
+          "$type": "app.certified.feed.beta.defs#evaluationView",
+          "summary": "Strong evidence",
+          "createdAt": "2026-07-21T10:00:00.000Z",
+          "target": {
+            "uri": "at://did:plc:ar7c4by46qjdydhdevvrndac/org.hypercerts.claim.activity/target",
+            "cid": "bafyreifxcn6ts5hr6oequ5w5jyrpwrdl6p5lq46jasnxmcw3h3sme6asru"
+          }
         }
       }
     }
@@ -92,15 +85,15 @@ Use the same body with `getFeedSkeleton` when another data system needs only exa
 }
 ```
 
-Hydrated items contain views only.
+Every hydrated entry has a generic source `subject` and an open `view` union. The current `certifiedFeedView` variant owns the Certified event kind, actor, and kind-specific content. Clients must tolerate unknown future feed-view and content variants.
 
 #### What you get
 
-Every feed item comes from a valid source record. Each item has a view made for that kind of item.
+Every hydrated feed entry comes from a valid source record. Each entry has a feed-specific view and kind-specific content.
 
 The service uses an actor's Certified profile for their name and avatar when it can. Otherwise, it uses their Bluesky profile. It adds a valid handle separately. If there is no profile, it shows the actor by their handle or DID.
 
-An evaluation, measurement, or update may point to another record by its exact URI and CID. The service checks that the reference is valid.
+An evaluation, measurement, or update may point to another record by its exact URI and CID. These targets remain strong references even though the entry's source `subject` is URI-only. The service checks that each target reference is valid.
 
 Clients must accept image and feed formats they do not know. Known images keep their original Hypercerts and AT Protocol formats.
 
@@ -142,9 +135,9 @@ sequenceDiagram
         Identity->>DB: One actor/profile batch
         DB-->>Identity: Current identity contexts
         Identity-->>Service: Complete DID map
-        Service-->>XRPC: View-only items and selected-page cursor
+        Service-->>XRPC: Generic entries, feed-specific views, and selected-page cursor
     else Skeleton endpoint
-        Service-->>XRPC: Exact references and cursor
+        Service-->>XRPC: URI-only subjects and cursor
     end
     XRPC-->>HTTP: Procedure response
     HTTP-->>Client: JSON response
@@ -152,14 +145,14 @@ sequenceDiagram
 
 ## Request behavior
 
-- Malformed JSON, an invalid nested `viewerDid`, or params that do not match the selected registered feed returns HTTP 400 with `InvalidRequest`. An unregistered `feedId` returns `UnsupportedFeed`. These never become internal server errors.
+- Malformed JSON, an invalid nested `viewerDid`, or params that do not match the selected registered feed return HTTP 400 with `InvalidRequest`. Semantically invalid selected-feed parameters return HTTP 422 with the same generic error name and an actionable feed-specific message. An unregistered `feedId` returns `UnsupportedFeed`. These never become internal server errors.
 - The base scope always comes from the viewer's current `app.certified.graph.follow` records. The service ignores malformed follow subjects.
 - `trustedEvaluators` adds the subjects of every current, active endorsement award from each evaluator.
 - An endorsement definition with no `allowedIssuers` allows any issuer. When it is present, only its listed issuer DIDs qualify. An empty or malformed value allows no issuers.
 - The service removes the viewer. Hyperindex removes source records for identities that are explicitly deleted, deactivated, suspended, or taken down, so feed selection does not check actor status.
 - The organization-quality rules run against the final combined author list before event selection. Only exact `app.certified.actor.organization/self` records count as organizations.
 - Trusted quality labelers come only from the service configuration. Quality labels are bare-DID, non-CID `external_label` rows. Callers cannot choose label sources.
-- Leaving out `kinds`, or passing an empty list, includes every supported kind. The service rejects unknown kinds.
+- Leaving out `kinds`, or passing an empty list, includes every supported kind. Unknown kinds are rejected as `InvalidRequest`.
 
 Supported event kinds:
 
@@ -184,7 +177,7 @@ The order is:
 feed timestamp DESC, record URI DESC
 ```
 
-Items appear newest first by `feedTimestamp`. This timestamp uses the record's valid `createdAt`. If that is not available, it uses the time when Hyperindex indexed the record. Pagination moves forward from the last source row chosen before hydration, so removing an invalid hydrated item does not move the cursor.
+Entries appear newest first using an internal feed timestamp. It uses the record's valid `createdAt`; otherwise, it uses the time when Hyperindex indexed the record. The timestamp is not exposed in either response. Pagination moves forward from the last source row chosen before hydration, so removing an invalid hydrated entry does not move the cursor.
 
 ### Pagination and database reads
 
@@ -193,17 +186,17 @@ Items appear newest first by `feedTimestamp`. This timestamp uses the record's v
 - The service checks one extra item to see whether another page exists.
 - The cursor marks the last item selected and is valid only for the `feedId` that issued it.
 - Both endpoints use the same ordering and feed-scoped cursor rules.
-- Invalid items are removed, not replaced.
+- Invalid hydrated entries are removed, not replaced.
 
 **Database work**
 
 - A skeleton page uses one database query.
-- A full feed page also loads actor and profile details when it has valid items.
-- The service never makes extra queries to fill gaps left by invalid items.
+- A full feed page also loads actor and profile details when it has valid entries.
+- The service never makes extra queries to fill gaps left by invalid entries.
 
 **Freshness**
 
-Feed items and their source records are read together. Actor and profile details are loaded afterward, so they may be newer.
+Feed entries and their source records are read together. Actor and profile details are loaded afterward, so they may be newer.
 
 Each page is a separate database read. Changes made between requests may appear on later pages.
 
@@ -328,11 +321,11 @@ Stable public feed errors:
 ```text
 InvalidRequest
 UnsupportedFeed
-TrustedEvaluatorsTooLarge
-InvalidKind
 InvalidCursor
 InternalError
 ```
+
+Feed-specific parameter failures use `InvalidRequest`; their message identifies the invalid parameter and how to correct it.
 
 Public errors never show SQL, database credentials, table contents, internal causes, or stack traces.
 

@@ -92,22 +92,23 @@ const buildHydratedFeedItems = (
       endorsedDid === undefined ? undefined : summaries.get(endorsedDid)
 
     return {
-      id: row.uri,
-      kind: row.kind,
-      subject: { uri: row.uri, cid: row.cid },
-      feedTimestamp: row.sortValue,
-      actor,
-      view: buildFeedItemView(record, {
-        ...(endorsedActor === undefined ? {} : { endorsedActor }),
-      }),
+      subject: row.uri,
+      view: {
+        $type: 'app.certified.feed.beta.defs#certifiedFeedView',
+        kind: row.kind,
+        actor,
+        content: buildFeedItemView(record, {
+          ...(endorsedActor === undefined ? {} : { endorsedActor }),
+        }),
+      },
     }
   })
 
 const buildOutput = (
-  items: readonly HydratedFeedItem[],
+  feed: readonly HydratedFeedItem[],
   cursor: string | undefined,
 ): GetHydratedFeedOutput => ({
-  items,
+  feed,
   ...(cursor === undefined ? {} : { cursor }),
 })
 

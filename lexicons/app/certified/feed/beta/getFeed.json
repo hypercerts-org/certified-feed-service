@@ -4,13 +4,11 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Builds an ordered, view-only hydrated feed from current indexed records and identities for the registered feed and parameters selected in the request. Authentication is not required.",
+      "description": "Builds an ordered hydrated feed from current indexed records and identities for the registered feed and parameters selected in the request. Authentication is not required.",
       "errors": [
-        { "name": "InvalidRequest", "description": "The request is malformed or semantically invalid." },
+        { "name": "InvalidRequest", "description": "The request or the selected feed's parameters are malformed or semantically invalid." },
         { "name": "UnsupportedFeed", "description": "The requested feed identifier is not registered by this service." },
-        { "name": "TrustedEvaluatorsTooLarge", "description": "The trusted evaluator filter exceeds its supported size." },
-        { "name": "InvalidKind", "description": "The request contains an unsupported event kind." },
-        { "name": "InvalidCursor", "description": "The cursor is invalid or incompatible." },
+        { "name": "InvalidCursor", "description": "The cursor is invalid or incompatible with the selected feed." },
         { "name": "InternalError", "description": "The service encountered an internal error." }
       ],
       "input": {
@@ -37,15 +35,15 @@
       "output": {
         "encoding": "application/json",
         "schema": {
-          "description": "Returns ordered view-only feed items and an optional cursor for the next page.",
+          "description": "Returns ordered hydrated feed entries and an optional cursor for the next page.",
           "type": "object",
-          "required": ["items"],
+          "required": ["feed"],
           "properties": {
-            "items": {
+            "feed": {
               "type": "array",
               "items": {
                 "type": "ref",
-                "ref": "app.certified.feed.beta.defs#feedItem"
+                "ref": "#feedItem"
               }
             },
             "cursor": {
@@ -54,6 +52,24 @@
               "description": "Cursor for the next page. Omitted when no later page is known."
             }
           }
+        }
+      }
+    },
+    "feedItem": {
+      "type": "object",
+      "required": ["subject", "view"],
+      "description": "One record selected for the feed together with its hydrated feed-specific representation.",
+      "properties": {
+        "subject": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "AT-URI of the source record represented by this entry."
+        },
+        "view": {
+          "type": "union",
+          "closed": false,
+          "refs": ["app.certified.feed.beta.defs#certifiedFeedView"],
+          "description": "Hydrated representation produced by the selected feed."
         }
       }
     }

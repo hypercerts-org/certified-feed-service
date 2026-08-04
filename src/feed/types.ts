@@ -9,7 +9,7 @@ export const ORGANIZATION_QUALITIES = [
 /** A quality category that a trusted Orglabeler can assign to an organization. */
 export type OrganizationQuality = (typeof ORGANIZATION_QUALITIES)[number]
 
-/** Collections that can produce events in the feed skeleton. */
+/** Collections that can produce events in the Certified feed. */
 export const FEED_COLLECTIONS = [
   'org.hypercerts.claim.activity',
   'org.hypercerts.collection',
@@ -20,7 +20,7 @@ export const FEED_COLLECTIONS = [
   'app.certified.badge.award',
 ] as const
 
-/** Final feed-event classifications returned by the skeleton endpoint. */
+/** Final event classifications exposed by the Certified hydrated view. */
 export const FEED_KINDS = [
   'cert.create',
   'collection.create',
@@ -91,32 +91,16 @@ export interface GetFeedSkeletonInput {
   readonly params: FeedParams
 }
 
-/** Exact indexed record version that a downstream data plane should hydrate. */
-export interface FeedSubject {
-  /** AT-URI of the current indexed record. */
-  readonly uri: string
-  /** CID of the exact record version selected for this page. */
-  readonly cid: string
-}
-
-/** One classified, ordered event in the feed skeleton. */
+/** One unhydrated record selected for the feed. */
 export interface FeedSkeletonItem {
-  /** Stable event identifier, currently the source record AT-URI. */
-  readonly id: string
-  /** Interpretation the hydrator and UI should apply to the source record. */
-  readonly kind: FeedKind
-  /** Strong reference to the exact indexed source record. */
-  readonly subject: FeedSubject
-  /** DID that owns and published the source record. */
-  readonly actorDid: string
-  /** Timestamp used to place this item in the feed, newest first; falls back to indexing time when needed. */
-  readonly feedTimestamp: string
+  /** AT-URI of the record that the downstream data plane should hydrate. */
+  readonly subject: string
 }
 
 /** Public response body from app.certified.feed.beta.getFeedSkeleton. */
 export interface GetFeedSkeletonOutput {
-  /** Ordered skeleton records for the current page. */
-  readonly items: readonly FeedSkeletonItem[]
+  /** Ordered, unhydrated feed records for the current page. */
+  readonly feed: readonly FeedSkeletonItem[]
   /** Opaque cursor for a possible later page; absent at the known end. */
   readonly cursor?: string
 }

@@ -182,16 +182,11 @@
         "target": { "type": "ref", "ref": "com.atproto.repo.strongRef" }
       }
     },
-    "feedItem": {
+    "certifiedFeedView": {
       "type": "object",
-      "required": ["id", "kind", "subject", "feedTimestamp", "actor", "view"],
-      "description": "A feed event whose indexed source record was validated and projected into a view.",
+      "required": ["kind", "actor", "content"],
+      "description": "Hydrated representation of one entry from the Certified viewer-scope feed.",
       "properties": {
-        "id": {
-          "type": "string",
-          "format": "at-uri",
-          "description": "Stable event identifier, currently the source record AT URI."
-        },
         "kind": {
           "type": "string",
           "maxLength": 64,
@@ -204,17 +199,13 @@
             "hyperboard.create",
             "update.create",
             "endorsement.award"
-          ]
-        },
-        "subject": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
-        "feedTimestamp": {
-          "type": "string",
-          "format": "datetime",
-          "description": "Timestamp used to place this item in the feed, newest first. It uses the record's createdAt when valid; otherwise, it uses the time Hyperindex indexed the record."
+          ],
+          "description": "Certified event classification used to interpret and present the entry."
         },
         "actor": { "type": "ref", "ref": "#actorSummary" },
-        "view": {
+        "content": {
           "type": "union",
+          "closed": false,
           "refs": [
             "#activityView",
             "#collectionView",
@@ -223,7 +214,8 @@
             "#measurementView",
             "#hyperboardView",
             "#updateView"
-          ]
+          ],
+          "description": "Kind-specific content needed to present the entry."
         }
       }
     }

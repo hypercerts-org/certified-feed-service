@@ -186,43 +186,49 @@ describe('HydratedFeedService', () => {
     expect(pages.calls).toEqual([{ input, mode: 'with-source' }])
     expect(identities.calls).toEqual([[authorDid, endorsedDid]])
     expect(output.cursor).toBe(cursor)
-    expect(output.items.map((item) => item.id)).toEqual([
+    expect(output.feed.map((item) => item.subject)).toEqual([
       activityUri,
       endorsementUri,
     ])
-    expect(output.items[0]).toEqual({
-      id: activityUri,
-      kind: 'cert.create',
-      subject: { uri: activityUri, cid },
-      feedTimestamp: '2026-07-20T00:00:03.000000Z',
-      actor: {
-        did: authorDid,
-        handle: 'author.example',
-        displayName: 'Certified Author',
-      },
+    expect(output.feed[0]).toEqual({
+      subject: activityUri,
       view: {
-        $type: 'app.certified.feed.beta.defs#activityView',
-        title: 'Restore the watershed',
-        shortDescription: 'Native forest restoration',
-        createdAt,
-        locationCount: 0,
+        $type: 'app.certified.feed.beta.defs#certifiedFeedView',
+        kind: 'cert.create',
+        actor: {
+          did: authorDid,
+          handle: 'author.example',
+          displayName: 'Certified Author',
+        },
+        content: {
+          $type: 'app.certified.feed.beta.defs#activityView',
+          title: 'Restore the watershed',
+          shortDescription: 'Native forest restoration',
+          createdAt,
+          locationCount: 0,
+        },
       },
     })
-    expect(output.items[1]).toMatchObject({
-      id: endorsementUri,
-      actor: { did: authorDid },
+    expect(output.feed[1]).toMatchObject({
+      subject: endorsementUri,
       view: {
-        $type: 'app.certified.feed.beta.defs#endorsementView',
-        subject: { did: endorsedDid },
+        $type: 'app.certified.feed.beta.defs#certifiedFeedView',
+        actor: { did: authorDid },
+        content: {
+          $type: 'app.certified.feed.beta.defs#endorsementView',
+          subject: { did: endorsedDid },
+        },
       },
     })
 
-    for (const item of output.items) {
+    for (const item of output.feed) {
       expect(item).not.toHaveProperty('$type')
+      expect(item).not.toHaveProperty('id')
+      expect(item).not.toHaveProperty('feedTimestamp')
       expect(item).not.toHaveProperty('record')
       expect(item).not.toHaveProperty('recordState')
       expect(item).not.toHaveProperty('actorDid')
-      expect(item.actor).not.toHaveProperty('profileSource')
+      expect(item.view.actor).not.toHaveProperty('profileSource')
     }
   })
 
@@ -260,10 +266,12 @@ describe('HydratedFeedService', () => {
     const output = await service.getFeed(feedRequest())
 
     expect(identities.calls).toEqual([[authorDid]])
-    expect(output.items[0]).toMatchObject({
+    expect(output.feed[0]).toMatchObject({
       view: {
-        $type: 'app.certified.feed.beta.defs#measurementView',
-        target: { uri: targetUri, cid },
+        content: {
+          $type: 'app.certified.feed.beta.defs#measurementView',
+          target: { uri: targetUri, cid },
+        },
       },
     })
   })
@@ -288,7 +296,7 @@ describe('HydratedFeedService', () => {
     const service = new HydratedFeedService(pages, identities)
 
     await expect(service.getFeed(feedRequest())).resolves.toEqual({
-      items: [],
+      feed: [],
       cursor,
     })
     expect(identities.calls).toEqual([])
@@ -300,7 +308,7 @@ describe('HydratedFeedService', () => {
     const service = new HydratedFeedService(pages, identities)
 
     await expect(service.getFeed(feedRequest())).resolves.toEqual({
-      items: [],
+      feed: [],
       cursor,
     })
     expect(pages.calls).toHaveLength(1)

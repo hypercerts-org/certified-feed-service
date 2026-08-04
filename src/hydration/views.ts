@@ -1,4 +1,3 @@
-import type { FeedSubject } from '../feed/types.js'
 import type {
   ActivityFeedView,
   ActorImageReference,
@@ -8,6 +7,7 @@ import type {
   EndorsementFeedView,
   EvaluationFeedView,
   FeedItemView,
+  FeedTargetReference,
   HyperboardFeedView,
   LargeImageReference,
   MeasurementFeedView,
@@ -127,7 +127,7 @@ export interface FeedViewContext {
 
 const targetReference = (
   target: { readonly uri: string; readonly cid: string } | undefined,
-): FeedSubject | undefined =>
+): FeedTargetReference | undefined =>
   target === undefined ? undefined : { uri: target.uri, cid: target.cid }
 
 const endorsementViewInvariantError = (): Error =>

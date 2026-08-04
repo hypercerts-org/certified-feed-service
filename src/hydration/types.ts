@@ -1,6 +1,6 @@
 import type { BlobRef } from '@atproto/lex'
 
-import type { FeedKind, FeedSubject } from '../feed/types.js'
+import type { FeedKind } from '../feed/types.js'
 
 /** Hyperindex actor fields used to build a feed-card identity summary. */
 export interface ActorRow {
@@ -99,12 +99,18 @@ export interface EndorsementFeedView {
   readonly createdAt?: string
 }
 
+/** Exact record reference used by hydrated content that targets another record. */
+export interface FeedTargetReference {
+  readonly uri: string
+  readonly cid: string
+}
+
 /** Lean first-render fields for an evaluation card. */
 export interface EvaluationFeedView {
   readonly $type: 'app.certified.feed.beta.defs#evaluationView'
   readonly summary?: string
   readonly createdAt?: string
-  readonly target?: FeedSubject
+  readonly target?: FeedTargetReference
 }
 
 /** Lean first-render fields for a measurement card. */
@@ -112,7 +118,7 @@ export interface MeasurementFeedView {
   readonly $type: 'app.certified.feed.beta.defs#measurementView'
   readonly metric?: string
   readonly createdAt?: string
-  readonly target?: FeedSubject
+  readonly target?: FeedTargetReference
 }
 
 /** Verb-only first-render fields for a Hyperboard card. */
@@ -128,7 +134,7 @@ export interface UpdateFeedView {
   readonly shortDescription?: string
   readonly image?: UpdateImageReference
   readonly createdAt?: string
-  readonly target?: FeedSubject
+  readonly target?: FeedTargetReference
 }
 
 /** Stable kind-specific card data built from one validated source record. */
@@ -141,18 +147,22 @@ export type FeedItemView =
   | HyperboardFeedView
   | UpdateFeedView
 
-/** View-only hydrated item built from one validated source record. */
-export interface HydratedFeedItem {
-  readonly id: string
+/** Certified feed-specific representation attached to one generic feed item. */
+export interface CertifiedFeedView {
+  readonly $type: 'app.certified.feed.beta.defs#certifiedFeedView'
   readonly kind: FeedKind
-  readonly subject: FeedSubject
-  readonly feedTimestamp: string
   readonly actor: ActorSummary
-  readonly view: FeedItemView
+  readonly content: FeedItemView
+}
+
+/** Generic hydrated item built from one validated source record. */
+export interface HydratedFeedItem {
+  readonly subject: string
+  readonly view: CertifiedFeedView
 }
 
 /** Public response body projected by the hydrated feed service. */
 export interface GetHydratedFeedOutput {
-  readonly items: readonly HydratedFeedItem[]
+  readonly feed: readonly HydratedFeedItem[]
   readonly cursor?: string
 }

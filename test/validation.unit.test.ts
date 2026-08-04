@@ -34,14 +34,28 @@ describe('feed request validation', () => {
     expect(result.trustedEvaluators).toEqual([viewer])
   })
 
-  it('rejects an unsupported kind with the stable error name', () => {
+  it('reports Certified parameter failures through the generic InvalidRequest error', () => {
     expect(() =>
       normalizeFeedRequest(
         feedParams({ viewerDid: viewer, kinds: ['cert.creat'] }),
       ),
     ).toThrowError(
       expect.objectContaining<Partial<FeedError>>({
-        code: FeedErrorCode.InvalidKind,
+        code: FeedErrorCode.InvalidRequest,
+        status: 422,
+      }),
+    )
+
+    const trustedEvaluators = Array.from(
+      { length: 65 },
+      (_, index) => `did:plc:${index.toString(36).padStart(24, 'a')}`,
+    )
+    expect(() =>
+      normalizeFeedRequest(feedParams({ viewerDid: viewer, trustedEvaluators })),
+    ).toThrowError(
+      expect.objectContaining<Partial<FeedError>>({
+        code: FeedErrorCode.InvalidRequest,
+        status: 422,
       }),
     )
   })

@@ -17,7 +17,6 @@ import { Metrics } from '../src/metrics.js'
 const viewer = 'did:plc:ar7c4by46qjdydhdevvrndac'
 const actor = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 const uri = `at://${actor}/org.hypercerts.claim.activity/3kpn`
-const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 const blobCid = 'bafkreiehxpuhtr5f6v4eu4byjo2j7kkrhjvd7psmfu4imnpdzb3bdqb7vy'
 const avatarBlob = jsonToLex(
   {
@@ -28,7 +27,6 @@ const avatarBlob = jsonToLex(
   },
   { strict: true },
 ) as BlobRef
-const feedTimestamp = '2026-07-21T10:00:00.000000Z'
 const logger = pino({ enabled: false })
 
 const skeletonPath =
@@ -40,11 +38,11 @@ const compatibleDatabase: DatabaseCompatibilityChecker = {
 }
 
 const emptySkeleton = (): FeedSkeletonReader => ({
-  getFeedSkeleton: vi.fn(async () => ({ items: [] })),
+  getFeedSkeleton: vi.fn(async () => ({ feed: [] })),
 })
 
 const emptyHydrated = (): HydratedFeedReader => ({
-  getFeed: vi.fn(async () => ({ items: [] })),
+  getFeed: vi.fn(async () => ({ feed: [] })),
 })
 
 const appServices = (
@@ -65,22 +63,12 @@ const post = (url: string, body: string): Request =>
   })
 
 describe('HTTP application', () => {
-  it('serves the existing skeleton POST procedure unchanged', async () => {
+  it('serves the generic skeleton POST procedure', async () => {
     let received: GetFeedSkeletonInput | undefined
     const skeleton: FeedSkeletonReader = {
       getFeedSkeleton: vi.fn(async (input) => {
         received = input
-        return {
-          items: [
-            {
-              id: uri,
-              kind: 'cert.create' as const,
-              subject: { uri, cid },
-              actorDid: actor,
-              feedTimestamp,
-            },
-          ],
-        }
+        return { feed: [{ subject: uri }] }
       }),
     }
     const app = createApp(
@@ -96,8 +84,8 @@ describe('HTTP application', () => {
 
     expect(response.status).toBe(200)
     expect(received).toMatchObject(feedRequest())
-    await expect(response.json()).resolves.toMatchObject({
-      items: [{ id: uri, subject: { cid } }],
+    await expect(response.json()).resolves.toEqual({
+      feed: [{ subject: uri }],
     })
   })
 
@@ -107,24 +95,25 @@ describe('HTTP application', () => {
       getFeed: vi.fn(async (input) => {
         received = input
         return {
-          items: [
+          feed: [
             {
-              id: uri,
-              kind: 'cert.create' as const,
-              subject: { uri, cid },
-              feedTimestamp,
-              actor: {
-                did: actor,
-                handle: 'actor.example',
-                avatar: {
-                  $type: 'org.hypercerts.defs#smallImage' as const,
-                  image: avatarBlob,
-                },
-              },
+              subject: uri,
               view: {
-                $type: 'app.certified.feed.beta.defs#activityView' as const,
-                title: 'Restore the watershed',
-                locationCount: 0,
+                $type: 'app.certified.feed.beta.defs#certifiedFeedView' as const,
+                kind: 'cert.create' as const,
+                actor: {
+                  did: actor,
+                  handle: 'actor.example',
+                  avatar: {
+                    $type: 'org.hypercerts.defs#smallImage' as const,
+                    image: avatarBlob,
+                  },
+                },
+                content: {
+                  $type: 'app.certified.feed.beta.defs#activityView' as const,
+                  title: 'Restore the watershed',
+                  locationCount: 0,
+                },
               },
             },
           ],
@@ -145,22 +134,27 @@ describe('HTTP application', () => {
     expect(response.status).toBe(200)
     expect(received).toMatchObject(feedRequest())
     await expect(response.json()).resolves.toMatchObject({
-      items: [
+      feed: [
         {
-          id: uri,
-          actor: {
-            did: actor,
-            avatar: {
-              $type: 'org.hypercerts.defs#smallImage',
-              image: {
-                $type: 'blob',
-                ref: { $link: blobCid },
-                mimeType: 'image/png',
-                size: 128,
+          subject: uri,
+          view: {
+            $type: 'app.certified.feed.beta.defs#certifiedFeedView',
+            actor: {
+              did: actor,
+              avatar: {
+                $type: 'org.hypercerts.defs#smallImage',
+                image: {
+                  $type: 'blob',
+                  ref: { $link: blobCid },
+                  mimeType: 'image/png',
+                  size: 128,
+                },
               },
             },
+            content: {
+              $type: 'app.certified.feed.beta.defs#activityView',
+            },
           },
-          view: { $type: 'app.certified.feed.beta.defs#activityView' },
         },
       ],
     })
@@ -286,15 +280,7 @@ describe('HTTP application', () => {
       skeletonPath,
       appServices({
         getFeedSkeleton: vi.fn(async () => ({
-          items: [
-            {
-              id: 'not-an-at-uri',
-              kind: 'cert.create' as const,
-              subject: { uri: 'bad', cid: 'bad' },
-              actorDid: 'not-a-did',
-              feedTimestamp: 'not-a-date',
-            },
-          ],
+          feed: [{ subject: 'not-an-at-uri' }],
         })),
       }),
     ],
@@ -303,17 +289,18 @@ describe('HTTP application', () => {
       hydratedPath,
       appServices(emptySkeleton(), {
         getFeed: vi.fn(async () => ({
-          items: [
+          feed: [
             {
-              id: 'not-an-at-uri',
-              kind: 'cert.create' as const,
-              subject: { uri: 'bad', cid: 'bad' },
-              feedTimestamp: 'not-a-date',
-              actor: { did: 'not-a-did' },
+              subject: 'not-an-at-uri',
               view: {
-                $type: 'app.certified.feed.beta.defs#activityView' as const,
-                title: 'Invalid response fixture',
-                locationCount: 0,
+                $type: 'app.certified.feed.beta.defs#certifiedFeedView' as const,
+                kind: 'cert.create' as const,
+                actor: { did: 'not-a-did' },
+                content: {
+                  $type: 'app.certified.feed.beta.defs#activityView' as const,
+                  title: 'Invalid response fixture',
+                  locationCount: 0,
+                },
               },
             },
           ],
@@ -423,10 +410,10 @@ describe('HTTP application', () => {
     })
   })
 
-  it('keeps expected skeleton FeedError translation unchanged', async () => {
+  it('translates expected skeleton InvalidRequest details', async () => {
     const getFeedSkeleton = vi.fn(async () => {
       throw new FeedError(
-        FeedErrorCode.TrustedEvaluatorsTooLarge,
+        FeedErrorCode.InvalidRequest,
         'Reduce trustedEvaluators before retrying.',
         422,
       )
@@ -444,7 +431,7 @@ describe('HTTP application', () => {
 
     expect(response.status).toBe(422)
     await expect(response.json()).resolves.toEqual({
-      error: 'TrustedEvaluatorsTooLarge',
+      error: 'InvalidRequest',
       message: 'Reduce trustedEvaluators before retrying.',
     })
   })
@@ -453,7 +440,7 @@ describe('HTTP application', () => {
     const internalCause = new Error('secret database detail')
     const getFeed = vi.fn(async () => {
       throw new FeedError(
-        FeedErrorCode.TrustedEvaluatorsTooLarge,
+        FeedErrorCode.InvalidRequest,
         'Reduce trustedEvaluators before retrying.',
         422,
         { cause: internalCause },
@@ -474,7 +461,7 @@ describe('HTTP application', () => {
     expect(getFeed).toHaveBeenCalledOnce()
     expect(response.status).toBe(422)
     expect(JSON.parse(responseText)).toEqual({
-      error: 'TrustedEvaluatorsTooLarge',
+      error: 'InvalidRequest',
       message: 'Reduce trustedEvaluators before retrying.',
     })
     expect(responseText).not.toContain(internalCause.message)

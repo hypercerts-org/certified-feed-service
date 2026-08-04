@@ -4,13 +4,11 @@
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Builds an ordered feed skeleton from current indexed records for the registered feed and parameters selected in the request. Authentication is not required. The caller hydrates returned strong references separately.",
+      "description": "Builds an ordered feed skeleton from current indexed records for the registered feed and parameters selected in the request. Authentication is not required. The caller hydrates returned AT-URIs separately.",
       "errors": [
-        { "name": "InvalidRequest", "description": "The request is malformed or semantically invalid." },
+        { "name": "InvalidRequest", "description": "The request or the selected feed's parameters are malformed or semantically invalid." },
         { "name": "UnsupportedFeed", "description": "The requested feed identifier is not registered by this service." },
-        { "name": "TrustedEvaluatorsTooLarge", "description": "The trusted evaluator filter exceeds its supported size." },
-        { "name": "InvalidKind", "description": "The request contains an unsupported event kind." },
-        { "name": "InvalidCursor", "description": "The cursor is invalid or incompatible." },
+        { "name": "InvalidCursor", "description": "The cursor is invalid or incompatible with the selected feed." },
         { "name": "InternalError", "description": "The service encountered an internal error." }
       ],
       "input": {
@@ -37,11 +35,11 @@
       "output": {
         "encoding": "application/json",
         "schema": {
-          "description": "Returns ordered feed skeleton items with exact record references and an optional cursor for the next page.",
+          "description": "Returns ordered, unhydrated feed subjects and an optional cursor for the next page.",
           "type": "object",
-          "required": ["items"],
+          "required": ["feed"],
           "properties": {
-            "items": {
+            "feed": {
               "type": "array",
               "items": { "type": "ref", "ref": "#feedSkeletonItem" }
             },
@@ -56,30 +54,13 @@
     },
     "feedSkeletonItem": {
       "type": "object",
-      "required": ["id", "kind", "subject", "actorDid", "feedTimestamp"],
-      "description": "One classified feed event represented by its exact indexed record version.",
+      "required": ["subject"],
+      "description": "One unhydrated record selected for the feed.",
       "properties": {
-        "id": { "type": "string", "format": "at-uri" },
-        "kind": {
+        "subject": {
           "type": "string",
-          "maxLength": 64,
-          "knownValues": [
-            "cert.create",
-            "collection.create",
-            "project.created_with_cert",
-            "evaluation.create",
-            "measurement.create",
-            "hyperboard.create",
-            "update.create",
-            "endorsement.award"
-          ]
-        },
-        "subject": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
-        "actorDid": { "type": "string", "format": "did" },
-        "feedTimestamp": {
-          "type": "string",
-          "format": "datetime",
-          "description": "Timestamp used to place this item in the feed, newest first. It uses the record's createdAt when valid; otherwise, it uses the time Hyperindex indexed the record."
+          "format": "at-uri",
+          "description": "AT-URI of the record to hydrate."
         }
       }
     }

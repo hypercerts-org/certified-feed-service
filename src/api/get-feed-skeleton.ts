@@ -9,7 +9,7 @@ import getFeedSkeleton, {
 } from '../lexicons/app/certified/feed/beta/getFeedSkeleton.js'
 import type { Metrics } from '../metrics.js'
 
-/** Registers the public Certified feed procedure on a LexRouter instance. */
+/** Registers the public generic feed-skeleton procedure on a LexRouter instance. */
 export const registerGetFeedSkeleton = (
   router: LexRouter,
   feedService: FeedSkeletonReader,
