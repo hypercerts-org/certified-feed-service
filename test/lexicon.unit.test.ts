@@ -23,7 +23,6 @@ const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
 const viewerDid = 'did:plc:ar7c4by46qjdydhdevvrndac'
 const actorDid = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 const uri = `at://${actorDid}/org.hypercerts.claim.activity/3kpn`
-const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 
 describe('feed skeleton Lexicon contract', () => {
   it('uses a feed identifier and open params union to select a feed contract', () => {
@@ -95,18 +94,10 @@ describe('feed skeleton Lexicon contract', () => {
     ).not.toThrow()
   })
 
-  it('keeps the existing exact-reference skeleton output wire shape', () => {
+  it('accepts a generic URI-only feed skeleton output', () => {
     expect(() =>
       $output.schema.$parse({
-        items: [
-          {
-            id: uri,
-            kind: 'cert.create',
-            subject: { uri, cid },
-            actorDid,
-            feedTimestamp: '2026-07-21T10:00:00.000Z',
-          },
-        ],
+        feed: [{ subject: uri }],
       }),
     ).not.toThrow()
   })

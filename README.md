@@ -11,7 +11,7 @@ POST /xrpc/app.certified.feed.beta.getFeedSkeleton
 Content-Type: application/json
 ```
 
-This is an unauthenticated, app-specific XRPC procedure, not the Bluesky `app.bsky.feed.getFeedSkeleton` query. `feedId` selects a registered algorithm, while the open-union `params` object selects its parameter contract through `$type`. The current algorithm's `viewerDid` selects the viewer scope and is not verified against an authenticated caller. `certified.app` or the Hypercerts data plane calls the procedure directly, then hydrates each returned URI and CID.
+This is an unauthenticated, app-specific XRPC procedure, not the Bluesky `app.bsky.feed.getFeedSkeleton` query. `feedId` selects a registered algorithm, while the open-union `params` object selects its parameter contract through `$type`. The current algorithm's `viewerDid` selects the viewer scope and is not verified against an authenticated caller. `certified.app` or the Hypercerts data plane calls the procedure directly, then hydrates each returned AT-URI.
 
 ```bash
 curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeedSkeleton \
@@ -37,21 +37,16 @@ Example response:
 
 ```json
 {
-  "items": [
+  "feed": [
     {
-      "id": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.claim.activity/3kpn",
-      "kind": "cert.create",
-      "subject": {
-        "uri": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.claim.activity/3kpn",
-        "cid": "bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u"
-      },
-      "actorDid": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
-      "feedTimestamp": "2026-07-21T10:00:00.000000Z"
+      "subject": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.claim.activity/3kpn"
     }
   ],
   "cursor": "eyJ2ZXJzaW9uIjoxLCJmZWVkSWQiOiJhcHAuY2VydGlmaWVkLmZlZWQuYmV0YS5kZWZzI2NlcnRpZmllZEZlZWQiLCJ2YWx1ZSI6eyJ2YWx1ZSI6IjIwMjYtMDctMjFUMTA6MDA6MDAuMDAwMDAwWiIsInVyaSI6ImF0Oi8vZGlkOnBsYzpld3ZpN254enlvdW42emh4cmhzNjRvaXovb3JnLmh5cGVyY2VydHMuY2xhaW0uYWN0aXZpdHkvM2twbiJ9fQ"
 }
 ```
+
+Each skeleton entry intentionally contains only the record AT-URI. The downstream hydrator resolves the current indexed record version; the skeleton does not pin hydration to a CID or expose feed-specific classification metadata.
 
 The cursor is opaque to callers, scoped to the selected `feedId`, and interpreted by that feed's registered cursor implementation.
 
@@ -79,7 +74,7 @@ sequenceDiagram
     Feed-->>Service: Metadata page
     Service-->>XRPC: Feed skeleton
     XRPC-->>HTTP: XRPC response
-    HTTP-->>Client: Items and optional cursor
+    HTTP-->>Client: Feed subjects and optional cursor
 ```
 
 ## Request behavior
@@ -117,9 +112,9 @@ Ordering is:
 feed timestamp DESC, record URI DESC
 ```
 
-`feedTimestamp` is the timestamp used to place an item in the feed, newest first. It uses the record's valid `createdAt` when available; otherwise, it uses the time Hyperindex indexed the record.
+The internal feed timestamp places each subject in the feed, newest first. It uses the record's valid `createdAt` when available; otherwise, it uses the time Hyperindex indexed the record. The public skeleton does not expose this timestamp.
 
-Cursor version 1 stores that feed timestamp and the record URI.
+Cursor version 1 stores the internal feed timestamp and the record URI.
 
 The SQL pipeline classifies and folds all eligible records before kind filtering, keyset filtering, ordering, and `LIMIT`. It fetches `limit + 1` matching events to decide whether a next cursor should be returned.
 

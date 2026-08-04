@@ -13,7 +13,6 @@ const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
 const viewer = 'did:plc:ar7c4by46qjdydhdevvrndac'
 const actor = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 const uri = `at://${actor}/org.hypercerts.claim.activity/3kpn`
-const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 const logger = pino({ enabled: false })
 
 const feedRequest = (viewerDid = viewer): GetFeedSkeletonInput => ({
@@ -32,15 +31,7 @@ describe('HTTP application', () => {
       getFeedSkeleton: vi.fn(async (input) => {
         received = input
         return {
-          items: [
-            {
-              id: uri,
-              kind: 'cert.create' as const,
-              subject: { uri, cid },
-              actorDid: actor,
-              feedTimestamp: '2026-07-21T10:00:00.000000Z',
-            },
-          ],
+          feed: [{ subject: uri }],
         }
       }),
     }
@@ -62,8 +53,8 @@ describe('HTTP application', () => {
       feedId,
       params: { $type: paramsType, viewerDid: viewer },
     })
-    await expect(response.json()).resolves.toMatchObject({
-      items: [{ id: uri, subject: { cid } }],
+    await expect(response.json()).resolves.toEqual({
+      feed: [{ subject: uri }],
     })
   })
 
@@ -175,15 +166,7 @@ describe('HTTP application', () => {
   it('rejects an invalid service response instead of violating the Lexicon', async () => {
     const feed: FeedSkeletonReader = {
       getFeedSkeleton: vi.fn(async () => ({
-        items: [
-          {
-            id: 'not-an-at-uri',
-            kind: 'cert.create' as const,
-            subject: { uri: 'bad', cid: 'bad' },
-            actorDid: 'not-a-did',
-            feedTimestamp: 'not-a-date',
-          },
-        ],
+        feed: [{ subject: 'not-an-at-uri' }],
       })),
     }
     const app = createApp(compatibleDatabase, feed, new Metrics(), logger)

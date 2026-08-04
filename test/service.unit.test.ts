@@ -77,13 +77,7 @@ describe('FeedService', () => {
     const service = new FeedService(pages)
 
     await expect(service.getFeedSkeleton(input)).resolves.toEqual({
-      items: rows.map((item) => ({
-        id: item.uri,
-        kind: item.kind,
-        subject: { uri: item.uri, cid: item.cid },
-        actorDid: item.actorDid,
-        feedTimestamp: item.sortValue,
-      })),
+      feed: rows.map((item) => ({ subject: item.uri })),
       cursor,
     })
     expect(pages.calls).toEqual([{ input, mode: 'metadata' }])

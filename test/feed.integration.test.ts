@@ -527,7 +527,7 @@ describe('Certified feed definition against Postgres', () => {
     )
 
     service = createService([trustedLabeler])
-    const output = await getFeedSkeleton({
+    const requestParams: Omit<CertifiedFeedParams, '$type'> = {
       viewerDid: viewer,
       trustedEvaluators: [evaluator],
       organizationQuality: {
@@ -535,9 +535,17 @@ describe('Certified feed definition against Postgres', () => {
         includeUnrated: false,
       },
       limit: 50,
-    })
+    }
+    const output = await getFeedSkeleton(requestParams)
+    const metadata = await createPages([trustedLabeler]).loadPage(
+      {
+        feedId,
+        params: { $type: paramsType, ...requestParams },
+      },
+      'metadata',
+    )
 
-    expect(output.items.map((item) => item.kind)).toEqual([
+    expect(metadata.rows.map((item) => item.kind)).toEqual([
       'evaluation.create',
       'project.created_with_cert',
       'update.create',
@@ -546,7 +554,7 @@ describe('Certified feed definition against Postgres', () => {
       'cert.create',
       'endorsement.award',
     ])
-    expect(output.items.map((item) => item.subject.uri)).toEqual([
+    expect(output.feed.map((item) => item.subject)).toEqual([
       expect.stringContaining('/org.hypercerts.context.evaluation/'),
       collectionUri,
       expect.stringContaining('/org.hypercerts.context.attachment/update'),
@@ -555,13 +563,13 @@ describe('Certified feed definition against Postgres', () => {
       endorsedUri,
       visibleAwardUri,
     ])
-    expect(output.items.some((item) => item.subject.uri === activityUri)).toBe(false)
-    expect(output.items[0]?.feedTimestamp).toBe('2026-07-21T11:00:00.000000Z')
+    expect(output.feed.some((item) => item.subject === activityUri)).toBe(false)
+    expect(metadata.rows[0]?.sortValue).toBe('2026-07-21T11:00:00.000000Z')
     expect(
-      output.items.find((item) => item.subject.uri === boardUri)?.feedTimestamp,
+      metadata.rows.find((item) => item.uri === boardUri)?.sortValue,
     ).toBe('2026-07-21T08:00:00.000000Z')
     expect(
-      output.items.find((item) => item.subject.uri === dateOnlyUri)?.feedTimestamp,
+      metadata.rows.find((item) => item.uri === dateOnlyUri)?.sortValue,
     ).toBe('2026-07-21T07:30:00.000000Z')
 
     const projectOnly = await getFeedForFollows([followedOrg], {
@@ -571,8 +579,8 @@ describe('Certified feed definition against Postgres', () => {
       },
       kinds: ['project.created_with_cert'],
     })
-    expect(projectOnly.items).toHaveLength(1)
-    expect(projectOnly.items[0]?.subject.uri).toBe(collectionUri)
+    expect(projectOnly.feed).toHaveLength(1)
+    expect(projectOnly.feed[0]?.subject).toBe(collectionUri)
 
     await seedExternalLabel(trustedLabeler, blockedOrg, 'likely-test', {
       neg: true,
@@ -582,14 +590,14 @@ describe('Certified feed definition against Postgres', () => {
     const expiredNegation = await getFeedForFollows([blockedOrg], {
       organizationQuality: { allowed: ['high-quality'], includeUnrated: true },
     })
-    expect(expiredNegation.items).toEqual([])
+    expect(expiredNegation.feed).toEqual([])
 
     const activelyNegatedOrg = randomDid()
     await Promise.all([
       seedActor(activelyNegatedOrg),
       seedOrganization(activelyNegatedOrg),
     ])
-    await seedRecord(
+    const activeNegationUri = await seedRecord(
       activelyNegatedOrg,
       'org.hypercerts.claim.activity',
       'active-negation',
@@ -604,9 +612,7 @@ describe('Certified feed definition against Postgres', () => {
     const activeNegation = await getFeedForFollows([activelyNegatedOrg], {
       organizationQuality: { allowed: ['high-quality'], includeUnrated: true },
     })
-    expect(activeNegation.items.map((item) => item.kind)).toEqual([
-      'cert.create',
-    ])
+    expect(activeNegation.feed).toEqual([{ subject: activeNegationUri }])
   })
 
   it('detects organizations only through the exact organization self record', async () => {
@@ -649,7 +655,7 @@ describe('Certified feed definition against Postgres', () => {
       },
     )
 
-    expect(output.items.map((item) => item.subject.uri)).toEqual([
+    expect(output.feed.map((item) => item.subject)).toEqual([
       personActivity,
     ])
   })
@@ -734,7 +740,7 @@ describe('Certified feed definition against Postgres', () => {
         },
       },
     )
-    expect(assertions.items).toEqual([])
+    expect(assertions.feed).toEqual([])
 
     const negations = await getFeedForFollows(
       [malformedCtsNegation, malformedExpNegation, unlabeled],
@@ -745,8 +751,11 @@ describe('Certified feed definition against Postgres', () => {
         },
       },
     )
-    expect(negations.items).toHaveLength(1)
-    expect(negations.items[0]?.actorDid).toBe(unlabeled)
+    expect(negations.feed).toEqual([
+      {
+        subject: `at://${unlabeled}/org.hypercerts.claim.activity/quality-timestamp`,
+      },
+    ])
   })
 
   it('expires positive labels and lets equal-time negations cancel assertions', async () => {
@@ -800,7 +809,7 @@ describe('Certified feed definition against Postgres', () => {
         includeUnrated: false,
       },
     })
-    expect(expired.items).toEqual([])
+    expect(expired.feed).toEqual([])
 
     const equalNegation = await getFeedForFollows([equalNegationOrg], {
       organizationQuality: {
@@ -808,8 +817,11 @@ describe('Certified feed definition against Postgres', () => {
         includeUnrated: true,
       },
     })
-    expect(equalNegation.items).toHaveLength(1)
-    expect(equalNegation.items[0]?.actorDid).toBe(equalNegationOrg)
+    expect(equalNegation.feed).toEqual([
+      {
+        subject: `at://${equalNegationOrg}/org.hypercerts.claim.activity/equal-negation`,
+      },
+    ])
   })
 
   it('orders by record_created_at and falls back to indexed_at', async () => {
@@ -835,13 +847,9 @@ describe('Certified feed definition against Postgres', () => {
 
     const output = await getFeedForFollows([author])
 
-    expect(output.items.map((item) => item.subject.uri)).toEqual([
+    expect(output.feed.map((item) => item.subject)).toEqual([
       materialized,
       fallback,
-    ])
-    expect(output.items.map((item) => item.feedTimestamp)).toEqual([
-      '2026-07-21T12:00:00.000000Z',
-      '2026-07-21T11:00:00.000000Z',
     ])
   })
 
@@ -890,13 +898,9 @@ describe('Certified feed definition against Postgres', () => {
 
     const output = await getFeedForFollows([author], { limit: 50 })
 
-    expect(output.items.map((item) => item.subject.uri)).toEqual([
+    expect(output.feed.map((item) => item.subject)).toEqual([
       fallbackCollection,
       materializedCollection,
-    ])
-    expect(output.items.map((item) => item.kind)).toEqual([
-      'project.created_with_cert',
-      'project.created_with_cert',
     ])
   })
 
@@ -965,7 +969,7 @@ describe('Certified feed definition against Postgres', () => {
       limit: 50,
     })
 
-    expect(output.items.map((item) => item.subject.uri)).toEqual([
+    expect(output.feed.map((item) => item.subject)).toEqual([
       subjectActivity,
       awardUri,
     ])
@@ -1013,10 +1017,10 @@ describe('Certified feed definition against Postgres', () => {
         viewerDid: viewer,
         trustedEvaluators: [disallowedIssuer],
       }),
-    ).resolves.toEqual({ items: [] })
+    ).resolves.toEqual({ feed: [] })
     await expect(
       getFeedForFollows([disallowedIssuer]),
-    ).resolves.toEqual({ items: [] })
+    ).resolves.toEqual({ feed: [] })
 
     const allowedAwardUri = await seedRecord(
       allowedIssuer,
@@ -1047,18 +1051,18 @@ describe('Certified feed definition against Postgres', () => {
     )
     const allowedOutput = await getFeedForFollows([allowedIssuer])
 
-    expect(allowedOutput.items.map((item) => item.subject.uri)).toEqual([
+    expect(allowedOutput.feed.map((item) => item.subject)).toEqual([
       allowedAwardUri,
     ])
-    expect(allowedOutput.items.some((item) => item.subject.uri === disallowedAwardUri)).toBe(
+    expect(allowedOutput.feed.some((item) => item.subject === disallowedAwardUri)).toBe(
       false,
     )
-    expect(allowedOutput.items.some((item) => item.subject.uri === malformedAwardUri)).toBe(
+    expect(allowedOutput.feed.some((item) => item.subject === malformedAwardUri)).toBe(
       false,
     )
     expect(
-      allowedOutput.items.some(
-        (item) => item.subject.uri === disallowedSubjectActivity,
+      allowedOutput.feed.some(
+        (item) => item.subject === disallowedSubjectActivity,
       ),
     ).toBe(false)
   })
@@ -1119,11 +1123,11 @@ describe('Certified feed definition against Postgres', () => {
         viewerDid: viewer,
         trustedEvaluators: [evaluator],
       }),
-    ).resolves.toEqual({ items: [] })
+    ).resolves.toEqual({ feed: [] })
 
     await expect(
       getFeedForFollows([evaluator]),
-    ).resolves.toEqual({ items: [] })
+    ).resolves.toEqual({ feed: [] })
   })
 
   it('requires exact CIDs when pairing projects and resolving badge definitions', async () => {
@@ -1187,17 +1191,13 @@ describe('Certified feed definition against Postgres', () => {
       limit: 50,
     })
 
-    expect(output.items.map((item) => item.subject.uri)).toEqual([
+    expect(output.feed.map((item) => item.subject)).toEqual([
       collectionUri,
       activityUri,
     ])
-    expect(output.items.map((item) => item.kind)).toEqual([
-      'collection.create',
-      'cert.create',
-    ])
-    expect(output.items.some((item) => item.subject.uri === awardUri)).toBe(false)
+    expect(output.feed.some((item) => item.subject === awardUri)).toBe(false)
     expect(
-      output.items.some((item) => item.subject.uri === subjectActivity),
+      output.feed.some((item) => item.subject === subjectActivity),
     ).toBe(false)
   })
 
@@ -1243,23 +1243,17 @@ describe('Certified feed definition against Postgres', () => {
       viewerDid: viewer,
       limit: 2,
     })
-    expect(first.items.map((item) => item.subject.uri)).toEqual([
+    expect(first.feed.map((item) => item.subject)).toEqual([
       collection,
       standalone,
     ])
-    expect(first.items[0]?.kind).toBe('project.created_with_cert')
 
     const second = await getFeedSkeleton({
       viewerDid: viewer,
       limit: 2,
       cursor: first.cursor!,
     })
-    expect(second.items.map((item) => item.subject.uri)).toEqual([old])
-    expect(
-      [...first.items, ...second.items].some(
-        (item) => item.subject.uri === pairedActivity,
-      ),
-    ).toBe(false)
+    expect(second.feed.map((item) => item.subject)).toEqual([old])
   })
 
   it('paginates equal timestamps by descending URI without repeats', async () => {
@@ -1285,7 +1279,7 @@ describe('Certified feed definition against Postgres', () => {
       viewerDid: viewer,
       limit: 2,
     })
-    expect(first.items.map((item) => item.subject.uri)).toEqual([
+    expect(first.feed.map((item) => item.subject)).toEqual([
       uris[2],
       uris[1],
     ])
@@ -1296,7 +1290,7 @@ describe('Certified feed definition against Postgres', () => {
       limit: 2,
       cursor: first.cursor!,
     })
-    expect(second.items.map((item) => item.subject.uri)).toEqual([uris[0]])
+    expect(second.feed.map((item) => item.subject)).toEqual([uris[0]])
     expect(second.cursor).toBeUndefined()
   })
 
@@ -1321,7 +1315,7 @@ describe('Certified feed definition against Postgres', () => {
 
     await expect(
       getFeedSkeleton({ viewerDid: viewer }),
-    ).resolves.toEqual({ items: [] })
+    ).resolves.toEqual({ feed: [] })
   })
 
   it('ignores responses that target a stale award CID', async () => {
@@ -1370,15 +1364,13 @@ describe('Certified feed definition against Postgres', () => {
     )
 
     const authorOutput = await getFeedForFollows([evaluator])
-    expect(authorOutput.items).toHaveLength(1)
-    expect(authorOutput.items[0]?.subject.uri).toBe(awardUri)
+    expect(authorOutput.feed).toEqual([{ subject: awardUri }])
 
     const evaluatorOutput = await getFeedSkeleton({
       viewerDid: viewer,
       trustedEvaluators: [evaluator],
     })
-    expect(evaluatorOutput.items).toHaveLength(1)
-    expect(evaluatorOutput.items[0]?.subject.uri).toBe(subjectActivity)
+    expect(evaluatorOutput.feed).toEqual([{ subject: subjectActivity }])
   })
 
   it('always derives the base scope from the viewer current follows', async () => {
@@ -1404,10 +1396,10 @@ describe('Certified feed definition against Postgres', () => {
 
     const output = await getFeedSkeleton({ viewerDid: viewer })
 
-    expect(output.items.map((item) => item.subject.uri)).toEqual([
+    expect(output.feed.map((item) => item.subject)).toEqual([
       followedUri,
     ])
-    expect(output.items.some((item) => item.subject.uri === unfollowedUri)).toBe(
+    expect(output.feed.some((item) => item.subject === unfollowedUri)).toBe(
       false,
     )
   })
@@ -1445,6 +1437,6 @@ describe('Certified feed definition against Postgres', () => {
 
     const output = await getFeedSkeleton({ viewerDid: viewer })
 
-    expect(output.items.map((item) => item.subject.uri)).toEqual([selectedUri])
+    expect(output.feed.map((item) => item.subject)).toEqual([selectedUri])
   })
 })
