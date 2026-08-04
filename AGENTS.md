@@ -136,7 +136,7 @@ A request, response, event kind, view, or public-error change normally requires 
 
 Preserve these unless the public contract is intentionally revised and documented:
 
-- Both procedures accept the same `{ feedId, params }` wrapper. The public params union remains open for future feeds, but runtime dispatch rejects an unregistered `feedId` with `UnsupportedFeed` and rejects a params discriminator that does not match the selected feed with `InvalidRequest` before querying.
+- Both procedures accept the same `{ feedId, params?, limit?, cursor? }` wrapper. `limit` and `cursor` are generic top-level pagination controls; `params` contains only algorithm-specific values and may be omitted for feeds that declare no params contract. The public params union remains open for future feeds. Runtime dispatch rejects an unregistered `feedId` with `UnsupportedFeed`, while the current Certified feed rejects missing params or a mismatched params discriminator with `InvalidRequest` before querying.
 - The base scope always resolves from the viewer's current Certified follows. There is no caller-supplied author override.
 - Deduplicate request lists before enforcing semantic limits: 64 evaluators, 16 kinds, and 1–50 page items.
 - Evaluator endorsement subjects are unioned after base-author resolution. Remove the viewer and deduplicate candidates. Do not query actor status: Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, and actors absent from `actor` remain eligible.

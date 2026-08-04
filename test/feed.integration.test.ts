@@ -179,7 +179,7 @@ describe('Certified feed definition against Postgres', () => {
   type CertifiedFeedOverrides = Omit<
     CertifiedFeedParams,
     '$type' | 'viewerDid'
-  >
+  > & Pick<GetFeedSkeletonInput, 'limit' | 'cursor'>
 
   const createPages = (
     trustedQualityLabelerDids: readonly string[] = [],
@@ -194,14 +194,19 @@ describe('Certified feed definition against Postgres', () => {
   const feedRequest = (
     viewerDid: string,
     input: CertifiedFeedOverrides = {},
-  ): GetFeedSkeletonInput => ({
-    feedId: CERTIFIED_FEED_ID,
-    params: {
-      $type: CERTIFIED_FEED_PARAMS_TYPE,
-      viewerDid,
-      ...input,
-    },
-  })
+  ): GetFeedSkeletonInput => {
+    const { limit, cursor, ...params } = input
+    return {
+      feedId: CERTIFIED_FEED_ID,
+      params: {
+        $type: CERTIFIED_FEED_PARAMS_TYPE,
+        viewerDid,
+        ...params,
+      },
+      ...(limit === undefined ? {} : { limit }),
+      ...(cursor === undefined ? {} : { cursor }),
+    }
+  }
 
   const getFeedForFollows = async (
     followedDids: readonly string[],

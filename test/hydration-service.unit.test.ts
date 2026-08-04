@@ -36,16 +36,25 @@ const endorsementUri = `at://${authorDid}/app.certified.badge.award/endorsement`
 const measurementUri = `at://${authorDid}/org.hypercerts.context.measurement/measurement`
 const targetUri = `at://${targetDid}/org.hypercerts.claim.activity/target`
 
+type FeedRequestOverrides = Partial<
+  Omit<CertifiedFeedParams, '$type' | 'viewerDid'>
+> & Pick<GetFeedSkeletonInput, 'limit' | 'cursor'>
+
 const feedRequest = (
-  overrides: Partial<CertifiedFeedParams> = {},
-): GetFeedSkeletonInput => ({
-  feedId: CERTIFIED_FEED_ID,
-  params: {
-    $type: CERTIFIED_FEED_PARAMS_TYPE,
-    viewerDid,
-    ...overrides,
-  },
-})
+  overrides: FeedRequestOverrides = {},
+): GetFeedSkeletonInput => {
+  const { limit, cursor, ...params } = overrides
+  return {
+    feedId: CERTIFIED_FEED_ID,
+    params: {
+      $type: CERTIFIED_FEED_PARAMS_TYPE,
+      viewerDid,
+      ...params,
+    },
+    ...(limit === undefined ? {} : { limit }),
+    ...(cursor === undefined ? {} : { cursor }),
+  }
+}
 
 const sourceRow = (
   overrides: Partial<InternalSourceFeedRow> = {},

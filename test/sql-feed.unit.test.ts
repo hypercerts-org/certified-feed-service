@@ -26,8 +26,6 @@ const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 
 interface ScoredParams {
   readonly $type: typeof paramsType
-  readonly limit?: number
-  readonly cursor?: string
 }
 
 interface NormalizedScoredParams {
@@ -162,10 +160,12 @@ const createFeed = (
           }
           return input as ScoredParams
         },
-        normalize(params): NormalizedScoredParams {
+        normalize(_params, pagination): NormalizedScoredParams {
           return {
-            limit: params.limit ?? 2,
-            ...(params.cursor === undefined ? {} : { cursor: params.cursor }),
+            limit: pagination.limit ?? 2,
+            ...(pagination.cursor === undefined
+              ? {}
+              : { cursor: pagination.cursor }),
           }
         },
       },
@@ -190,7 +190,8 @@ describe('defineSqlFeed', () => {
     const feed = createFeed(database)
 
     const page = await feed.loadPage(
-      { $type: paramsType, limit: 2 } as ScoredParams,
+      { $type: paramsType } as ScoredParams,
+      { limit: 2 },
       'metadata',
     )
 
@@ -214,7 +215,11 @@ describe('defineSqlFeed', () => {
     const feed = createFeed(new FakeQueryExecutor([source]))
 
     await expect(
-      feed.loadPage({ $type: paramsType } as ScoredParams, 'with-source'),
+      feed.loadPage(
+        { $type: paramsType } as ScoredParams,
+        {},
+        'with-source',
+      ),
     ).resolves.toEqual({
       rows: [
         {
@@ -241,7 +246,11 @@ describe('defineSqlFeed', () => {
     )
 
     await expect(
-      feed.loadPage({ $type: paramsType, limit: 1 } as ScoredParams, 'metadata'),
+      feed.loadPage(
+        { $type: paramsType } as ScoredParams,
+        { limit: 1 },
+        'metadata',
+      ),
     ).rejects.toThrow(/returned 3 rows after requesting at most 2/i)
   })
 
@@ -253,7 +262,11 @@ describe('defineSqlFeed', () => {
     )
 
     await expect(
-      feed.loadPage({ $type: paramsType } as ScoredParams, 'with-source'),
+      feed.loadPage(
+        { $type: paramsType } as ScoredParams,
+        {},
+        'with-source',
+      ),
     ).rejects.toThrow(/without sourceValue in with-source mode/i)
   })
 
@@ -277,7 +290,11 @@ describe('defineSqlFeed', () => {
     )
 
     await expect(
-      feed.loadPage({ $type: paramsType } as ScoredParams, 'metadata'),
+      feed.loadPage(
+        { $type: paramsType } as ScoredParams,
+        {},
+        'metadata',
+      ),
     ).rejects.toBe(failure)
     expect(await metrics.registry.metrics()).toContain(
       'certified_feed_database_duration_seconds_count{operation="feed"} 1',
@@ -304,7 +321,8 @@ describe('defineSqlFeed', () => {
 
     await expect(
       feed.loadPage(
-        { $type: paramsType, cursor } as ScoredParams,
+        { $type: paramsType } as ScoredParams,
+        { cursor },
         'metadata',
       ),
     ).rejects.toMatchObject({ code: FeedErrorCode.InvalidCursor })

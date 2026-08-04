@@ -48,7 +48,6 @@ const resultRow = (overrides: Record<string, unknown> = {}) => ({
 const params = {
   $type: paramsType,
   viewerDid,
-  limit: 2,
 } as const
 
 describe('Certified SQL feed definition', () => {
@@ -66,7 +65,9 @@ describe('Certified SQL feed definition', () => {
       [trustedLabeler],
     )
 
-    await expect(feed.loadPage(params, 'metadata')).resolves.toEqual({
+    await expect(
+      feed.loadPage(params, { limit: 2 }, 'metadata'),
+    ).resolves.toEqual({
       rows: [
         {
           uri,
@@ -105,7 +106,7 @@ describe('Certified SQL feed definition', () => {
     )
 
     await expect(
-      feed.loadPage({ $type: paramsType }, 'metadata'),
+      feed.loadPage({ $type: paramsType }, {}, 'metadata'),
     ).rejects.toMatchObject({ code: 'InvalidRequest' })
     await expect(
       feed.loadPage(
@@ -113,6 +114,7 @@ describe('Certified SQL feed definition', () => {
           $type: paramsType,
           viewerDid: 'not-a-did',
         },
+        {},
         'metadata',
       ),
     ).rejects.toMatchObject({ code: 'InvalidRequest' })
@@ -129,7 +131,9 @@ describe('Certified SQL feed definition', () => {
       [],
     )
 
-    await expect(feed.loadPage(params, 'with-source')).resolves.toEqual({
+    await expect(
+      feed.loadPage(params, { limit: 2 }, 'with-source'),
+    ).resolves.toEqual({
       rows: [
         {
           uri,
@@ -174,9 +178,9 @@ describe('Certified SQL feed definition', () => {
       [],
     )
 
-    await expect(feed.loadPage(params, 'metadata')).rejects.toThrow(
-      'metadata invariant failed',
-    )
+    await expect(
+      feed.loadPage(params, { limit: 2 }, 'metadata'),
+    ).rejects.toThrow('metadata invariant failed')
   })
 
   it('preserves a present JSON null source value', async () => {
@@ -188,7 +192,7 @@ describe('Certified SQL feed definition', () => {
       [],
     )
 
-    const page = await feed.loadPage(params, 'with-source')
+    const page = await feed.loadPage(params, {}, 'with-source')
 
     expect(page.rows[0]).toHaveProperty('sourceValue', null)
   })
@@ -209,8 +213,8 @@ describe('Certified SQL feed definition', () => {
       [],
     )
 
-    await expect(feed.loadPage(params, 'with-source')).rejects.toThrow(
-      'source invariant failed',
-    )
+    await expect(
+      feed.loadPage(params, { limit: 2 }, 'with-source'),
+    ).rejects.toThrow('source invariant failed')
   })
 })

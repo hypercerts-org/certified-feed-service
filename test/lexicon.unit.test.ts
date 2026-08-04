@@ -41,6 +41,8 @@ const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
 const feedRequest = {
   feedId,
   params: { $type: paramsType, viewerDid },
+  limit: 20,
+  cursor: 'next-page',
 }
 
 const uriImage = {
@@ -161,7 +163,7 @@ const withContent = (
 describe('feed Lexicon contract', () => {
   it('keeps registered feed inputs and UpperCamelCase public errors identical', () => {
     expect(hydratedMain.input).toEqual(skeletonMain.input)
-    expect(hydratedMain.input.schema.required).toEqual(['feedId', 'params'])
+    expect(hydratedMain.input.schema.required).toEqual(['feedId'])
     expect(hydratedMain.input.schema.properties.feedId).toMatchObject({
       type: 'string',
       knownValues: [feedId],
@@ -171,7 +173,18 @@ describe('feed Lexicon contract', () => {
       closed: false,
       refs: [paramsType],
     })
+    expect(hydratedMain.input.schema.properties.limit).toMatchObject({
+      type: 'integer',
+      minimum: 1,
+      maximum: 100,
+    })
+    expect(hydratedMain.input.schema.properties.cursor).toMatchObject({
+      type: 'string',
+      maxLength: 4096,
+    })
     expect(defs.certifiedFeedParams.properties).not.toHaveProperty('authors')
+    expect(defs.certifiedFeedParams.properties).not.toHaveProperty('limit')
+    expect(defs.certifiedFeedParams.properties).not.toHaveProperty('cursor')
     expect(defs.certifiedFeedParams.properties.organizationQuality.ref).toBe(
       'app.certified.feed.beta.defs#organizationQualityPolicy',
     )
@@ -189,6 +202,13 @@ describe('feed Lexicon contract', () => {
 
     for (const parser of [skeletonInput, hydratedInput]) {
       expect(() => parser.schema.$parse(feedRequest)).not.toThrow()
+      expect(() =>
+        parser.schema.$parse({
+          feedId: 'app.example.feed.defs#futureFeed',
+          limit: 100,
+          cursor: 'future-page',
+        }),
+      ).not.toThrow()
       expect(() =>
         parser.schema.$parse({
           feedId: 'app.example.feed.defs#futureFeed',

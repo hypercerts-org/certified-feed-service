@@ -6,6 +6,7 @@ import { decodeCursor, encodeCursor, type CursorCodec } from './cursor.js'
 import { FeedError, FeedErrorCode } from './errors.js'
 import type {
   FeedPageMode,
+  FeedPagination,
   InternalFeedPage,
   InternalFeedRow,
   InternalSourceFeedRow,
@@ -50,7 +51,10 @@ export interface SqlFeedDefinition<
   readonly params: {
     readonly type: Params['$type']
     readonly parse: (input: FeedParams) => Params
-    readonly normalize: (params: Params) => Normalized
+    readonly normalize: (
+      params: Params,
+      pagination: FeedPagination,
+    ) => Normalized
   }
   readonly sql: string
   readonly bind: (input: {
@@ -110,17 +114,26 @@ export const defineSqlFeed = <
   }
 
   function loadPage(
-    params: FeedParams,
+    params: FeedParams | undefined,
+    pagination: FeedPagination,
     mode: 'metadata',
   ): Promise<InternalFeedPage<InternalFeedRow>>
   function loadPage(
-    params: FeedParams,
+    params: FeedParams | undefined,
+    pagination: FeedPagination,
     mode: 'with-source',
   ): Promise<InternalFeedPage<InternalSourceFeedRow>>
   async function loadPage(
-    params: FeedParams,
+    params: FeedParams | undefined,
+    pagination: FeedPagination,
     mode: FeedPageMode,
   ): Promise<InternalFeedPage<InternalFeedRow | InternalSourceFeedRow>> {
+    if (params === undefined) {
+      throw new FeedError(
+        FeedErrorCode.InvalidRequest,
+        `feedId ${JSON.stringify(definition.id)} requires params with $type ${JSON.stringify(definition.params.type)}; provide those params and retry.`,
+      )
+    }
     if (params.$type !== definition.params.type) {
       throw new FeedError(
         FeedErrorCode.InvalidRequest,
@@ -129,7 +142,7 @@ export const defineSqlFeed = <
     }
 
     const parsed = definition.params.parse(params)
-    const normalized = definition.params.normalize(parsed)
+    const normalized = definition.params.normalize(parsed, pagination)
     const cursor = decodeCursor(
       definition.id,
       normalized.cursor,

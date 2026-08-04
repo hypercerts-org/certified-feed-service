@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { FeedErrorCode } from '../src/feed/errors.js'
 import type {
   FeedPageMode,
+  FeedPagination,
   InternalFeedPage,
   InternalFeedRow,
   InternalSourceFeedRow,
@@ -27,28 +28,32 @@ const row: InternalFeedRow = {
 
 class FakeRegisteredFeed implements RegisteredFeed {
   readonly loadCalls: Array<{
-    readonly params: FeedParams
+    readonly params: FeedParams | undefined
+    readonly pagination: FeedPagination
     readonly mode: FeedPageMode
   }> = []
 
   constructor(
     readonly id: string,
-    readonly paramsType: string,
+    readonly paramsType: string | undefined,
   ) {}
 
   loadPage(
-    params: FeedParams,
+    params: FeedParams | undefined,
+    pagination: FeedPagination,
     mode: 'metadata',
   ): Promise<InternalFeedPage<InternalFeedRow>>
   loadPage(
-    params: FeedParams,
+    params: FeedParams | undefined,
+    pagination: FeedPagination,
     mode: 'with-source',
   ): Promise<InternalFeedPage<InternalSourceFeedRow>>
   async loadPage(
-    params: FeedParams,
+    params: FeedParams | undefined,
+    pagination: FeedPagination,
     mode: FeedPageMode,
   ): Promise<InternalFeedPage<InternalFeedRow | InternalSourceFeedRow>> {
-    this.loadCalls.push({ params, mode })
+    this.loadCalls.push({ params, pagination, mode })
     return mode === 'metadata'
       ? { rows: [row] }
       : { rows: [{ ...row, sourceValue: { title: 'Source' } }] }
@@ -64,7 +69,41 @@ describe('FeedRegistry', () => {
     await expect(
       registry.loadPage({ feedId, params }, 'metadata'),
     ).resolves.toEqual({ rows: [row] })
-    expect(feed.loadCalls).toEqual([{ params, mode: 'metadata' }])
+    expect(feed.loadCalls).toEqual([
+      { params, pagination: {}, mode: 'metadata' },
+    ])
+  })
+
+  it('dispatches a feed that accepts no algorithm-specific params', async () => {
+    const feed = new FakeRegisteredFeed(feedId, undefined)
+    const registry = new FeedRegistry([feed])
+
+    await expect(
+      registry.loadPage(
+        { feedId, limit: 10, cursor: 'next-page' },
+        'metadata',
+      ),
+    ).resolves.toEqual({ rows: [row] })
+    expect(feed.loadCalls).toEqual([
+      {
+        params: undefined,
+        pagination: { limit: 10, cursor: 'next-page' },
+        mode: 'metadata',
+      },
+    ])
+  })
+
+  it('rejects missing params when the selected feed requires them', async () => {
+    const feed = new FakeRegisteredFeed(feedId, paramsType)
+    const registry = new FeedRegistry([feed])
+
+    await expect(
+      registry.loadPage({ feedId }, 'metadata'),
+    ).rejects.toMatchObject({
+      code: FeedErrorCode.InvalidRequest,
+      message: expect.stringContaining(paramsType),
+    })
+    expect(feed.loadCalls).toEqual([])
   })
 
   it('dispatches source-aware mode without changing the selected params', async () => {
@@ -77,7 +116,9 @@ describe('FeedRegistry', () => {
     ).resolves.toEqual({
       rows: [{ ...row, sourceValue: { title: 'Source' } }],
     })
-    expect(feed.loadCalls).toEqual([{ params, mode: 'with-source' }])
+    expect(feed.loadCalls).toEqual([
+      { params, pagination: {}, mode: 'with-source' },
+    ])
   })
 
   it('rejects duplicate feed identifiers at construction', () => {

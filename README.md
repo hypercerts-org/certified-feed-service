@@ -8,7 +8,7 @@ Hyperindex is the only supported owner of the database. The service provides a U
 
 ## Endpoints
 
-Both endpoints are unauthenticated POST procedures. They use the same `{ feedId, params }` request wrapper, limits, feed-scoped cursor contract, and stable public errors. The registered feed's `params.viewerDid` chooses the viewer scope. The service does not check it against an authenticated caller:
+Both endpoints are unauthenticated POST procedures. They use the same `{ feedId, params?, limit?, cursor? }` request wrapper, feed-scoped cursor contract, and stable public errors. `params` contains only algorithm-specific values; pagination is generic and top-level. The registered Certified feed requires `params.viewerDid` to choose the viewer scope. The service does not check it against an authenticated caller:
 
 ```text
 POST /xrpc/app.certified.feed.beta.getFeedSkeleton
@@ -32,13 +32,13 @@ curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeed \
       "organizationQuality": {
         "allowed": ["high-quality", "standard"],
         "includeUnrated": false
-      },
-      "limit": 20
-    }
+      }
+    },
+    "limit": 20
   }'
 ```
 
-Use the same body with `getFeedSkeleton` when another data system needs only ordered source AT-URIs. The public params union is open for future feed algorithms. This service currently registers only `app.certified.feed.beta.defs#certifiedFeed`; an unknown `feedId` returns `UnsupportedFeed`, while a params `$type` that does not match the selected feed returns `InvalidRequest`.
+Use the same body with `getFeedSkeleton` when another data system needs only ordered source AT-URIs. The public params union is open for future feed algorithms, including algorithms that accept no params. This service currently registers only `app.certified.feed.beta.defs#certifiedFeed` and requires `app.certified.feed.beta.defs#certifiedFeedParams`; missing params or a mismatched `$type` returns `InvalidRequest`, while an unknown `feedId` returns `UnsupportedFeed`.
 
 ### Skeleton response
 
@@ -53,7 +53,7 @@ Use the same body with `getFeedSkeleton` when another data system needs only ord
 }
 ```
 
-Each skeleton entry intentionally contains only the source record AT-URI. A downstream hydrator resolves the current indexed record version; the skeleton does not pin hydration to a CID or expose feed-specific classification metadata.
+Each skeleton entry intentionally contains only the source record AT-URI. A downstream hydrator resolves the current indexed record version; the skeleton does not pin hydration to a CID or expose feed-specific classification metadata. Send a returned cursor back as the top-level request `cursor`, never inside algorithm-specific `params`.
 
 ### Hydrated response
 
@@ -124,7 +124,7 @@ sequenceDiagram
     HTTP->>XRPC: Bounded, validated JSON
     XRPC->>Service: Endpoint input
     Service->>Registry: Load metadata or source-aware page
-    Registry->>Feed: Dispatch feedId and typed params
+    Registry->>Feed: Dispatch feedId, optional params, and pagination
     Feed->>DB: One normalized Hyperindex selection statement
     DB-->>Feed: Scope and limit+1 metadata or exact sources
     Feed-->>Registry: Selected page and feed-scoped cursor
@@ -145,7 +145,7 @@ sequenceDiagram
 
 ## Request behavior
 
-- Malformed JSON, an invalid nested `viewerDid`, or params that do not match the selected registered feed return HTTP 400 with `InvalidRequest`. Semantically invalid selected-feed parameters return HTTP 422 with the same generic error name and an actionable feed-specific message. An unregistered `feedId` returns `UnsupportedFeed`. These never become internal server errors.
+- Malformed JSON, missing required params, an invalid nested `viewerDid`, params that do not match the selected feed, or structurally invalid top-level pagination return HTTP 400 with `InvalidRequest`. Semantically invalid selected-feed parameters or pagination beyond that feed's supported range return HTTP 422 with the same generic error name and an actionable message. An unregistered `feedId` returns `UnsupportedFeed`. These never become internal server errors.
 - The base scope always comes from the viewer's current `app.certified.graph.follow` records. The service ignores malformed follow subjects.
 - `trustedEvaluators` adds the subjects of every current, active endorsement award from each evaluator.
 - An endorsement definition with no `allowedIssuers` allows any issuer. When it is present, only its listed issuer DIDs qualify. An empty or malformed value allows no issuers.
@@ -185,7 +185,7 @@ Entries appear newest first using an internal feed timestamp. It uses the record
 
 - The service checks one extra item to see whether another page exists.
 - The cursor marks the last item selected and is valid only for the `feedId` that issued it.
-- Both endpoints use the same ordering and feed-scoped cursor rules.
+- Both endpoints use the same top-level pagination, ordering, and feed-scoped cursor rules.
 - Invalid hydrated entries are removed, not replaced.
 
 **Database work**

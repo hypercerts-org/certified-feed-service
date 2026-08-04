@@ -84,8 +84,6 @@ const parseCertifiedFeedParams = (
             includeUnrated: parsed.organizationQuality.includeUnrated,
           },
         }),
-    ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
-    ...(parsed.cursor === undefined ? {} : { cursor: parsed.cursor }),
     ...(parsed.kinds === undefined ? {} : { kinds: parsed.kinds }),
   }
 }
