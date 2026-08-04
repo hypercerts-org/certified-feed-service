@@ -62,9 +62,10 @@ const parseCertifiedFeedParams = (
   try {
     parsed = certifiedFeedParamsSchema.schema.$parse(input)
   } catch (cause) {
+    const detail = cause instanceof Error && cause.message ? `: ${cause.message}` : ''
     throw new FeedError(
       FeedErrorCode.InvalidRequest,
-      `params does not match ${CERTIFIED_FEED_PARAMS_TYPE}; correct the feed parameters and retry.`,
+      `params does not match ${CERTIFIED_FEED_PARAMS_TYPE}${detail}; correct the feed parameters and retry.`,
       400,
       { cause },
     )

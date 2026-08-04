@@ -107,7 +107,10 @@ describe('Certified SQL feed definition', () => {
 
     await expect(
       feed.loadPage({ $type: paramsType }, {}, 'metadata'),
-    ).rejects.toMatchObject({ code: 'InvalidRequest' })
+    ).rejects.toMatchObject({
+      code: 'InvalidRequest',
+      message: expect.stringContaining('Missing required key "viewerDid"'),
+    })
     await expect(
       feed.loadPage(
         {
