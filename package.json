@@ -7,17 +7,17 @@
     "node": ">=22"
   },
   "scripts": {
-    "codegen": "lex build --lexicons ./lexicons --out ./src/lexicons --clear --indexFile",
+    "codegen": "node scripts/codegen.mjs",
     "prebuild": "npm run codegen",
-    "build": "tsc -p tsconfig.build.json",
-    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-sql.mjs && node scripts/check-build.mjs",
+    "dev": "tsx watch --include src/feed/feed-query.sql src/server.ts",
     "pretest": "npm run codegen",
     "test": "vitest run test/*.unit.test.ts",
     "pretest:unit": "npm run codegen",
     "test:unit": "vitest run test/*.unit.test.ts",
     "pretest:integration": "npm run codegen",
     "test:integration": "vitest run test/*.integration.test.ts",
-    "test:integration:magic": "sh scripts/test-magic-schema.sh",
+    "test:integration:hyperindex": "sh scripts/test-hyperindex-schema.sh",
     "precheck": "npm run codegen",
     "check": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/server.js"
@@ -25,7 +25,9 @@
   "dependencies": {
     "@atproto/lex": "^0.3.0",
     "@atproto/lex-server": "^0.1.9",
+    "@atproto/lexicon": "0.6.2",
     "@atproto/syntax": "^0.7.2",
+    "@hypercerts-org/lexicon": "1.0.0",
     "dotenv": "^17.4.2",
     "pg": "^8.16.3",
     "pino": "^9.14.0",
