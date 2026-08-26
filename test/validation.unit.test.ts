@@ -71,23 +71,26 @@ describe('feed request validation', () => {
     )
   })
 
-  it('validates organization quality values', () => {
-    expect(() =>
-      normalizeFeedRequest(
-        feedParams({
-          viewerDid: viewer,
-          organizationQuality: {
-            allowed: ['excellent' as 'standard'],
-            includeUnrated: false,
-          },
+  it.each(['', 'excellent'])(
+    'rejects unsupported organization quality %j',
+    (quality) => {
+      expect(() =>
+        normalizeFeedRequest(
+          feedParams({
+            viewerDid: viewer,
+            organizationQuality: {
+              allowed: [quality as 'standard'],
+              includeUnrated: false,
+            },
+          }),
+        ),
+      ).toThrowError(
+        expect.objectContaining<Partial<FeedError>>({
+          code: FeedErrorCode.InvalidRequest,
         }),
-      ),
-    ).toThrowError(
-      expect.objectContaining<Partial<FeedError>>({
-        code: FeedErrorCode.InvalidRequest,
-      }),
-    )
-  })
+      )
+    },
+  )
 
   it('rejects malformed viewers and page sizes', () => {
     expect(() =>

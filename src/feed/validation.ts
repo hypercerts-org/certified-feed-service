@@ -71,7 +71,7 @@ export const normalizeFeedRequest = (
   if (rawQuality) {
     const allowed = dedupe(rawQuality.allowed)
     const invalidQuality = allowed.find((quality) => !QUALITY_SET.has(quality))
-    if (invalidQuality) {
+    if (invalidQuality !== undefined) {
       throw invalidFeedParams(
         `organizationQuality.allowed contains unsupported value ${JSON.stringify(invalidQuality)}; use one of: ${ORGANIZATION_QUALITIES.join(', ')}.`,
       )
