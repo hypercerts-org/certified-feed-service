@@ -6,6 +6,10 @@ export interface Config {
   readonly host: string
   /** TCP port used by the HTTP server. */
   readonly port: number
+  /** TCP interface used by the optional metrics server. */
+  readonly metricsHost: string
+  /** TCP port used by the optional metrics server, or undefined when disabled. */
+  readonly metricsPort: number | undefined
   /** Postgres connection URL for the indexer's existing database. */
   readonly databaseUrl: string
   /** Maximum number of Postgres sessions held by this sidecar. */
@@ -26,6 +30,21 @@ export interface Config {
   readonly logLevel: string
 }
 
+const parseIntegerEnv = (
+  raw: string,
+  name: string,
+  minimum: number,
+  maximum: number,
+): number => {
+  const parsed = Number(raw)
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(
+      `${name} must be an integer from ${minimum} through ${maximum}; change ${name} from ${JSON.stringify(raw)} to a value in that range.`,
+    )
+  }
+  return parsed
+}
+
 const integerEnv = (
   env: NodeJS.ProcessEnv,
   name: string,
@@ -34,14 +53,21 @@ const integerEnv = (
   maximum: number,
 ): number => {
   const raw = env[name]
-  if (raw === undefined || raw === '') return fallback
-  const parsed = Number(raw)
-  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
-    throw new Error(
-      `${name} must be an integer from ${minimum} through ${maximum}; change ${name} from ${JSON.stringify(raw)} to a value in that range.`,
-    )
-  }
-  return parsed
+  return raw === undefined || raw === ''
+    ? fallback
+    : parseIntegerEnv(raw, name, minimum, maximum)
+}
+
+const optionalIntegerEnv = (
+  env: NodeJS.ProcessEnv,
+  name: string,
+  minimum: number,
+  maximum: number,
+): number | undefined => {
+  const raw = env[name]
+  return raw === undefined || raw === ''
+    ? undefined
+    : parseIntegerEnv(raw, name, minimum, maximum)
 }
 
 /** Loads and validates process environment values before any listener or pool is started. */
@@ -82,9 +108,19 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
     )
   }
 
+  const port = integerEnv(env, 'PORT', 3000, 1, 65_535)
+  const metricsPort = optionalIntegerEnv(env, 'METRICS_PORT', 1, 65_535)
+  if (metricsPort === port) {
+    throw new Error(
+      'METRICS_PORT must differ from PORT; set the public and private listeners to separate ports.',
+    )
+  }
+
   return {
     host: env.HOST || '0.0.0.0',
-    port: integerEnv(env, 'PORT', 3000, 1, 65_535),
+    port,
+    metricsHost: env.METRICS_HOST || '0.0.0.0',
+    metricsPort,
     databaseUrl,
     databaseMaxConnections: integerEnv(
       env,

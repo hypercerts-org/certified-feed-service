@@ -10,6 +10,11 @@ import { FeedService } from './feed/service.js'
 import { loadLocalEnvironment } from './environment.js'
 import { PostgresIdentityReader } from './hydration/identity.js'
 import { HydratedFeedService } from './hydration/service.js'
+import {
+  closeMetricsServer,
+  createMetricsServer,
+  listenMetricsServer,
+} from './metrics-server.js'
 import { Metrics } from './metrics.js'
 
 loadLocalEnvironment()
@@ -37,18 +42,47 @@ metrics.setReady(false)
 const server = createServer(app, {
   gracefulTerminationTimeout: config.gracefulShutdownMs,
 })
+const metricsServer =
+  config.metricsPort === undefined
+    ? undefined
+    : createMetricsServer(metrics, {
+        requestTimeoutMs: config.requestTimeoutMs,
+        onError: (error) => logger.error({ err: error }, 'metrics server error'),
+      })
 // Node's request timeout bounds receiving the request, not handler or database work.
 server.requestTimeout = config.requestTimeoutMs
 server.headersTimeout = config.requestTimeoutMs + 1_000
 server.keepAliveTimeout = 5_000
 
 try {
+  if (metricsServer && config.metricsPort !== undefined) {
+    await listenMetricsServer(
+      metricsServer,
+      config.metricsPort,
+      config.metricsHost,
+    )
+    logger.info(
+      { host: config.metricsHost, port: config.metricsPort },
+      'Metrics server is listening',
+    )
+  }
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
     server.listen(config.port, config.host, () => resolve())
   })
 } catch (cause) {
-  await database.close()
+  if (metricsServer?.listening) {
+    try {
+      await closeMetricsServer(metricsServer, config.gracefulShutdownMs)
+    } catch (error) {
+      logger.error({ err: error }, 'metrics server startup cleanup failed')
+    }
+  }
+  try {
+    await database.close()
+  } catch (error) {
+    logger.error({ err: error }, 'database startup cleanup failed')
+  }
   throw cause
 }
 logger.info(
@@ -83,6 +117,14 @@ const shutdown = (signal: NodeJS.Signals): Promise<void> => {
     } catch (error) {
       failed = true
       logger.error({ err: error }, 'HTTP server termination failed')
+    }
+    if (metricsServer) {
+      try {
+        await closeMetricsServer(metricsServer, config.gracefulShutdownMs)
+      } catch (error) {
+        failed = true
+        logger.error({ err: error }, 'metrics server shutdown failed')
+      }
     }
     try {
       await database.close()

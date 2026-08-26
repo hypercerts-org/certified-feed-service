@@ -214,7 +214,9 @@ For local development, copy `.env.example` to `.env`. For deployment, copy its v
 |---|---:|---:|---|
 | `DATABASE_URL` | yes | | Dedicated read-only Postgres URL for the Hyperindex database |
 | `PORT` | no | `3000` | HTTP listen port |
-| `HOST` | no | `0.0.0.0` | HTTP listen interface |
+| `HOST` | no | `0.0.0.0` | Public HTTP listen interface |
+| `METRICS_HOST` | no | `0.0.0.0` | Private metrics listen interface; used only when `METRICS_PORT` is set |
+| `METRICS_PORT` | no | disabled | Enables the private `GET /metrics` listener on this port; must differ from `PORT` |
 | `LOG_LEVEL` | no | `info` | Pino log level |
 | `DATABASE_MAX_CONNECTIONS` | no | `5` | Maximum pool size, capped at 20; the pool keeps one connection warm |
 | `DATABASE_IDLE_TIMEOUT_MS` | no | `60000` | Time before idle connections above the one-connection minimum are closed |
@@ -303,6 +305,15 @@ docker run --rm -p 3000:3000 \
 
 Deploy the service beside Hyperindex and use private networking for the database.
 
+To expose metrics, set a private metrics listener separate from the public application port:
+
+```env
+METRICS_HOST=0.0.0.0
+METRICS_PORT=3001
+```
+
+Configure a compatible Prometheus collector to read `http://<private-service-host>:3001/metrics`. The `GET /metrics` response uses Prometheus-compatible exposition format. The listener has no application-level authentication, so do not attach a public domain or TCP proxy to the metrics port. Each replica exposes only its current in-memory registry; the collector owns aggregation, retention, and historical data. When `METRICS_PORT` is unset or empty, the metrics listener is disabled. `/metrics` remains unavailable on the public application port.
+
 Set per-IP rate limits at the gateway. The first public policy allows 60 feed requests per minute for each client IP, with a burst of 20. When a client exceeds the limit, return HTTP 429 with `Retry-After`. Keep health and readiness private and outside this public limit. Adjust the limits using measured query response time and pool saturation.
 
 The process limits request body size, HTTP request receive time, pool size, connection wait time, and SQL statement duration. `REQUEST_TIMEOUT_MS` is not a deadline for the whole handler or query. Feed procedures allow browser requests from every origin and support `POST` preflight requests. They do not allow credentialed CORS requests. CORS does not authenticate callers or replace gateway rate limiting. Do not add rate-limit state to this service because separate replicas would disagree.
@@ -311,7 +322,8 @@ The process limits request body size, HTTP request receive time, pool size, conn
 
 - `GET /health`: checks only whether the process is alive.
 - `GET /ready`: checks current database support and read-only state; the runtime schema contract is documented separately.
-- `SIGTERM` and `SIGINT`: stop accepting requests, let current work finish, and then close the database pool.
+- Private metrics listener: when `METRICS_PORT` is set, `GET /metrics` exposes this replica's metrics in Prometheus-compatible exposition format on `METRICS_HOST:METRICS_PORT`; all other paths are rejected.
+- `SIGTERM` and `SIGINT`: stop accepting requests, let current work finish, stop the optional metrics listener, and then close the database pool.
 
 Stable public feed errors:
 
