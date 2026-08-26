@@ -246,6 +246,24 @@ describe('HTTP application', () => {
     )
   })
 
+  it('does not count operational endpoint errors as feed errors', async () => {
+    const metrics = new Metrics()
+    const app = createApp(
+      compatibleDatabase,
+      appServices(),
+      metrics,
+      logger,
+    )
+
+    await app.fetch(new Request('http://localhost/health', { method: 'POST' }))
+    await app.fetch(new Request('http://localhost/ready', { method: 'POST' }))
+
+    const metricText = await metrics.registry.metrics()
+    expect(metricText).not.toContain(
+      'certified_feed_errors_total{error="InvalidRequest"}',
+    )
+  })
+
   it('leaves operational endpoints without CORS headers', async () => {
     const app = createApp(
       compatibleDatabase,
@@ -565,6 +583,32 @@ describe('HTTP application', () => {
       error: 'UnsupportedFeed',
       message: 'The requested feed is not supported.',
     })
+  })
+
+  it('counts a route-generated InvalidRequest only once', async () => {
+    const metrics = new Metrics()
+    const getFeedSkeleton = vi.fn(async () => {
+      throw new FeedError(
+        FeedErrorCode.InvalidRequest,
+        'The request is invalid.',
+      )
+    })
+    const app = createApp(
+      compatibleDatabase,
+      appServices({ getFeedSkeleton }),
+      metrics,
+      logger,
+    )
+
+    const response = await app.fetch(
+      post(skeletonPath, JSON.stringify(feedRequest())),
+    )
+
+    expect(response.status).toBe(400)
+    const metricText = await metrics.registry.metrics()
+    expect(metricText).toContain(
+      'certified_feed_errors_total{error="InvalidRequest"} 1',
+    )
   })
 
   it('translates expected skeleton InvalidRequest details', async () => {

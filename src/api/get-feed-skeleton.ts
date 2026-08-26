@@ -7,13 +7,11 @@ import type { GetFeedSkeletonInput } from '../feed/types.js'
 import getFeedSkeleton, {
   $output,
 } from '../lexicons/app/certified/feed/beta/getFeedSkeleton.js'
-import type { Metrics } from '../metrics.js'
 
 /** Registers the public generic feed-skeleton procedure on a LexRouter instance. */
 export const registerGetFeedSkeleton = (
   router: LexRouter,
   feedService: FeedSkeletonReader,
-  metrics: Metrics,
   logger: Logger,
 ): void => {
   router.add(getFeedSkeleton, async ({ input }) => {
@@ -24,7 +22,6 @@ export const registerGetFeedSkeleton = (
       return { body: $output.schema.$parse(output) }
     } catch (cause) {
       if (cause instanceof FeedError) {
-        metrics.observeError(cause.code)
         throw new LexServerError(
           cause.status,
           { error: cause.code, message: cause.message },
@@ -33,7 +30,6 @@ export const registerGetFeedSkeleton = (
         )
       }
 
-      metrics.observeError(FeedErrorCode.InternalError)
       logger.error({ err: cause }, 'feed skeleton generation failed')
       throw new LexServerError(
         500,

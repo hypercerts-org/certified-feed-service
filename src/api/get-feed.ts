@@ -7,13 +7,11 @@ import type { HydratedFeedReader } from '../hydration/service.js'
 import getFeed, {
   $output,
 } from '../lexicons/app/certified/feed/beta/getFeed.js'
-import type { Metrics } from '../metrics.js'
 
 /** Registers the public view-only hydrated feed procedure on a LexRouter instance. */
 export const registerGetFeed = (
   router: LexRouter,
   feedService: HydratedFeedReader,
-  metrics: Metrics,
   logger: Logger,
 ): void => {
   router.add(getFeed, async ({ input }) => {
@@ -24,7 +22,6 @@ export const registerGetFeed = (
       return { body: $output.schema.$parse(output) }
     } catch (cause) {
       if (cause instanceof FeedError) {
-        metrics.observeError(cause.code)
         throw new LexServerError(
           cause.status,
           { error: cause.code, message: cause.message },
@@ -33,7 +30,6 @@ export const registerGetFeed = (
         )
       }
 
-      metrics.observeError(FeedErrorCode.InternalError)
       logger.error({ err: cause }, 'hydrated feed generation failed')
       throw new LexServerError(
         500,

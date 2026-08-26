@@ -169,7 +169,6 @@ const rejectMalformedJson = async (
 
 const normalizeLexiconValidationError = async (
   response: Response,
-  metrics: Metrics,
   nsid: string | undefined,
 ): Promise<Response> => {
   if (nsid === undefined) return response
@@ -195,7 +194,6 @@ const normalizeLexiconValidationError = async (
     'message' in body && typeof body.message === 'string'
       ? ` Details: ${body.message}`
       : ''
-  metrics.observeError(FeedErrorCode.InvalidRequest)
   return jsonResponse(
     {
       error: FeedErrorCode.InvalidRequest,
@@ -203,6 +201,30 @@ const normalizeLexiconValidationError = async (
     },
     400,
   )
+}
+
+const observeResponseError = async (
+  response: Response,
+  metrics: Metrics,
+): Promise<void> => {
+  if (response.status < 400) return
+
+  let body: unknown
+  try {
+    body = await response.clone().json()
+  } catch {
+    return
+  }
+  if (
+    typeof body !== 'object' ||
+    body === null ||
+    !('error' in body) ||
+    typeof body.error !== 'string' ||
+    !Object.values(FeedErrorCode).includes(body.error as FeedErrorCode)
+  ) {
+    return
+  }
+  metrics.observeError(body.error as FeedErrorCode)
 }
 
 const handleHealthRequest = (request: Request): Response =>
@@ -236,10 +258,8 @@ const handleFeedRequest = async (
   originalRequest: Request,
   matchedRoute: FeedRoute | undefined,
   router: LexRouter,
-  metrics: Metrics,
 ): Promise<Response> => {
   if (matchedRoute && originalRequest.method !== 'POST') {
-    metrics.observeError(FeedErrorCode.InvalidRequest)
     return methodNotAllowed('POST')
   }
 
@@ -247,24 +267,18 @@ const handleFeedRequest = async (
   if (matchedRoute) {
     const bounded = await readBoundedRequest(originalRequest)
     if (bounded instanceof Response) {
-      metrics.observeError(FeedErrorCode.InvalidRequest)
       return bounded
     }
     request = bounded
 
     const malformedJson = await rejectMalformedJson(request)
     if (malformedJson) {
-      metrics.observeError(FeedErrorCode.InvalidRequest)
       return malformedJson
     }
   }
 
   const response = await router.fetch(request)
-  return normalizeLexiconValidationError(
-    response,
-    metrics,
-    matchedRoute?.nsid,
-  )
+  return normalizeLexiconValidationError(response, matchedRoute?.nsid)
 }
 
 const handleRequest = async (
@@ -279,15 +293,12 @@ const handleRequest = async (
   let response: Response
   if (matchedFeedRoute && request.method === 'OPTIONS') {
     response = corsPreflightResponse(request)
-    if (response.status >= 400) {
-      metrics.observeError(FeedErrorCode.InvalidRequest)
-    }
   } else if (pathname === '/health') {
     response = handleHealthRequest(request)
   } else if (pathname === '/ready') {
     response = await handleReadyRequest(request, database, metrics)
   } else {
-    response = await handleFeedRequest(request, matchedFeedRoute, router, metrics)
+    response = await handleFeedRequest(request, matchedFeedRoute, router)
   }
 
   return matchedFeedRoute ? withCorsHeaders(response) : response
@@ -312,12 +323,13 @@ export const createApp = (
       logger.error({ err: error, nsid: method.nsid }, 'unexpected XRPC handler error')
     },
   })
-  registerGetFeedSkeleton(router, services.skeleton, metrics, logger)
-  registerGetFeed(router, services.hydrated, metrics, logger)
+  registerGetFeedSkeleton(router, services.skeleton, logger)
+  registerGetFeed(router, services.hydrated, logger)
 
   const fetch: FetchHandler = async (request) => {
     const startedAt = performance.now()
     const pathname = new URL(request.url).pathname
+    const matchedFeedRoute = feedRoute(pathname)
     const route = routeLabel(pathname)
     let status = 500
     try {
@@ -329,6 +341,9 @@ export const createApp = (
         metrics,
       )
       status = response.status
+      if (matchedFeedRoute !== undefined) {
+        await observeResponseError(response, metrics)
+      }
       return response
     } finally {
       metrics.observeRequest(
