@@ -60,7 +60,7 @@ export const normalizeFeedRequest = (
     )
   }
   const unknownKind = rawKinds.find((kind) => !FEED_KIND_SET.has(kind))
-  if (unknownKind) {
+  if (unknownKind !== undefined) {
     throw invalidFeedParams(
       `kinds contains unsupported value ${JSON.stringify(unknownKind)}; use one of: ${FEED_KINDS.join(', ')}.`,
     )

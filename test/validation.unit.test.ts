@@ -60,6 +60,17 @@ describe('feed request validation', () => {
     )
   })
 
+  it('rejects empty event kind values', () => {
+    expect(() =>
+      normalizeFeedRequest(feedParams({ viewerDid: viewer, kinds: [''] })),
+    ).toThrowError(
+      expect.objectContaining<Partial<FeedError>>({
+        code: FeedErrorCode.InvalidRequest,
+        status: 422,
+      }),
+    )
+  })
+
   it('validates organization quality values', () => {
     expect(() =>
       normalizeFeedRequest(
