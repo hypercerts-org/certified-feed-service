@@ -47,14 +47,10 @@ describe('release workflow', () => {
     })
   })
 
-  test('requires each normal pull request to include a valid changeset', () => {
+  test('allows pull requests without a Changeset fragment', () => {
     expect(ciWorkflow).toMatch(/^  workflow_dispatch:/m)
-    expect(ciWorkflow).toContain('Require a changeset')
-    expect(ciWorkflow).toContain("github.event.pull_request.head.ref != 'changeset-release/main'")
-    expect(ciWorkflow).toContain(
-      'github.event.pull_request.head.repo.full_name != github.repository',
-    )
-    expect(ciWorkflow).toContain("npm run changeset:status -- --since \"$BASE_SHA\"")
+    expect(ciWorkflow).not.toContain('Require a changeset')
+    expect(ciWorkflow).not.toContain('npm run changeset:status -- --since')
   })
 
   test('uses the repository token to create an approval-gated Release pull request', () => {

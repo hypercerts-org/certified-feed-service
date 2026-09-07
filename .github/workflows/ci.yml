@@ -45,25 +45,6 @@ jobs:
       - name: Build required native dependencies
         run: npm rebuild esbuild
 
-      - name: Require a changeset
-        if: >-
-          github.event_name == 'pull_request' &&
-          (
-            github.event.pull_request.head.ref != 'changeset-release/main' ||
-            github.event.pull_request.head.repo.full_name != github.repository
-          )
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          changeset_files="$(git diff --name-only --diff-filter=AM "$BASE_SHA...$HEAD_SHA" -- '.changeset/*.md' ':!.changeset/README.md')"
-          if [ -z "$changeset_files" ]; then
-            echo "::error::This pull request needs a changeset. Run 'npm run changeset', or use 'npm run changeset:empty' when no version bump is needed."
-            exit 1
-          fi
-          npm run changeset:status -- --since "$BASE_SHA"
-
       - name: Type-check
         run: npm run check
 

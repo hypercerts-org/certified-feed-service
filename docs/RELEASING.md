@@ -4,19 +4,13 @@ This repository uses Changesets to version the service and create GitHub Release
 
 ## Contributors
 
-Every normal pull request needs one Changeset fragment. For application behavior, configuration, public contract, or operator-workflow changes, add a release-note fragment:
+Add a Changeset when a pull request affects application behavior, runtime configuration, the public contract, supported runtime versions, service deployment, or operator procedures. This includes changes to feed selection, filtering, pagination, hydration, request parameters, responses, and public errors:
 
 ```bash
 npm run changeset
 ```
 
-Commit the generated `.changeset/*.md` file with the pull request. For docs-only, tests, internal refactors, or other changes that should merge without changing the application version, add an empty fragment:
-
-```bash
-npm run changeset:empty
-```
-
-Empty Changesets satisfy the CI check. `.changeset/README.md` is documentation, not a fragment.
+Commit the generated `.changeset/*.md` file with the pull request. Local development tools, tests, behavior-preserving internal refactors, documentation-only corrections, and repository or CI maintenance with no service or operator impact do not need a Changeset. CI does not infer semantic release impact; contributors and reviewers must apply this policy during review. `.changeset/README.md` is documentation, not a fragment.
 
 ## Maintainers
 

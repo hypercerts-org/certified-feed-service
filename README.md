@@ -295,7 +295,7 @@ This command needs `psql`. It checks the required Hyperindex migrations, the rec
 
 ## Releases
 
-Every normal pull request needs either a release-note Changeset from `npm run changeset` or an empty Changeset from `npm run changeset:empty` when no version bump is needed. GitHub creates approval-gated CI runs for the automated **Release** pull request. Maintainers approve those runs, wait for the full PostgreSQL-backed CI suite, and merge the Release pull request only after it passes. The release workflow then validates the exact merged commit and creates a Git tag and GitHub Release without publishing the private package to npm or deploying the service.
+Add a Changeset with `npm run changeset` when a pull request affects the service's behavior, runtime configuration, public contract, supported runtime versions, deployment, or operator procedures. Local development tools, tests, behavior-preserving internal refactors, documentation-only corrections, and repository or CI maintenance with no service or operator impact do not need one. GitHub creates approval-gated CI runs for the automated **Release** pull request. Maintainers approve those runs, wait for the full PostgreSQL-backed CI suite, and merge the Release pull request only after it passes. The release workflow then validates the exact merged commit and creates a Git tag and GitHub Release without publishing the private package to npm or deploying the service.
 
 See [`docs/RELEASING.md`](docs/RELEASING.md) for the contributor and maintainer workflow.
 
