@@ -1,0 +1,218 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions: {}
+
+concurrency:
+  # Keep version-PR updates serialized without letting rapid main pushes
+  # replace a pending release-publication event.
+  group: release-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  select-mode:
+    name: Select Changesets mode
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.select-mode.outputs.mode }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Select Changesets mode
+        id: select-mode
+        uses: changesets/action/select-mode@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+
+  version:
+    name: Create or update Release PR
+    if: github.event_name == 'push' && needs.select-mode.outputs.mode == 'version'
+    needs: select-mode
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Version package, changelog, and lockfile
+        uses: changesets/action/version@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: npm run version:packages
+          commit-message: 'release: version packages'
+          pr-title: Release
+          pr-base-branch: main
+
+  publish:
+    name: Validate and publish GitHub Release
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'changeset-release/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: certified_feed_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d certified_feed_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/certified_feed_test
+    steps:
+      - name: Check out exact merged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify release commit
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$EXPECTED_SHA" ]; then
+            echo "::error::The merged Release pull request did not provide a merge commit SHA"
+            exit 1
+          fi
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Expected commit $EXPECTED_SHA but checked out $actual_sha"
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build required native dependencies
+        run: npm rebuild esbuild
+
+      - name: Type-check
+        run: npm run check
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Build
+        run: npm run build
+
+      - name: Check existing tag and GitHub Release
+        id: preflight
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version="$(node --print "require('./package.json').version")"
+          if [ -z "$version" ]; then
+            echo "::error::Could not derive a package version from package.json"
+            exit 1
+          fi
+          tag="v${version}"
+          api_url="${GITHUB_API_URL%/}"
+
+          get_status() {
+            local endpoint="$1"
+            local status
+            if ! status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "${api_url}/${endpoint}")"; then
+              echo "::error::Unable to query GitHub while checking ${tag}" >&2
+              exit 1
+            fi
+            printf '%s' "$status"
+          }
+
+          tag_status="$(get_status "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}")"
+          release_status="$(get_status "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}")"
+          case "${tag_status}:${release_status}" in
+            200:200)
+              echo "::notice::${tag} already has both a remote tag and GitHub Release; nothing to publish."
+              echo 'publish=false' >> "$GITHUB_OUTPUT"
+              ;;
+            404:404)
+              echo "No existing tag or GitHub Release found for ${tag}; publishing is required."
+              echo 'publish=true' >> "$GITHUB_OUTPUT"
+              ;;
+            200:404)
+              echo "::error::Release state is inconsistent for ${tag}: the remote tag exists but the GitHub Release is missing. Reconcile the tag and Release manually, then rerun this workflow."
+              exit 1
+              ;;
+            404:200)
+              echo "::error::Release state is inconsistent for ${tag}: the GitHub Release exists but the remote tag is missing. Reconcile the tag and Release manually, then rerun this workflow."
+              exit 1
+              ;;
+            *)
+              echo "::error::Unexpected GitHub API response while checking ${tag}: tag=${tag_status}, release=${release_status}"
+              exit 1
+              ;;
+          esac
+
+      # The package is private, so Changesets emits a tag-only release and does
+      # not run npm publish. This action creates the tag and GitHub Release.
+      - name: Create tag and GitHub Release
+        if: steps.preflight.outputs.publish == 'true'
+        uses: changesets/action/publish@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          create-github-releases: true
+          push-git-tags: true
