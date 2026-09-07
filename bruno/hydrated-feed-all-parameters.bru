@@ -1,0 +1,42 @@
+meta {
+  name: Hydrated feed — all parameters
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/xrpc/app.certified.feed.beta.getFeed
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "feedId": "{{feedId}}",
+    "params": {
+      "$type": "{{feedParamsType}}",
+      "viewerDid": "{{viewerDid}}",
+      "trustedEvaluators": [],
+      "organizationQuality": {
+        "allowed": ["high-quality", "standard", "draft", "likely-test"],
+        "includeUnrated": true
+      },
+      "kinds": [
+        "cert.create",
+        "collection.create",
+        "project.created_with_cert",
+        "evaluation.create",
+        "measurement.create",
+        "hyperboard.create",
+        "update.create",
+        "endorsement.award"
+      ]
+    },
+    "limit": {{limit}},
+    "cursor": "{{cursor}}"
+  }
+}
