@@ -251,7 +251,7 @@ Before cutover, confirm that trusted quality-label subscriptions are healthy and
 
 ## Development
 
-You need Node.js 22+ and PostgreSQL 16+.
+You need Node.js 22.13+ and PostgreSQL 16+.
 
 ```bash
 npm install
@@ -292,6 +292,12 @@ TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/hyperindex_feed
 ```
 
 This command needs `psql`. It checks the required Hyperindex migrations, the record, actor, and external-label columns, the generated `record.rkey`, and the external-label lookup index. It then runs the same behavior tests. It does not apply Hyperindex migrations.
+
+## Releases
+
+Add a Changeset with `npm run changeset` when a pull request affects the service's behavior, runtime configuration, public contract, supported runtime versions, deployment, or operator procedures. Local development tools, tests, behavior-preserving internal refactors, documentation-only corrections, and repository or CI maintenance with no service or operator impact do not need one. GitHub creates approval-gated CI runs for the automated **Release** pull request. Maintainers approve those runs, wait for the full PostgreSQL-backed CI suite, and merge the Release pull request only after it passes. The release workflow then validates the exact merged commit and creates a Git tag and GitHub Release without publishing the private package to npm or deploying the service.
+
+See [`docs/RELEASING.md`](docs/RELEASING.md) for the contributor and maintainer workflow.
 
 ## Deployment
 
