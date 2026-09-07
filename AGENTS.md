@@ -15,7 +15,7 @@ app.certified.feed.beta.getFeed
 
 The skeleton returns URI-only generic feed subjects. The hydrated endpoint returns generic feed entries with validated feed-specific views and actor summaries. Hyperindex is the only supported database owner. The service reads its current PostgreSQL state directly; it does not ingest, authenticate, write records, own migrations, cache across requests, call Hyperindex/PDS/AppView APIs, download blobs, hydrate target records, or provide immutable history.
 
-Use **npm**, not pnpm. `package-lock.json` is authoritative. Node.js 22+ is supported; CI and Docker use Node.js 24. PostgreSQL 16+ is required.
+Use **npm**, not pnpm. `package-lock.json` is authoritative. Node.js 22.13+ is supported; CI and Docker use Node.js 24. PostgreSQL 16+ is required.
 
 Before changing feed behavior, read together:
 
@@ -31,6 +31,8 @@ Before changing feed behavior, read together:
 npm install                    # local setup; use npm ci for a clean reproducible install
 npm run dev                    # watch TypeScript and src/feed/feed-query.sql
 npm run codegen                # regenerate ignored Lexicon TypeScript
+npm run changeset              # add a versioned release-note fragment
+npm run changeset:empty        # add a no-version-bump fragment
 npm run check                  # strict TypeScript check
 npm test                       # unit tests; equivalent to npm run test:unit
 npm run build                  # codegen, compile, copy SQL, smoke-load production adapters
@@ -120,6 +122,12 @@ Test at the narrowest owner:
 - Lexicon tests inspect committed JSON and generated parsers;
 - PostgreSQL integration tests own SQL, schema, cross-table, source-mode, and pagination behavior.
 
+## Release workflow
+
+Every normal pull request needs a Changeset fragment. Use `npm run changeset` for application behavior, configuration, public contract, or operator-workflow changes. Use `npm run changeset:empty` for tests, internal refactors, documentation, or other changes that should not bump the service version.
+
+Changesets creates or updates the `changeset-release/main` Release pull request with `GITHUB_TOKEN`. Current GitHub behavior creates its CI runs in an approval-required state. A maintainer must approve those runs and wait for the full PostgreSQL-backed CI suite before merging. The release workflow then validates the exact merged commit before creating the private package's Git tag and GitHub Release. It does not publish to npm or deploy the service. See `docs/RELEASING.md` for the complete flow.
+
 ## Canonical and generated files
 
 - Project-owned `lexicons/app/certified/feed/**/*.json` is the public wire contract. Other committed Lexicons may be external dependencies pinned by `lexicons.json`; refresh them only through `lex install`.
@@ -185,6 +193,7 @@ Do not add ingestion, writes, authentication, cross-request caching, immutable h
 2. Change only the owning layer and coupled contracts.
 3. Add focused tests. SQL behavior requires PostgreSQL integration coverage.
 4. Update Lexicons and documentation for public behavior changes.
-5. Run `npm run check`, `npm test`, `npm run build`, and `git diff --check`.
-6. Run integration tests only with an explicitly selected disposable PostgreSQL database.
-7. Report commands, failures, and unavailable validation.
+5. Add a release-note Changeset or an empty Changeset.
+6. Run `npm run check`, `npm test`, `npm run build`, and `git diff --check`.
+7. Run integration tests only with an explicitly selected disposable PostgreSQL database.
+8. Report commands, failures, and unavailable validation.

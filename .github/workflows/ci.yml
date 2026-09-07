@@ -1,12 +1,14 @@
-name: ci
+name: CI
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   verify:
+    name: Check, Test & Build
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -25,13 +27,51 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/certified_feed_test
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npm test
-      - run: npm run test:integration
-      - run: npm run build
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build required native dependencies
+        run: npm rebuild esbuild
+
+      - name: Require a changeset
+        if: >-
+          github.event_name == 'pull_request' &&
+          (
+            github.event.pull_request.head.ref != 'changeset-release/main' ||
+            github.event.pull_request.head.repo.full_name != github.repository
+          )
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          changeset_files="$(git diff --name-only --diff-filter=AM "$BASE_SHA...$HEAD_SHA" -- '.changeset/*.md' ':!.changeset/README.md')"
+          if [ -z "$changeset_files" ]; then
+            echo "::error::This pull request needs a changeset. Run 'npm run changeset', or use 'npm run changeset:empty' when no version bump is needed."
+            exit 1
+          fi
+          npm run changeset:status -- --since "$BASE_SHA"
+
+      - name: Type-check
+        run: npm run check
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Build
+        run: npm run build
