@@ -1,0 +1,42 @@
+import pino from 'pino'
+import { describe, expect, it, vi } from 'vitest'
+
+import { loadConfig } from '../src/config.js'
+
+const { poolConstructor } = vi.hoisted(() => ({
+  poolConstructor: vi.fn(),
+}))
+
+vi.mock('pg', () => ({
+  Pool: class {
+    constructor(config: unknown) {
+      poolConstructor(config)
+    }
+
+    on(): this {
+      return this
+    }
+  },
+}))
+
+import { Database } from '../src/database.js'
+
+describe('Database', () => {
+  it('keeps one connection warm and drains excess idle connections', () => {
+    const config = loadConfig({
+      DATABASE_URL: 'postgres://feed:secret@localhost:5432/indexer',
+      DATABASE_MAX_CONNECTIONS: '5',
+      DATABASE_IDLE_TIMEOUT_MS: '120000',
+    })
+
+    new Database(config, pino({ enabled: false }))
+
+    expect(poolConstructor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        max: 5,
+        min: 1,
+        idleTimeoutMillis: 120_000,
+      }),
+    )
+  })
+})

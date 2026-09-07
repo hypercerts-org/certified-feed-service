@@ -1,0 +1,79 @@
+{
+  "lexicon": 1,
+  "id": "app.certified.feed.beta.getFeedSkeleton",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Builds an ordered feed skeleton from current indexed records for the registered feed and parameters selected in the request. Authentication is not required. The caller hydrates returned AT-URIs separately.",
+      "errors": [
+        { "name": "InvalidRequest", "description": "The request or the selected feed's parameters are malformed or semantically invalid." },
+        { "name": "UnsupportedFeed", "description": "The requested feed identifier is not registered by this service." },
+        { "name": "InvalidCursor", "description": "The cursor is invalid or incompatible with the selected feed." },
+        { "name": "InternalError", "description": "The service encountered an internal error." }
+      ],
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["feedId"],
+          "properties": {
+            "feedId": {
+              "type": "string",
+              "maxLength": 512,
+              "knownValues": ["app.certified.feed.beta.defs#certifiedFeed"],
+              "description": "Identifier of the feed algorithm to execute."
+            },
+            "params": {
+              "type": "union",
+              "closed": false,
+              "refs": ["app.certified.feed.beta.defs#certifiedFeedParams"],
+              "description": "Algorithm-specific parameters. Omit when the selected feed accepts none."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "Maximum number of feed subjects to return. The selected feed determines the default and may enforce a lower maximum."
+            },
+            "cursor": {
+              "type": "string",
+              "maxLength": 4096,
+              "description": "Opaque cursor returned by a previous request for this feed."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "description": "Returns ordered, unhydrated feed subjects and an optional cursor for the next page.",
+          "type": "object",
+          "required": ["feed"],
+          "properties": {
+            "feed": {
+              "type": "array",
+              "items": { "type": "ref", "ref": "#feedSkeletonItem" }
+            },
+            "cursor": {
+              "type": "string",
+              "maxLength": 4096,
+              "description": "Cursor for the next page. Omitted when no later page is known."
+            }
+          }
+        }
+      }
+    },
+    "feedSkeletonItem": {
+      "type": "object",
+      "required": ["subject"],
+      "description": "One unhydrated record selected for the feed.",
+      "properties": {
+        "subject": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "AT-URI of the record to hydrate."
+        }
+      }
+    }
+  }
+}
