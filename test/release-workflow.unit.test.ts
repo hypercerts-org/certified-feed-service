@@ -47,10 +47,15 @@ describe('release workflow', () => {
     })
   })
 
-  test('allows pull requests without a Changeset fragment', () => {
+  test('allows omission and validates Changeset fragments when present', () => {
     expect(ciWorkflow).toMatch(/^  workflow_dispatch:/m)
-    expect(ciWorkflow).not.toContain('Require a changeset')
-    expect(ciWorkflow).not.toContain('npm run changeset:status -- --since')
+    expect(ciWorkflow).toContain('Validate changesets when present')
+    expect(ciWorkflow).toContain('--diff-filter=ACMR')
+    expect(ciWorkflow).toContain('if [ -n "$changeset_files" ]; then')
+    expect(ciWorkflow).toContain(
+      'npm run changeset:status -- --since "$BASE_SHA"',
+    )
+    expect(ciWorkflow).not.toContain('This pull request needs a changeset')
   })
 
   test('uses the repository token to create an approval-gated Release pull request', () => {

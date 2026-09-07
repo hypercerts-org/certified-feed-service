@@ -10,7 +10,7 @@ Add a Changeset when a pull request affects application behavior, runtime config
 npm run changeset
 ```
 
-Commit the generated `.changeset/*.md` file with the pull request. Local development tools, tests, behavior-preserving internal refactors, documentation-only corrections, and repository or CI maintenance with no service or operator impact do not need a Changeset. CI does not infer semantic release impact; contributors and reviewers must apply this policy during review. `.changeset/README.md` is documentation, not a fragment.
+Commit the generated `.changeset/*.md` file with the pull request. Local development tools, tests, behavior-preserving internal refactors, documentation-only corrections, and repository or CI maintenance with no service or operator impact do not need a Changeset. CI does not infer semantic release impact; contributors and reviewers must apply this policy during review. When a pull request includes an added or modified fragment, CI runs `changeset status` to reject malformed release metadata before merge. `.changeset/README.md` is documentation, not a fragment.
 
 ## Maintainers
 
