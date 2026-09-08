@@ -1,9 +1,5 @@
 # Hypercerts Feed Service agent guide
 
-## Release status
-
-This service and its `org.hypercerts.feed.*` Lexicons have not had their first public release. Until then, contract changes are pre-release revisions, not breaking changes, and do not require backward compatibility. Update this section when the first public release occurs.
-
 ## Read this first
 
 This repository is a standalone, read-only TypeScript service exposing two unauthenticated POST procedures:
