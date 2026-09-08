@@ -1,10 +1,10 @@
 {
   "lexicon": 1,
-  "id": "app.certified.feed.beta.getFeedSkeleton",
+  "id": "org.hypercerts.feed.getFeed",
   "defs": {
     "main": {
       "type": "procedure",
-      "description": "Builds an ordered feed skeleton from current indexed records for the registered feed and parameters selected in the request. Authentication is not required. The caller hydrates returned AT-URIs separately.",
+      "description": "Builds an ordered hydrated feed from current indexed records and identities for the registered feed and parameters selected in the request. Authentication is not required.",
       "errors": [
         { "name": "InvalidRequest", "description": "The request or the selected feed's parameters are malformed or semantically invalid." },
         { "name": "UnsupportedFeed", "description": "The requested feed identifier is not registered by this service." },
@@ -20,13 +20,13 @@
             "feedId": {
               "type": "string",
               "maxLength": 512,
-              "knownValues": ["app.certified.feed.beta.defs#certifiedFeed"],
+              "knownValues": ["org.hypercerts.feed.defs#hypercertsFeed"],
               "description": "Identifier of the feed algorithm to execute."
             },
             "params": {
               "type": "union",
               "closed": false,
-              "refs": ["app.certified.feed.beta.defs#certifiedFeedParams"],
+              "refs": ["org.hypercerts.feed.defs#hypercertsFeedParams"],
               "description": "Algorithm-specific parameters. Omit when the selected feed accepts none."
             },
             "limit": {
@@ -46,13 +46,16 @@
       "output": {
         "encoding": "application/json",
         "schema": {
-          "description": "Returns ordered, unhydrated feed subjects and an optional cursor for the next page.",
+          "description": "Returns ordered hydrated feed entries and an optional cursor for the next page.",
           "type": "object",
           "required": ["feed"],
           "properties": {
             "feed": {
               "type": "array",
-              "items": { "type": "ref", "ref": "#feedSkeletonItem" }
+              "items": {
+                "type": "ref",
+                "ref": "#feedItem"
+              }
             },
             "cursor": {
               "type": "string",
@@ -63,15 +66,21 @@
         }
       }
     },
-    "feedSkeletonItem": {
+    "feedItem": {
       "type": "object",
-      "required": ["subject"],
-      "description": "One unhydrated record selected for the feed.",
+      "required": ["subject", "view"],
+      "description": "One record selected for the feed together with its hydrated feed-specific representation.",
       "properties": {
         "subject": {
           "type": "string",
           "format": "at-uri",
-          "description": "AT-URI of the record to hydrate."
+          "description": "AT-URI of the source record represented by this entry."
+        },
+        "view": {
+          "type": "union",
+          "closed": false,
+          "refs": ["org.hypercerts.feed.defs#hypercertsFeedView"],
+          "description": "Hydrated representation produced by the selected feed."
         }
       }
     }

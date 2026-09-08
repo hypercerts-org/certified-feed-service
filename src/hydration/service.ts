@@ -94,7 +94,7 @@ const buildHydratedFeedItems = (
     return {
       subject: row.uri,
       view: {
-        $type: 'app.certified.feed.beta.defs#certifiedFeedView',
+        $type: 'org.hypercerts.feed.defs#hypercertsFeedView',
         kind: row.kind,
         actor,
         content: buildFeedItemView(record, {

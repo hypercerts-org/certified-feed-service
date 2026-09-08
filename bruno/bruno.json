@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "name": "Certified Feed Service",
+  "name": "Hypercerts Feed Service",
   "type": "collection",
   "ignore": [
     "node_modules",

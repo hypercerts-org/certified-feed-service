@@ -71,7 +71,7 @@ export interface SanitizedActorRow {
 
 /** First-render fields for an activity feed card. */
 export interface ActivityFeedView {
-  readonly $type: 'app.certified.feed.beta.defs#activityView'
+  readonly $type: 'org.hypercerts.feed.defs#activityView'
   readonly title: string
   readonly shortDescription?: string
   readonly image?: ActorImageReference
@@ -83,7 +83,7 @@ export interface ActivityFeedView {
 
 /** First-render fields shared by collection and project-with-cert cards. */
 export interface CollectionFeedView {
-  readonly $type: 'app.certified.feed.beta.defs#collectionView'
+  readonly $type: 'org.hypercerts.feed.defs#collectionView'
   readonly collectionType?: string
   readonly title: string
   readonly shortDescription?: string
@@ -94,7 +94,7 @@ export interface CollectionFeedView {
 
 /** First-render fields for an account endorsement card. */
 export interface EndorsementFeedView {
-  readonly $type: 'app.certified.feed.beta.defs#endorsementView'
+  readonly $type: 'org.hypercerts.feed.defs#endorsementView'
   readonly subject: ActorSummary
   readonly createdAt?: string
 }
@@ -107,7 +107,7 @@ export interface FeedTargetReference {
 
 /** Lean first-render fields for an evaluation card. */
 export interface EvaluationFeedView {
-  readonly $type: 'app.certified.feed.beta.defs#evaluationView'
+  readonly $type: 'org.hypercerts.feed.defs#evaluationView'
   readonly summary?: string
   readonly createdAt?: string
   readonly target?: FeedTargetReference
@@ -115,7 +115,7 @@ export interface EvaluationFeedView {
 
 /** Lean first-render fields for a measurement card. */
 export interface MeasurementFeedView {
-  readonly $type: 'app.certified.feed.beta.defs#measurementView'
+  readonly $type: 'org.hypercerts.feed.defs#measurementView'
   readonly metric?: string
   readonly createdAt?: string
   readonly target?: FeedTargetReference
@@ -123,13 +123,13 @@ export interface MeasurementFeedView {
 
 /** Verb-only first-render fields for a Hyperboard card. */
 export interface HyperboardFeedView {
-  readonly $type: 'app.certified.feed.beta.defs#hyperboardView'
+  readonly $type: 'org.hypercerts.feed.defs#hyperboardView'
   readonly createdAt?: string
 }
 
 /** First-render fields for an attachment/update card. */
 export interface UpdateFeedView {
-  readonly $type: 'app.certified.feed.beta.defs#updateView'
+  readonly $type: 'org.hypercerts.feed.defs#updateView'
   readonly title?: string
   readonly shortDescription?: string
   readonly image?: UpdateImageReference
@@ -147,9 +147,9 @@ export type FeedItemView =
   | HyperboardFeedView
   | UpdateFeedView
 
-/** Certified feed-specific representation attached to one generic feed item. */
-export interface CertifiedFeedView {
-  readonly $type: 'app.certified.feed.beta.defs#certifiedFeedView'
+/** Hypercerts feed-specific representation attached to one generic feed item. */
+export interface HypercertsFeedView {
+  readonly $type: 'org.hypercerts.feed.defs#hypercertsFeedView'
   readonly kind: FeedKind
   readonly actor: ActorSummary
   readonly content: FeedItemView
@@ -158,7 +158,7 @@ export interface CertifiedFeedView {
 /** Generic hydrated item built from one validated source record. */
 export interface HydratedFeedItem {
   readonly subject: string
-  readonly view: CertifiedFeedView
+  readonly view: HypercertsFeedView
 }
 
 /** Public response body projected by the hydrated feed service. */

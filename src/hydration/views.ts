@@ -152,7 +152,7 @@ const buildActivityView = (
 ): ActivityFeedView => {
   const image = smallImageReference(value.image)
   return {
-    $type: 'app.certified.feed.beta.defs#activityView',
+    $type: 'org.hypercerts.feed.defs#activityView',
     title: value.title,
     shortDescription: value.shortDescription,
     ...(image === undefined ? {} : { image }),
@@ -169,7 +169,7 @@ const buildCollectionView = (
   const image: CollectionImageReference | undefined =
     smallImageReference(value.avatar) ?? largeImageReference(value.banner)
   return {
-    $type: 'app.certified.feed.beta.defs#collectionView',
+    $type: 'org.hypercerts.feed.defs#collectionView',
     ...(value.type === undefined ? {} : { collectionType: value.type }),
     title: value.title,
     ...(value.shortDescription === undefined
@@ -194,7 +194,7 @@ const buildEndorsementView = (
     throw endorsementViewInvariantError()
   }
   return {
-    $type: 'app.certified.feed.beta.defs#endorsementView',
+    $type: 'org.hypercerts.feed.defs#endorsementView',
     subject: context.endorsedActor,
     createdAt: record.value.createdAt,
   }
@@ -205,7 +205,7 @@ const buildEvaluationView = (
 ): EvaluationFeedView => {
   const target = targetReference(value.subject)
   return {
-    $type: 'app.certified.feed.beta.defs#evaluationView',
+    $type: 'org.hypercerts.feed.defs#evaluationView',
     summary: value.summary,
     createdAt: value.createdAt,
     ...(target === undefined ? {} : { target }),
@@ -217,7 +217,7 @@ const buildMeasurementView = (
 ): MeasurementFeedView => {
   const target = targetReference(value.subjects?.[0])
   return {
-    $type: 'app.certified.feed.beta.defs#measurementView',
+    $type: 'org.hypercerts.feed.defs#measurementView',
     metric: value.metric,
     createdAt: value.createdAt,
     ...(target === undefined ? {} : { target }),
@@ -227,7 +227,7 @@ const buildMeasurementView = (
 const buildHyperboardView = (
   value: FeedRecordValue<'org.hyperboards.board'>,
 ): HyperboardFeedView => ({
-  $type: 'app.certified.feed.beta.defs#hyperboardView',
+  $type: 'org.hypercerts.feed.defs#hyperboardView',
   createdAt: value.createdAt,
 })
 
@@ -245,7 +245,7 @@ const buildUpdateView = (
   const image = smallBlobImageReference(imageBlob)
   const target = targetReference(value.subjects?.[0])
   return {
-    $type: 'app.certified.feed.beta.defs#updateView',
+    $type: 'org.hypercerts.feed.defs#updateView',
     title: value.title,
     ...(value.shortDescription === undefined
       ? {}

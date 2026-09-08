@@ -15,13 +15,13 @@ const MAX_REQUEST_BODY_BYTES = 64 * 1024
 
 const FEED_ROUTES = [
   {
-    path: '/xrpc/app.certified.feed.beta.getFeedSkeleton',
-    nsid: 'app.certified.feed.beta.getFeedSkeleton',
+    path: '/xrpc/org.hypercerts.feed.getFeedSkeleton',
+    nsid: 'org.hypercerts.feed.getFeedSkeleton',
     label: 'feed_skeleton',
   },
   {
-    path: '/xrpc/app.certified.feed.beta.getFeed',
-    nsid: 'app.certified.feed.beta.getFeed',
+    path: '/xrpc/org.hypercerts.feed.getFeed',
+    nsid: 'org.hypercerts.feed.getFeed',
     label: 'feed_hydrated',
   },
 ] as const

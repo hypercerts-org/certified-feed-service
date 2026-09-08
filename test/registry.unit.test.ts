@@ -12,8 +12,8 @@ import type {
 import { FeedRegistry } from '../src/feed/registry.js'
 import type { FeedParams } from '../src/feed/types.js'
 
-const feedId = 'app.certified.feed.beta.defs#certifiedFeed'
-const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
+const feedId = 'org.hypercerts.feed.defs#hypercertsFeed'
+const paramsType = 'org.hypercerts.feed.defs#hypercertsFeedParams'
 const actorDid = 'did:plc:ar7c4by46qjdydhdevvrndac'
 const uri = `at://${actorDid}/org.hypercerts.claim.activity/3kpn`
 
@@ -138,7 +138,7 @@ describe('FeedRegistry', () => {
     await expect(
       registry.loadPage(
         {
-          feedId: 'app.certified.feed.beta.defs#missingFeed',
+          feedId: 'org.hypercerts.feed.defs#missingFeed',
           params: { $type: 'malformed' },
         },
         'metadata',
@@ -155,7 +155,7 @@ describe('FeedRegistry', () => {
       registry.loadPage(
         {
           feedId,
-          params: { $type: 'app.certified.feed.beta.defs#otherParams' },
+          params: { $type: 'org.hypercerts.feed.defs#otherParams' },
         },
         'metadata',
       ),

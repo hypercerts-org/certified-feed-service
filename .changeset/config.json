@@ -3,7 +3,7 @@
   "changelog": [
     "@changesets/changelog-github",
     {
-      "repo": "hypercerts-org/certified-feed-service"
+      "repo": "hypercerts-org/hypercerts-feed-service"
     }
   ],
   "commit": false,

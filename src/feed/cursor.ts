@@ -12,7 +12,7 @@ export interface CursorCodec<Cursor, Row> {
   encode(row: Row): unknown
 }
 
-/** Decoded timestamp-and-URI position used by the current Certified feed. */
+/** Decoded timestamp-and-URI position used by the current Hypercerts feed. */
 export interface FeedCursor {
   readonly value: string
   readonly uri: string

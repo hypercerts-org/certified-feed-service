@@ -32,7 +32,7 @@ export class Database implements DatabaseCompatibilityChecker {
       idleTimeoutMillis: config.databaseIdleTimeoutMs,
       connectionTimeoutMillis: config.databaseConnectionTimeoutMs,
       statement_timeout: config.databaseStatementTimeoutMs,
-      application_name: 'certified-feed-service',
+      application_name: 'hypercerts-feed-service',
       options: '-c default_transaction_read_only=on',
     }
     this.#pool = new Pool(poolConfig)

@@ -18,7 +18,7 @@ const hypercertsPackageRoot = dirname(
   require.resolve('@hypercerts-org/lexicon/package.json'),
 )
 const lexPackageRoot = dirname(dirname(require.resolve('@atproto/lex')))
-const stagingRoot = await mkdtemp(join(tmpdir(), 'certified-feed-lexicons-'))
+const stagingRoot = await mkdtemp(join(tmpdir(), 'hypercerts-feed-lexicons-'))
 const stagedLexicons = join(stagingRoot, 'lexicons')
 
 try {

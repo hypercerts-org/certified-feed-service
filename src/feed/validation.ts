@@ -5,7 +5,7 @@ import type { FeedPagination } from './registry.js'
 import {
   FEED_KINDS,
   ORGANIZATION_QUALITIES,
-  type CertifiedFeedParams,
+  type HypercertsFeedParams,
   type FeedKind,
   type NormalizedFeedRequest,
   type OrganizationQuality,
@@ -34,9 +34,9 @@ const validateEvaluatorDids = (values: readonly string[]): void => {
   }
 }
 
-/** Normalizes Certified params with the shared pagination controls. */
+/** Normalizes Hypercerts params with the shared pagination controls. */
 export const normalizeFeedRequest = (
-  input: CertifiedFeedParams,
+  input: HypercertsFeedParams,
   pagination: FeedPagination = {},
 ): NormalizedFeedRequest => {
   if (!isValidDid(input.viewerDid)) {
