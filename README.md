@@ -231,6 +231,8 @@ If there are no configured trusted labelers, known organizations count as unrate
 
 Use a dedicated login that has only `SELECT` access. The service also sets `default_transaction_read_only=on` for every connection in the pool, but database grants are still the main security boundary.
 
+This database arrangement will change when the Hypercerts API is introduced. At that point, Hypercerts Feed Service will use the same database as the Hypercerts API.
+
 Each service replica has its own limited in-process pool. When planning database connections, allow for `replica count × DATABASE_MAX_CONNECTIONS`. Use an external pooler if many replicas share a PostgreSQL server with few available connections.
 
 Example operator setup:

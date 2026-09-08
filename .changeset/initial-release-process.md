@@ -4,8 +4,6 @@
 
 Introduce the initial version of Hypercerts Feed Service.
 
-This release replaces the former `app.certified.feed.beta.*` namespace with `org.hypercerts.feed.*`. Consumers must update endpoint NSIDs and regenerate bindings; no compatibility aliases are provided.
-
 Available in this release:
 
 - `org.hypercerts.feed.getFeedSkeleton`, returning URI-only feed subjects.
