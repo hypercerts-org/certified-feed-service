@@ -165,7 +165,9 @@ ALTER ROLE hypercerts_feed_reader
   SET default_transaction_read_only = on;
 ```
 
-Grant `CONNECT` on the selected database separately when required by the deployment. The Node pool also enables `default_transaction_read_only=on`; that setting is defense in depth, not a replacement for least-privilege grants.
+Grant `CONNECT` on the selected database separately when required by the deployment. Before changing `DATABASE_URL`, create or rename the deployment role, apply the required grants, and verify with that login that it can connect, select the three runtime tables, and report read-only session state. Only then update the managed secret and deployment configuration and roll out the service.
+
+The Node pool also enables `default_transaction_read_only=on`; that setting is defense in depth, not a replacement for least-privilege grants.
 
 ## Compatibility and performance verification
 
