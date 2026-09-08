@@ -124,7 +124,7 @@ Test at the narrowest owner:
 
 ## Release workflow
 
-Every normal pull request needs a Changeset fragment. Use `npm run changeset` for application behavior, configuration, public contract, or operator-workflow changes. Use `npm run changeset:empty` for tests, internal refactors, documentation, or other changes that should not bump the service version.
+Add a Changeset when a pull request affects application behavior, runtime configuration, the public contract, supported runtime versions, service deployment, or operator procedures. This includes changes to feed selection, filtering, pagination, hydration, request parameters, responses, and public errors. Do not add a Changeset for local development tools, tests, behavior-preserving internal refactors, documentation-only corrections, or repository and CI maintenance that does not affect the service or its operators. CI does not infer semantic release impact; contributors and reviewers own this decision. When a pull request does include a Changeset fragment, CI validates it with `changeset status` so malformed release metadata cannot reach `main`.
 
 Changesets creates or updates the `changeset-release/main` Release pull request with `GITHUB_TOKEN`. Current GitHub behavior creates its CI runs in an approval-required state. A maintainer must approve those runs and wait for the full PostgreSQL-backed CI suite before merging. The release workflow then validates the exact merged commit before creating the private package's Git tag and GitHub Release. It does not publish to npm or deploy the service. See `docs/RELEASING.md` for the complete flow.
 
@@ -193,7 +193,7 @@ Do not add ingestion, writes, authentication, cross-request caching, immutable h
 2. Change only the owning layer and coupled contracts.
 3. Add focused tests. SQL behavior requires PostgreSQL integration coverage.
 4. Update Lexicons and documentation for public behavior changes.
-5. Add a release-note Changeset or an empty Changeset.
+5. Add a Changeset when the change has release impact under the release workflow policy.
 6. Run `npm run check`, `npm test`, `npm run build`, and `git diff --check`.
 7. Run integration tests only with an explicitly selected disposable PostgreSQL database.
 8. Report commands, failures, and unavailable validation.

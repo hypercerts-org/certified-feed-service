@@ -1,16 +1,12 @@
 # Changesets
 
-Every normal pull request needs one `.changeset/*.md` fragment. Add a release-note changeset for application or operator-workflow changes:
+Add a `.changeset/*.md` fragment when a pull request affects application behavior, runtime configuration, the public contract, supported runtime versions, service deployment, or operator procedures:
 
 ```bash
 npm run changeset
 ```
 
-For docs-only, internal, or other changes that should merge without changing the application version, create an empty changeset:
-
-```bash
-npm run changeset:empty
-```
+Local development tools, tests, behavior-preserving internal refactors, documentation-only corrections, and repository or CI maintenance with no service or operator impact do not need a Changeset. CI does not infer semantic release impact; contributors and reviewers own this decision. Included Changeset fragments are validated in pull-request CI so malformed release metadata cannot reach `main`.
 
 The release workflow turns pending changesets into a `Release` pull request. GitHub creates CI runs for that automation-owned pull request in an approval-required state. A maintainer with write access must select **Approve workflows to run** before merging it.
 

@@ -27,6 +27,14 @@ const changesetsConfig = (() => {
 const ciWorkflow = readOptionalFile('.github/workflows/ci.yml')
 const releaseWorkflow = readOptionalFile('.github/workflows/release.yml')
 
+const workflowStep = (source: string, name: string): string => {
+  const marker = `      - name: ${name}\n`
+  const start = source.indexOf(marker)
+  if (start === -1) return ''
+  const next = source.indexOf('\n      - name:', start + marker.length)
+  return source.slice(start, next === -1 ? undefined : next)
+}
+
 describe('release workflow', () => {
   test('configures Changesets for private GitHub releases from main', () => {
     expect(packageJson.private).toBe(true)
@@ -47,14 +55,21 @@ describe('release workflow', () => {
     })
   })
 
-  test('requires each normal pull request to include a valid changeset', () => {
+  test('allows omission and validates Changeset fragments when present', () => {
     expect(ciWorkflow).toMatch(/^  workflow_dispatch:/m)
-    expect(ciWorkflow).toContain('Require a changeset')
-    expect(ciWorkflow).toContain("github.event.pull_request.head.ref != 'changeset-release/main'")
-    expect(ciWorkflow).toContain(
-      'github.event.pull_request.head.repo.full_name != github.repository',
-    )
-    expect(ciWorkflow).toContain("npm run changeset:status -- --since \"$BASE_SHA\"")
+    expect(workflowStep(ciWorkflow, 'Validate changesets when present')).toBe(`      - name: Validate changesets when present
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: \${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: \${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          changeset_files="$(git diff --name-only --diff-filter=ACMR "$BASE_SHA...$HEAD_SHA" -- '.changeset/*.md' ':!.changeset/README.md')"
+          if [ -n "$changeset_files" ]; then
+            npm run changeset:status -- --since "$BASE_SHA"
+          fi
+`)
+    expect(ciWorkflow).not.toContain('This pull request needs a changeset')
   })
 
   test('uses the repository token to create an approval-gated Release pull request', () => {

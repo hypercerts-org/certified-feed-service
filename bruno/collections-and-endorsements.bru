@@ -1,0 +1,28 @@
+meta {
+  name: Collections and endorsements
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/xrpc/app.certified.feed.beta.getFeed
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "feedId": "{{feedId}}",
+    "params": {
+      "$type": "{{feedParamsType}}",
+      "viewerDid": "{{viewerDid}}",
+      "kinds": ["collection.create", "endorsement.award"]
+    },
+    "limit": {{limit}},
+    "cursor": "{{cursor}}"
+  }
+}

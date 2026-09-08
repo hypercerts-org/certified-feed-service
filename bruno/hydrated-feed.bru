@@ -1,0 +1,27 @@
+meta {
+  name: Hydrated feed
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/xrpc/app.certified.feed.beta.getFeed
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "feedId": "{{feedId}}",
+    "params": {
+      "$type": "{{feedParamsType}}",
+      "viewerDid": "{{viewerDid}}"
+    },
+    "limit": {{limit}},
+    "cursor": "{{cursor}}"
+  }
+}

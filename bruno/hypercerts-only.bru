@@ -1,0 +1,28 @@
+meta {
+  name: Hypercerts only
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/xrpc/app.certified.feed.beta.getFeed
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "feedId": "{{feedId}}",
+    "params": {
+      "$type": "{{feedParamsType}}",
+      "viewerDid": "{{viewerDid}}",
+      "kinds": ["cert.create"]
+    },
+    "limit": {{limit}},
+    "cursor": "{{cursor}}"
+  }
+}
