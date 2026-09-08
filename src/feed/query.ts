@@ -14,25 +14,25 @@ import {
   type SqlFeedRuntime,
 } from './sql-feed.js'
 import {
-  CERTIFIED_FEED_ID,
-  CERTIFIED_FEED_PARAMS_TYPE,
+  HYPERCERTS_FEED_ID,
+  HYPERCERTS_FEED_PARAMS_TYPE,
   FEED_COLLECTIONS,
   FEED_KINDS,
-  type CertifiedFeedParams,
+  type HypercertsFeedParams,
   type FeedKind,
   type OrganizationQuality,
 } from './types.js'
 import { normalizeFeedRequest } from './validation.js'
 import { timestampUriCursor } from './cursor.js'
-import { certifiedFeedParams as certifiedFeedParamsSchema } from '../lexicons/app/certified/feed/beta/defs.js'
+import { hypercertsFeedParams as hypercertsFeedParamsSchema } from '../lexicons/org/hypercerts/feed/defs.js'
 
-const CERTIFIED_FEED_QUERY = readFileSync(
+const HYPERCERTS_FEED_QUERY = readFileSync(
   new URL('./feed-query.sql', import.meta.url),
   'utf8',
 )
 const FEED_KIND_SET = new Set<string>(FEED_KINDS)
 
-interface CertifiedFeedQueryRow extends QueryResultRow {
+interface HypercertsFeedQueryRow extends QueryResultRow {
   readonly uri: string | null
   readonly cid: string | null
   readonly collection: string | null
@@ -47,32 +47,32 @@ interface CertifiedFeedQueryRow extends QueryResultRow {
 
 const metadataInvariantError = (): Error =>
   new Error(
-    'Certified feed query metadata invariant failed: a selected row omitted URI, CID, collection, actor DID, kind, or sort value; verify the SQL projection before serving feed requests.',
+    'Hypercerts feed query metadata invariant failed: a selected row omitted URI, CID, collection, actor DID, kind, or sort value; verify the SQL projection before serving feed requests.',
   )
 
 const sourceInvariantError = (): Error =>
   new Error(
-    'Certified feed query source invariant failed: a selected source did not match the exact URI, CID, and collection of its feed row; verify the post-pagination source join before serving hydrated requests.',
+    'Hypercerts feed query source invariant failed: a selected source did not match the exact URI, CID, and collection of its feed row; verify the post-pagination source join before serving hydrated requests.',
   )
 
-const parseCertifiedFeedParams = (
+const parseHypercertsFeedParams = (
   input: { readonly $type: string },
-): CertifiedFeedParams => {
-  let parsed: ReturnType<typeof certifiedFeedParamsSchema.schema.$parse>
+): HypercertsFeedParams => {
+  let parsed: ReturnType<typeof hypercertsFeedParamsSchema.schema.$parse>
   try {
-    parsed = certifiedFeedParamsSchema.schema.$parse(input)
+    parsed = hypercertsFeedParamsSchema.schema.$parse(input)
   } catch (cause) {
     const detail = cause instanceof Error && cause.message ? `: ${cause.message}` : ''
     throw new FeedError(
       FeedErrorCode.InvalidRequest,
-      `params does not match ${CERTIFIED_FEED_PARAMS_TYPE}${detail}; correct the feed parameters and retry.`,
+      `params does not match ${HYPERCERTS_FEED_PARAMS_TYPE}${detail}; correct the feed parameters and retry.`,
       400,
       { cause },
     )
   }
 
   return {
-    $type: CERTIFIED_FEED_PARAMS_TYPE,
+    $type: HYPERCERTS_FEED_PARAMS_TYPE,
     viewerDid: parsed.viewerDid,
     ...(parsed.trustedEvaluators === undefined
       ? {}
@@ -89,8 +89,8 @@ const parseCertifiedFeedParams = (
   }
 }
 
-const mapCertifiedFeedRow: FeedRowMapper<
-  CertifiedFeedQueryRow,
+const mapHypercertsFeedRow: FeedRowMapper<
+  HypercertsFeedQueryRow,
   InternalFeedRow
 > = (row, mode): InternalFeedRow | InternalSourceFeedRow => {
   if (
@@ -126,19 +126,19 @@ const mapCertifiedFeedRow: FeedRowMapper<
   return { ...metadata, sourceValue: row.source_json }
 }
 
-/** Builds the current Certified feed definition over one read-only SQL runtime. */
-export const createCertifiedFeed = (
+/** Builds the current Hypercerts feed definition over one read-only SQL runtime. */
+export const createHypercertsFeed = (
   runtime: SqlFeedRuntime,
   trustedQualityLabelerDids: readonly string[],
 ): RegisteredFeed =>
   defineSqlFeed(runtime, {
-    id: CERTIFIED_FEED_ID,
+    id: HYPERCERTS_FEED_ID,
     params: {
-      type: CERTIFIED_FEED_PARAMS_TYPE,
-      parse: parseCertifiedFeedParams,
+      type: HYPERCERTS_FEED_PARAMS_TYPE,
+      parse: parseHypercertsFeedParams,
       normalize: normalizeFeedRequest,
     },
-    sql: CERTIFIED_FEED_QUERY,
+    sql: HYPERCERTS_FEED_QUERY,
     bind: ({ params, cursor, mode, fetchLimit }) => {
       const policy = params.organizationQuality
       return [
@@ -157,5 +157,5 @@ export const createCertifiedFeed = (
       ]
     },
     cursor: timestampUriCursor,
-    mapRow: mapCertifiedFeedRow,
+    mapRow: mapHypercertsFeedRow,
   })

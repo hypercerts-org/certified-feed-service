@@ -1,13 +1,13 @@
 import type { QueryResultRow } from 'pg'
 import { describe, expect, it } from 'vitest'
 
-import { createCertifiedFeed } from '../src/feed/query.js'
+import { createHypercertsFeed } from '../src/feed/query.js'
 import type { SqlFeedQueryExecutor } from '../src/feed/sql-feed.js'
 import { FEED_COLLECTIONS } from '../src/feed/types.js'
 import { Metrics } from '../src/metrics.js'
 
-const feedId = 'app.certified.feed.beta.defs#certifiedFeed'
-const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
+const feedId = 'org.hypercerts.feed.defs#hypercertsFeed'
+const paramsType = 'org.hypercerts.feed.defs#hypercertsFeedParams'
 const viewerDid = 'did:plc:ar7c4by46qjdydhdevvrndac'
 const actorDid = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 const trustedLabeler = 'did:plc:ragtjsm2j2vknwkz3zp4oxrd'
@@ -50,7 +50,7 @@ const params = {
   viewerDid,
 } as const
 
-describe('Certified SQL feed definition', () => {
+describe('Hypercerts SQL feed definition', () => {
   it('binds the current feed contract and maps metadata rows', async () => {
     const database = new FakeQueryExecutor([
       resultRow({
@@ -60,7 +60,7 @@ describe('Certified SQL feed definition', () => {
         source_json: null,
       }),
     ])
-    const feed = createCertifiedFeed(
+    const feed = createHypercertsFeed(
       { database, metrics: new Metrics() },
       [trustedLabeler],
     )
@@ -100,7 +100,7 @@ describe('Certified SQL feed definition', () => {
 
   it('rejects structural and semantic params failures before querying', async () => {
     const database = new FakeQueryExecutor([])
-    const feed = createCertifiedFeed(
+    const feed = createHypercertsFeed(
       { database, metrics: new Metrics() },
       [],
     )
@@ -129,7 +129,7 @@ describe('Certified SQL feed definition', () => {
     const database = new FakeQueryExecutor([
       resultRow({ source_json: sourceValue }),
     ])
-    const feed = createCertifiedFeed(
+    const feed = createHypercertsFeed(
       { database, metrics: new Metrics() },
       [],
     )
@@ -173,7 +173,7 @@ describe('Certified SQL feed definition', () => {
     { kind: null },
     { sort_value: null },
   ])('fails instead of silently dropping incomplete metadata: %o', async (overrides) => {
-    const feed = createCertifiedFeed(
+    const feed = createHypercertsFeed(
       {
         database: new FakeQueryExecutor([resultRow(overrides)]),
         metrics: new Metrics(),
@@ -187,7 +187,7 @@ describe('Certified SQL feed definition', () => {
   })
 
   it('preserves a present JSON null source value', async () => {
-    const feed = createCertifiedFeed(
+    const feed = createHypercertsFeed(
       {
         database: new FakeQueryExecutor([resultRow({ source_json: null })]),
         metrics: new Metrics(),
@@ -208,7 +208,7 @@ describe('Certified SQL feed definition', () => {
     { selected_source_collection: null },
     { selected_source_collection: 'org.hypercerts.collection' },
   ])('rejects a missing or mismatched selected source: %o', async (overrides) => {
-    const feed = createCertifiedFeed(
+    const feed = createHypercertsFeed(
       {
         database: new FakeQueryExecutor([resultRow(overrides)]),
         metrics: new Metrics(),

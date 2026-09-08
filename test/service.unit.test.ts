@@ -11,8 +11,8 @@ import type {
 import { FeedService } from '../src/feed/service.js'
 import type { GetFeedSkeletonInput } from '../src/feed/types.js'
 
-const feedId = 'app.certified.feed.beta.defs#certifiedFeed'
-const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
+const feedId = 'org.hypercerts.feed.defs#hypercertsFeed'
+const paramsType = 'org.hypercerts.feed.defs#hypercertsFeedParams'
 const viewerDid = 'did:plc:ar7c4by46qjdydhdevvrndac'
 const actorDid = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'
 const baseUri = `at://${actorDid}/org.hypercerts.claim.activity/`

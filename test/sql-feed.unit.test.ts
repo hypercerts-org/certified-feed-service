@@ -18,9 +18,9 @@ import {
 } from '../src/feed/sql-feed.js'
 import { Metrics } from '../src/metrics.js'
 
-const feedId = 'app.certified.feed.beta.defs#scoredFeed'
-const paramsType = 'app.certified.feed.beta.defs#scoredFeedParams'
-const otherFeedId = 'app.certified.feed.beta.defs#otherFeed'
+const feedId = 'org.hypercerts.feed.defs#scoredFeed'
+const paramsType = 'org.hypercerts.feed.defs#scoredFeedParams'
+const otherFeedId = 'org.hypercerts.feed.defs#otherFeed'
 const actorDid = 'did:plc:ar7c4by46qjdydhdevvrndac'
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 
@@ -297,7 +297,7 @@ describe('defineSqlFeed', () => {
       ),
     ).rejects.toBe(failure)
     expect(await metrics.registry.metrics()).toContain(
-      'certified_feed_database_duration_seconds_count{operation="feed"} 1',
+      'hypercerts_feed_database_duration_seconds_count{operation="feed"} 1',
     )
   })
 

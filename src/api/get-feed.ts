@@ -6,7 +6,7 @@ import type { GetFeedSkeletonInput } from '../feed/types.js'
 import type { HydratedFeedReader } from '../hydration/service.js'
 import getFeed, {
   $output,
-} from '../lexicons/app/certified/feed/beta/getFeed.js'
+} from '../lexicons/org/hypercerts/feed/getFeed.js'
 
 /** Registers the public view-only hydrated feed procedure on a LexRouter instance. */
 export const registerGetFeed = (

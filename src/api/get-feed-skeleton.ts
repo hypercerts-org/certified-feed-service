@@ -6,7 +6,7 @@ import type { FeedSkeletonReader } from '../feed/service.js'
 import type { GetFeedSkeletonInput } from '../feed/types.js'
 import getFeedSkeleton, {
   $output,
-} from '../lexicons/app/certified/feed/beta/getFeedSkeleton.js'
+} from '../lexicons/org/hypercerts/feed/getFeedSkeleton.js'
 
 /** Registers the public generic feed-skeleton procedure on a LexRouter instance. */
 export const registerGetFeedSkeleton = (

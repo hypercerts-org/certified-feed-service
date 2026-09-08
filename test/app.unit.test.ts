@@ -7,8 +7,8 @@ import type { DatabaseCompatibilityChecker } from '../src/database.js'
 import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 import type { FeedSkeletonReader } from '../src/feed/service.js'
 import {
-  CERTIFIED_FEED_ID,
-  CERTIFIED_FEED_PARAMS_TYPE,
+  HYPERCERTS_FEED_ID,
+  HYPERCERTS_FEED_PARAMS_TYPE,
   type GetFeedSkeletonInput,
 } from '../src/feed/types.js'
 import type { HydratedFeedReader } from '../src/hydration/service.js'
@@ -30,8 +30,8 @@ const avatarBlob = jsonToLex(
 const logger = pino({ enabled: false })
 
 const skeletonPath =
-  'http://localhost/xrpc/app.certified.feed.beta.getFeedSkeleton'
-const hydratedPath = 'http://localhost/xrpc/app.certified.feed.beta.getFeed'
+  'http://localhost/xrpc/org.hypercerts.feed.getFeedSkeleton'
+const hydratedPath = 'http://localhost/xrpc/org.hypercerts.feed.getFeed'
 
 const compatibleDatabase: DatabaseCompatibilityChecker = {
   checkCompatibility: vi.fn(async () => ({ compatible: true })),
@@ -51,8 +51,8 @@ const appServices = (
 ): AppFeedServices => ({ skeleton, hydrated })
 
 const feedRequest = (viewerDid = viewer): GetFeedSkeletonInput => ({
-  feedId: CERTIFIED_FEED_ID,
-  params: { $type: CERTIFIED_FEED_PARAMS_TYPE, viewerDid },
+  feedId: HYPERCERTS_FEED_ID,
+  params: { $type: HYPERCERTS_FEED_PARAMS_TYPE, viewerDid },
 })
 
 const post = (url: string, body: string): Request =>
@@ -99,7 +99,7 @@ describe('HTTP application', () => {
             {
               subject: uri,
               view: {
-                $type: 'app.certified.feed.beta.defs#certifiedFeedView' as const,
+                $type: 'org.hypercerts.feed.defs#hypercertsFeedView' as const,
                 kind: 'cert.create' as const,
                 actor: {
                   did: actor,
@@ -110,7 +110,7 @@ describe('HTTP application', () => {
                   },
                 },
                 content: {
-                  $type: 'app.certified.feed.beta.defs#activityView' as const,
+                  $type: 'org.hypercerts.feed.defs#activityView' as const,
                   title: 'Restore the watershed',
                   locationCount: 0,
                 },
@@ -138,7 +138,7 @@ describe('HTTP application', () => {
         {
           subject: uri,
           view: {
-            $type: 'app.certified.feed.beta.defs#certifiedFeedView',
+            $type: 'org.hypercerts.feed.defs#hypercertsFeedView',
             actor: {
               did: actor,
               avatar: {
@@ -152,7 +152,7 @@ describe('HTTP application', () => {
               },
             },
             content: {
-              $type: 'app.certified.feed.beta.defs#activityView',
+              $type: 'org.hypercerts.feed.defs#activityView',
             },
           },
         },
@@ -196,7 +196,7 @@ describe('HTTP application', () => {
 
     const metricText = await metrics.registry.metrics()
     expect(metricText).not.toContain(
-      'certified_feed_errors_total{error="InvalidRequest"}',
+      'hypercerts_feed_errors_total{error="InvalidRequest"}',
     )
   })
 
@@ -242,7 +242,7 @@ describe('HTTP application', () => {
     })
     const metricText = await metrics.registry.metrics()
     expect(metricText).toContain(
-      'certified_feed_errors_total{error="InvalidRequest"} 1',
+      'hypercerts_feed_errors_total{error="InvalidRequest"} 1',
     )
   })
 
@@ -260,7 +260,7 @@ describe('HTTP application', () => {
 
     const metricText = await metrics.registry.metrics()
     expect(metricText).not.toContain(
-      'certified_feed_errors_total{error="InvalidRequest"}',
+      'hypercerts_feed_errors_total{error="InvalidRequest"}',
     )
   })
 
@@ -468,11 +468,11 @@ describe('HTTP application', () => {
             {
               subject: 'not-an-at-uri',
               view: {
-                $type: 'app.certified.feed.beta.defs#certifiedFeedView' as const,
+                $type: 'org.hypercerts.feed.defs#hypercertsFeedView' as const,
                 kind: 'cert.create' as const,
                 actor: { did: 'not-a-did' },
                 content: {
-                  $type: 'app.certified.feed.beta.defs#activityView' as const,
+                  $type: 'org.hypercerts.feed.defs#activityView' as const,
                   title: 'Invalid response fixture',
                   locationCount: 0,
                 },
@@ -496,8 +496,8 @@ describe('HTTP application', () => {
   })
 
   it.each([
-    ['app.certified.feed.beta.getFeedSkeleton', skeletonPath],
-    ['app.certified.feed.beta.getFeed', hydratedPath],
+    ['org.hypercerts.feed.getFeedSkeleton', skeletonPath],
+    ['org.hypercerts.feed.getFeed', hydratedPath],
   ])('normalizes Lexicon validation failures for %s', async (nsid, url) => {
     const app = createApp(
       compatibleDatabase,
@@ -607,7 +607,7 @@ describe('HTTP application', () => {
     expect(response.status).toBe(400)
     const metricText = await metrics.registry.metrics()
     expect(metricText).toContain(
-      'certified_feed_errors_total{error="InvalidRequest"} 1',
+      'hypercerts_feed_errors_total{error="InvalidRequest"} 1',
     )
   })
 

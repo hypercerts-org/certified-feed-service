@@ -1,16 +1,16 @@
 {
   "lexicon": 1,
-  "id": "app.certified.feed.beta.defs",
-  "description": "Shared wire definitions for Certified feed procedures.",
+  "id": "org.hypercerts.feed.defs",
+  "description": "Shared wire definitions for Hypercerts feed procedures.",
   "defs": {
-    "certifiedFeed": {
+    "hypercertsFeed": {
       "type": "token",
-      "description": "Identifies the Certified viewer-scope feed algorithm."
+      "description": "Identifies the Hypercerts viewer-scope feed algorithm."
     },
-    "certifiedFeedParams": {
+    "hypercertsFeedParams": {
       "type": "object",
       "required": ["viewerDid"],
-      "description": "Parameters accepted by the Certified viewer-scope feed algorithm.",
+      "description": "Parameters accepted by the Hypercerts viewer-scope feed algorithm.",
       "properties": {
         "viewerDid": {
           "type": "string",
@@ -26,7 +26,7 @@
         },
         "organizationQuality": {
           "type": "ref",
-          "ref": "app.certified.feed.beta.defs#organizationQualityPolicy"
+          "ref": "org.hypercerts.feed.defs#organizationQualityPolicy"
         },
         "kinds": {
           "type": "array",
@@ -170,10 +170,10 @@
         "target": { "type": "ref", "ref": "com.atproto.repo.strongRef" }
       }
     },
-    "certifiedFeedView": {
+    "hypercertsFeedView": {
       "type": "object",
       "required": ["kind", "actor", "content"],
-      "description": "Hydrated representation of one entry from the Certified viewer-scope feed.",
+      "description": "Hydrated representation of one entry from the Hypercerts viewer-scope feed.",
       "properties": {
         "kind": {
           "type": "string",
@@ -188,7 +188,7 @@
             "update.create",
             "endorsement.award"
           ],
-          "description": "Certified event classification used to interpret and present the entry."
+          "description": "Hypercerts event classification used to interpret and present the entry."
         },
         "actor": { "type": "ref", "ref": "#actorSummary" },
         "content": {

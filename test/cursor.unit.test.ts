@@ -7,8 +7,8 @@ import {
 } from '../src/feed/cursor.js'
 import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
 
-const feedId = 'app.certified.feed.beta.defs#certifiedFeed'
-const otherFeedId = 'app.certified.feed.beta.defs#otherFeed'
+const feedId = 'org.hypercerts.feed.defs#hypercertsFeed'
+const otherFeedId = 'org.hypercerts.feed.defs#otherFeed'
 const uri =
   'at://did:plc:ar7c4by46qjdydhdevvrndac/org.hypercerts.claim.activity/3kpn'
 const row = {

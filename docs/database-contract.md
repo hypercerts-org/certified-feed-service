@@ -59,7 +59,7 @@ Missing source-event rows produce a smaller feed. Missing identity rows do not r
 
 ## Query ownership
 
-`src/feed/feed-query.sql` owns one parameterized CTE statement. `src/feed/query.ts` registers the Certified feed's parameter parser, bind order, cursor codec, and row mapping through `src/feed/sql-feed.ts`; `src/feed/registry.ts` dispatches the public `feedId` and typed params before execution. The statement has these stages:
+`src/feed/feed-query.sql` owns one parameterized CTE statement. `src/feed/query.ts` registers the Hypercerts feed's parameter parser, bind order, cursor codec, and row mapping through `src/feed/sql-feed.ts`; `src/feed/registry.ts` dispatches the public `feedId` and typed params before execution. The statement has these stages:
 
 1. Resolve the viewer's current Certified outbound follows.
 2. Resolve current evaluator endorsement subjects from award JSON.
@@ -124,7 +124,7 @@ Hyperindex materializes a valid top-level `createdAt` into `record_created_at` a
 
 The same effective timestamp is used for feed ordering, cursor values, project/activity pairing, and latest endorsement-response ordering. Response ordering uses the effective timestamp first, then `indexed_at`, then URI descending.
 
-Cursor version 1 is unpadded base64url JSON containing exactly `{ version: 1, feedId, value: { value, uri } }`. The registry-selected feed must match `feedId` before the Certified feed decodes the nested position. Its descending keyset predicate is:
+Cursor version 1 is unpadded base64url JSON containing exactly `{ version: 1, feedId, value: { value, uri } }`. The registry-selected feed must match `feedId` before the Hypercerts feed decodes the nested position. Its descending keyset predicate is:
 
 ```sql
 effective_at < position.value
@@ -158,14 +158,16 @@ The query intentionally does not use Hyperindex's derived endorsement adjacency 
 The deployment role needs only schema usage and `SELECT` on the three runtime tables:
 
 ```sql
-GRANT USAGE ON SCHEMA public TO certified_feed_reader;
+GRANT USAGE ON SCHEMA public TO hypercerts_feed_reader;
 GRANT SELECT ON public.record, public.actor, public.external_label
-  TO certified_feed_reader;
-ALTER ROLE certified_feed_reader
+  TO hypercerts_feed_reader;
+ALTER ROLE hypercerts_feed_reader
   SET default_transaction_read_only = on;
 ```
 
-Grant `CONNECT` on the selected database separately when required by the deployment. The Node pool also enables `default_transaction_read_only=on`; that setting is defense in depth, not a replacement for least-privilege grants.
+Grant `CONNECT` on the selected database separately when required by the deployment. Before changing `DATABASE_URL`, create or rename the deployment role, apply the required grants, and verify with that login that it can connect, select the three runtime tables, and report read-only session state. Only then update the managed secret and deployment configuration and roll out the service.
+
+The Node pool also enables `default_transaction_read_only=on`; that setting is defense in depth, not a replacement for least-privilege grants.
 
 ## Compatibility and performance verification
 

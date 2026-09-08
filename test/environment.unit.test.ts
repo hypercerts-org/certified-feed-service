@@ -6,12 +6,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { loadLocalEnvironment } from '../src/environment.js'
 
-const variableName = 'CERTIFIED_FEED_DOTENV_TEST'
+const variableName = 'HYPERCERTS_FEED_DOTENV_TEST'
 const originalValue = process.env[variableName]
 const directories: string[] = []
 
 const createEnvFile = (value: string): string => {
-  const directory = mkdtempSync(join(tmpdir(), 'certified-feed-env-'))
+  const directory = mkdtempSync(join(tmpdir(), 'hypercerts-feed-env-'))
   directories.push(directory)
   const path = join(directory, '.env')
   writeFileSync(path, `${variableName}=${value}\n`)

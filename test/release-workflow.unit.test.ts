@@ -49,7 +49,7 @@ describe('release workflow', () => {
       baseBranch: 'main',
       changelog: [
         '@changesets/changelog-github',
-        { repo: 'hypercerts-org/certified-feed-service' },
+        { repo: 'hypercerts-org/hypercerts-feed-service' },
       ],
       privatePackages: { version: true, tag: true },
     })
@@ -95,7 +95,7 @@ describe('release workflow', () => {
     )
     expect(releaseWorkflow).toContain('image: postgres:16-alpine')
     expect(releaseWorkflow).toContain(
-      'TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/certified_feed_test',
+      'TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/hypercerts_feed_test',
     )
     expect(releaseWorkflow).toMatch(/run: npm run check\s/)
     expect(releaseWorkflow).toMatch(/run: npm test\s/)
