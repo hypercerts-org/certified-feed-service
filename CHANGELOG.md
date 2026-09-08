@@ -1,8 +1,8 @@
 # @hypercerts/hypercerts-feed-service
 
-## 0.1.1
+## 0.1.0
 
-### Patch Changes
+### Initial Release
 
 - [#7](https://github.com/hypercerts-org/hypercerts-feed-service/pull/7) [`07fc96f`](https://github.com/hypercerts-org/hypercerts-feed-service/commit/07fc96f229a4a9200331c94d6fdc15b68c271268) Thanks [@Kzoeps](https://github.com/Kzoeps)! - Introduce the initial version of Hypercerts Feed Service.
 
