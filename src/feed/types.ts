@@ -9,7 +9,7 @@ export const ORGANIZATION_QUALITIES = [
 /** A quality category that a trusted Orglabeler can assign to an organization. */
 export type OrganizationQuality = (typeof ORGANIZATION_QUALITIES)[number]
 
-/** Collections that can produce events in the Certified feed. */
+/** Collections that can produce events in the Hypercerts feed. */
 export const FEED_COLLECTIONS = [
   'org.hypercerts.claim.activity',
   'org.hypercerts.collection',
@@ -20,7 +20,7 @@ export const FEED_COLLECTIONS = [
   'app.certified.badge.award',
 ] as const
 
-/** Final event classifications exposed by the Certified hydrated view. */
+/** Final event classifications exposed by the Hypercerts hydrated view. */
 export const FEED_KINDS = [
   'cert.create',
   'collection.create',
@@ -43,13 +43,13 @@ export interface OrganizationQualityPolicy {
   readonly includeUnrated: boolean
 }
 
-/** Identifier of the Certified viewer-scope feed algorithm. */
-export const CERTIFIED_FEED_ID =
-  'app.certified.feed.beta.defs#certifiedFeed' as const
+/** Identifier of the Hypercerts viewer-scope feed algorithm. */
+export const HYPERCERTS_FEED_ID =
+  'org.hypercerts.feed.defs#hypercertsFeed' as const
 
-/** Open-union discriminator for the Certified feed's parameters. */
-export const CERTIFIED_FEED_PARAMS_TYPE =
-  'app.certified.feed.beta.defs#certifiedFeedParams' as const
+/** Open-union discriminator for the Hypercerts feed's parameters. */
+export const HYPERCERTS_FEED_PARAMS_TYPE =
+  'org.hypercerts.feed.defs#hypercertsFeedParams' as const
 
 /** Raw organization-quality policy accepted before semantic value checks. */
 export interface OrganizationQualityPolicyInput {
@@ -57,9 +57,9 @@ export interface OrganizationQualityPolicyInput {
   readonly includeUnrated: boolean
 }
 
-/** Parameters accepted by the Certified viewer-scope feed algorithm. */
-export interface CertifiedFeedParams {
-  readonly $type: typeof CERTIFIED_FEED_PARAMS_TYPE
+/** Parameters accepted by the Hypercerts viewer-scope feed algorithm. */
+export interface HypercertsFeedParams {
+  readonly $type: typeof HYPERCERTS_FEED_PARAMS_TYPE
   /** Viewer whose current Certified outbound follows supply the base scope. */
   readonly viewerDid: string
   /** Evaluators whose active endorsement subjects are added to the base scope. */
@@ -77,7 +77,7 @@ export interface UnknownFeedParams {
 }
 
 /** Parameters for any feed algorithm accepted by the public open union. */
-export type FeedParams = CertifiedFeedParams | UnknownFeedParams
+export type FeedParams = HypercertsFeedParams | UnknownFeedParams
 
 /** Raw request body shared by the skeleton and hydrated feed procedures. */
 export interface GetFeedSkeletonInput {
@@ -97,7 +97,7 @@ export interface FeedSkeletonItem {
   readonly subject: string
 }
 
-/** Public response body from app.certified.feed.beta.getFeedSkeleton. */
+/** Public response body from org.hypercerts.feed.getFeedSkeleton. */
 export interface GetFeedSkeletonOutput {
   /** Ordered, unhydrated feed records for the current page. */
   readonly feed: readonly FeedSkeletonItem[]

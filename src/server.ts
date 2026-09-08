@@ -4,7 +4,7 @@ import pino from 'pino'
 import { createApp } from './app.js'
 import { loadConfig } from './config.js'
 import { Database } from './database.js'
-import { createCertifiedFeed } from './feed/query.js'
+import { createHypercertsFeed } from './feed/query.js'
 import { FeedRegistry } from './feed/registry.js'
 import { FeedService } from './feed/service.js'
 import { loadLocalEnvironment } from './environment.js'
@@ -22,11 +22,11 @@ const config = loadConfig()
 const logger = pino({ level: config.logLevel })
 const metrics = new Metrics()
 const database = new Database(config, logger)
-const certifiedFeed = createCertifiedFeed(
+const hypercertsFeed = createHypercertsFeed(
   { database, metrics },
   config.trustedQualityLabelerDids,
 )
-const feeds = new FeedRegistry([certifiedFeed])
+const feeds = new FeedRegistry([hypercertsFeed])
 const feedService = new FeedService(feeds)
 const identities = new PostgresIdentityReader(database)
 const hydratedFeed = new HydratedFeedService(feeds, identities)
@@ -87,7 +87,7 @@ try {
 }
 logger.info(
   { host: config.host, port: config.port },
-  'Certified feed service is listening',
+  'Hypercerts feed service is listening',
 )
 
 try {

@@ -6,13 +6,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { loadConfig } from '../src/config.js'
 import { Database } from '../src/database.js'
-import { createCertifiedFeed } from '../src/feed/query.js'
+import { createHypercertsFeed } from '../src/feed/query.js'
 import { FeedRegistry } from '../src/feed/registry.js'
 import { FeedService } from '../src/feed/service.js'
 import {
-  CERTIFIED_FEED_ID,
-  CERTIFIED_FEED_PARAMS_TYPE,
-  type CertifiedFeedParams,
+  HYPERCERTS_FEED_ID,
+  HYPERCERTS_FEED_PARAMS_TYPE,
+  type HypercertsFeedParams,
   type GetFeedSkeletonInput,
 } from '../src/feed/types.js'
 import { PostgresIdentityReader } from '../src/hydration/identity.js'
@@ -35,7 +35,7 @@ const randomDid = (): string => {
   return `did:plc:${suffix}`
 }
 
-describe('Certified feed definition against Postgres', () => {
+describe('Hypercerts feed definition against Postgres', () => {
   const logger = pino({ enabled: false })
   let admin: Pool
   let database: Database
@@ -176,8 +176,8 @@ describe('Certified feed definition against Postgres', () => {
     )
   }
 
-  type CertifiedFeedOverrides = Omit<
-    CertifiedFeedParams,
+  type HypercertsFeedOverrides = Omit<
+    HypercertsFeedParams,
     '$type' | 'viewerDid'
   > & Pick<GetFeedSkeletonInput, 'limit' | 'cursor'>
 
@@ -185,7 +185,7 @@ describe('Certified feed definition against Postgres', () => {
     trustedQualityLabelerDids: readonly string[] = [],
   ): FeedRegistry =>
     new FeedRegistry([
-      createCertifiedFeed(
+      createHypercertsFeed(
         { database, metrics: new Metrics() },
         trustedQualityLabelerDids,
       ),
@@ -193,13 +193,13 @@ describe('Certified feed definition against Postgres', () => {
 
   const feedRequest = (
     viewerDid: string,
-    input: CertifiedFeedOverrides = {},
+    input: HypercertsFeedOverrides = {},
   ): GetFeedSkeletonInput => {
     const { limit, cursor, ...params } = input
     return {
-      feedId: CERTIFIED_FEED_ID,
+      feedId: HYPERCERTS_FEED_ID,
       params: {
-        $type: CERTIFIED_FEED_PARAMS_TYPE,
+        $type: HYPERCERTS_FEED_PARAMS_TYPE,
         viewerDid,
         ...params,
       },
@@ -210,7 +210,7 @@ describe('Certified feed definition against Postgres', () => {
 
   const getFeedForFollows = async (
     followedDids: readonly string[],
-    input: CertifiedFeedOverrides = {},
+    input: HypercertsFeedOverrides = {},
   ) => {
     const viewerDid = randomDid()
     await seedActor(viewerDid)

@@ -8,9 +8,9 @@ import type {
   InternalSourceFeedRow,
 } from '../src/feed/registry.js'
 import {
-  CERTIFIED_FEED_ID,
-  CERTIFIED_FEED_PARAMS_TYPE,
-  type CertifiedFeedParams,
+  HYPERCERTS_FEED_ID,
+  HYPERCERTS_FEED_PARAMS_TYPE,
+  type HypercertsFeedParams,
   type GetFeedSkeletonInput,
 } from '../src/feed/types.js'
 import { HydratedFeedService } from '../src/hydration/service.js'
@@ -37,7 +37,7 @@ const measurementUri = `at://${authorDid}/org.hypercerts.context.measurement/mea
 const targetUri = `at://${targetDid}/org.hypercerts.claim.activity/target`
 
 type FeedRequestOverrides = Partial<
-  Omit<CertifiedFeedParams, '$type' | 'viewerDid'>
+  Omit<HypercertsFeedParams, '$type' | 'viewerDid'>
 > & Pick<GetFeedSkeletonInput, 'limit' | 'cursor'>
 
 const feedRequest = (
@@ -45,9 +45,9 @@ const feedRequest = (
 ): GetFeedSkeletonInput => {
   const { limit, cursor, ...params } = overrides
   return {
-    feedId: CERTIFIED_FEED_ID,
+    feedId: HYPERCERTS_FEED_ID,
     params: {
-      $type: CERTIFIED_FEED_PARAMS_TYPE,
+      $type: HYPERCERTS_FEED_PARAMS_TYPE,
       viewerDid,
       ...params,
     },
@@ -202,7 +202,7 @@ describe('HydratedFeedService', () => {
     expect(output.feed[0]).toEqual({
       subject: activityUri,
       view: {
-        $type: 'app.certified.feed.beta.defs#certifiedFeedView',
+        $type: 'org.hypercerts.feed.defs#hypercertsFeedView',
         kind: 'cert.create',
         actor: {
           did: authorDid,
@@ -210,7 +210,7 @@ describe('HydratedFeedService', () => {
           displayName: 'Certified Author',
         },
         content: {
-          $type: 'app.certified.feed.beta.defs#activityView',
+          $type: 'org.hypercerts.feed.defs#activityView',
           title: 'Restore the watershed',
           shortDescription: 'Native forest restoration',
           createdAt,
@@ -221,10 +221,10 @@ describe('HydratedFeedService', () => {
     expect(output.feed[1]).toMatchObject({
       subject: endorsementUri,
       view: {
-        $type: 'app.certified.feed.beta.defs#certifiedFeedView',
+        $type: 'org.hypercerts.feed.defs#hypercertsFeedView',
         actor: { did: authorDid },
         content: {
-          $type: 'app.certified.feed.beta.defs#endorsementView',
+          $type: 'org.hypercerts.feed.defs#endorsementView',
           subject: { did: endorsedDid },
         },
       },
@@ -278,7 +278,7 @@ describe('HydratedFeedService', () => {
     expect(output.feed[0]).toMatchObject({
       view: {
         content: {
-          $type: 'app.certified.feed.beta.defs#measurementView',
+          $type: 'org.hypercerts.feed.defs#measurementView',
           target: { uri: targetUri, cid },
         },
       },

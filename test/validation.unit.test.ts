@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
 import { FeedError, FeedErrorCode } from '../src/feed/errors.js'
-import type { CertifiedFeedParams } from '../src/feed/types.js'
+import type { HypercertsFeedParams } from '../src/feed/types.js'
 import { normalizeFeedRequest } from '../src/feed/validation.js'
 
-const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
+const paramsType = 'org.hypercerts.feed.defs#hypercertsFeedParams'
 const viewer = 'did:plc:ar7c4by46qjdydhdevvrndac'
 
 const feedParams = (
-  params: Omit<CertifiedFeedParams, '$type'>,
-): CertifiedFeedParams => ({ $type: paramsType, ...params })
+  params: Omit<HypercertsFeedParams, '$type'>,
+): HypercertsFeedParams => ({ $type: paramsType, ...params })
 
 describe('feed request validation', () => {
   it('normalizes the viewer-follow request defaults', () => {
@@ -34,7 +34,7 @@ describe('feed request validation', () => {
     expect(result.trustedEvaluators).toEqual([viewer])
   })
 
-  it('reports Certified parameter failures through the generic InvalidRequest error', () => {
+  it('reports Hypercerts parameter failures through the generic InvalidRequest error', () => {
     expect(() =>
       normalizeFeedRequest(
         feedParams({ viewerDid: viewer, kinds: ['cert.creat'] }),

@@ -7,11 +7,11 @@ import { FeedErrorCode } from '../src/feed/errors.js'
 import {
   $input as hydratedInput,
   $output as hydratedOutput,
-} from '../src/lexicons/app/certified/feed/beta/getFeed.js'
+} from '../src/lexicons/org/hypercerts/feed/getFeed.js'
 import {
   $input as skeletonInput,
   $output as skeletonOutput,
-} from '../src/lexicons/app/certified/feed/beta/getFeedSkeleton.js'
+} from '../src/lexicons/org/hypercerts/feed/getFeedSkeleton.js'
 
 const readLexicon = (relativePath: string): Record<string, any> =>
   JSON.parse(
@@ -19,10 +19,10 @@ const readLexicon = (relativePath: string): Record<string, any> =>
   ) as Record<string, any>
 
 const skeletonLexicon = readLexicon(
-  'app/certified/feed/beta/getFeedSkeleton.json',
+  'org/hypercerts/feed/getFeedSkeleton.json',
 )
-const hydratedLexicon = readLexicon('app/certified/feed/beta/getFeed.json')
-const defsLexicon = readLexicon('app/certified/feed/beta/defs.json')
+const hydratedLexicon = readLexicon('org/hypercerts/feed/getFeed.json')
+const defsLexicon = readLexicon('org/hypercerts/feed/defs.json')
 
 const skeletonMain = skeletonLexicon.defs.main
 const hydratedMain = hydratedLexicon.defs.main
@@ -35,8 +35,8 @@ const targetUri = `at://${viewerDid}/org.hypercerts.claim.activity/target`
 const cid = 'bafyreia3tbsfxe3cc75xrxyyn6qc42oupi73fxiox76prlyi5bpx7hr72u'
 const blobCid = 'bafkreiehxpuhtr5f6v4eu4byjo2j7kkrhjvd7psmfu4imnpdzb3bdqb7vy'
 const createdAt = '2026-07-21T10:00:00.000Z'
-const feedId = 'app.certified.feed.beta.defs#certifiedFeed'
-const paramsType = 'app.certified.feed.beta.defs#certifiedFeedParams'
+const feedId = 'org.hypercerts.feed.defs#hypercertsFeed'
+const paramsType = 'org.hypercerts.feed.defs#hypercertsFeedParams'
 
 const feedRequest = {
   feedId,
@@ -86,48 +86,48 @@ const target = { uri: targetUri, cid }
 
 const viewsByKind = {
   'cert.create': {
-    $type: 'app.certified.feed.beta.defs#activityView',
+    $type: 'org.hypercerts.feed.defs#activityView',
     title: 'Restore the watershed',
     image: uriImage,
     createdAt,
     locationCount: 2,
   },
   'collection.create': {
-    $type: 'app.certified.feed.beta.defs#collectionView',
+    $type: 'org.hypercerts.feed.defs#collectionView',
     title: 'Watershed projects',
     image: largeImage,
     createdAt,
     itemCount: 3,
   },
   'project.created_with_cert': {
-    $type: 'app.certified.feed.beta.defs#collectionView',
+    $type: 'org.hypercerts.feed.defs#collectionView',
     title: 'Watershed project',
     createdAt,
     itemCount: 1,
   },
   'endorsement.award': {
-    $type: 'app.certified.feed.beta.defs#endorsementView',
+    $type: 'org.hypercerts.feed.defs#endorsementView',
     subject: { did: viewerDid },
     createdAt,
   },
   'evaluation.create': {
-    $type: 'app.certified.feed.beta.defs#evaluationView',
+    $type: 'org.hypercerts.feed.defs#evaluationView',
     summary: 'Strong evidence',
     createdAt,
     target,
   },
   'measurement.create': {
-    $type: 'app.certified.feed.beta.defs#measurementView',
+    $type: 'org.hypercerts.feed.defs#measurementView',
     metric: 'hectares restored',
     createdAt,
     target,
   },
   'hyperboard.create': {
-    $type: 'app.certified.feed.beta.defs#hyperboardView',
+    $type: 'org.hypercerts.feed.defs#hyperboardView',
     createdAt,
   },
   'update.create': {
-    $type: 'app.certified.feed.beta.defs#updateView',
+    $type: 'org.hypercerts.feed.defs#updateView',
     title: 'Field report',
     image: smallBlob,
     createdAt,
@@ -140,7 +140,7 @@ const feedItem = (
 ): Record<string, any> => ({
   subject: uri,
   view: {
-    $type: 'app.certified.feed.beta.defs#certifiedFeedView',
+    $type: 'org.hypercerts.feed.defs#hypercertsFeedView',
     kind,
     actor,
     content: viewsByKind[kind],
@@ -182,11 +182,11 @@ describe('feed Lexicon contract', () => {
       type: 'string',
       maxLength: 4096,
     })
-    expect(defs.certifiedFeedParams.properties).not.toHaveProperty('authors')
-    expect(defs.certifiedFeedParams.properties).not.toHaveProperty('limit')
-    expect(defs.certifiedFeedParams.properties).not.toHaveProperty('cursor')
-    expect(defs.certifiedFeedParams.properties.organizationQuality.ref).toBe(
-      'app.certified.feed.beta.defs#organizationQualityPolicy',
+    expect(defs.hypercertsFeedParams.properties).not.toHaveProperty('authors')
+    expect(defs.hypercertsFeedParams.properties).not.toHaveProperty('limit')
+    expect(defs.hypercertsFeedParams.properties).not.toHaveProperty('cursor')
+    expect(defs.hypercertsFeedParams.properties.organizationQuality.ref).toBe(
+      'org.hypercerts.feed.defs#organizationQualityPolicy',
     )
     expect(hydratedMain.errors).toEqual(skeletonMain.errors)
     const errorNames = hydratedMain.errors.map(
@@ -279,14 +279,14 @@ describe('feed Lexicon contract', () => {
     expect(hydratedLexicon.defs.feedItem.properties.view).toMatchObject({
       type: 'union',
       closed: false,
-      refs: ['app.certified.feed.beta.defs#certifiedFeedView'],
+      refs: ['org.hypercerts.feed.defs#hypercertsFeedView'],
     })
-    expect(defs.certifiedFeedView.required).toEqual([
+    expect(defs.hypercertsFeedView.required).toEqual([
       'kind',
       'actor',
       'content',
     ])
-    expect(defs.certifiedFeedView.properties.content).toMatchObject({
+    expect(defs.hypercertsFeedView.properties.content).toMatchObject({
       type: 'union',
       closed: false,
       refs: [
@@ -303,7 +303,7 @@ describe('feed Lexicon contract', () => {
 
     const serialized = JSON.stringify({
       feedItem: hydratedLexicon.defs.feedItem,
-      certifiedFeedView: defs.certifiedFeedView,
+      hypercertsFeedView: defs.hypercertsFeedView,
     })
     for (const forbidden of [
       'record',

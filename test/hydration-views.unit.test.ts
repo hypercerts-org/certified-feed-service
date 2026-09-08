@@ -478,7 +478,7 @@ describe('top-level record validation', () => {
     raw.image = uriImage('https://example.com/mutated.png')
 
     expect(buildFeedItemView(result)).toEqual({
-      $type: 'app.certified.feed.beta.defs#activityView',
+      $type: 'org.hypercerts.feed.defs#activityView',
       title: 'Restore the watershed',
       shortDescription: 'Native forest restoration',
       image: protocolValue(smallImage()),
@@ -499,7 +499,7 @@ describe('feed-card view builders', () => {
     })
 
     expect(buildFeedItemView(record)).toEqual({
-      $type: 'app.certified.feed.beta.defs#activityView',
+      $type: 'org.hypercerts.feed.defs#activityView',
       title: 'Restore the watershed',
       shortDescription: 'Native forest restoration',
       image: protocolValue(smallImage()),
@@ -525,7 +525,7 @@ describe('feed-card view builders', () => {
       ],
     }
     const expected = {
-      $type: 'app.certified.feed.beta.defs#collectionView',
+      $type: 'org.hypercerts.feed.defs#collectionView',
       collectionType: 'project',
       title: 'Watershed projects',
       shortDescription: 'A coordinated portfolio',
@@ -574,7 +574,7 @@ describe('feed-card view builders', () => {
       image: protocolValue(largeImage()),
     })
     expect(buildFeedItemView(legacyRecord)).toEqual({
-      $type: 'app.certified.feed.beta.defs#collectionView',
+      $type: 'org.hypercerts.feed.defs#collectionView',
       title: 'Watershed projects',
       createdAt,
       itemCount: 0,
@@ -591,7 +591,7 @@ describe('feed-card view builders', () => {
     expect(
       buildFeedItemView(record, { endorsedActor }),
     ).toEqual({
-      $type: 'app.certified.feed.beta.defs#endorsementView',
+      $type: 'org.hypercerts.feed.defs#endorsementView',
       subject: endorsedActor,
       createdAt,
     })
@@ -637,19 +637,19 @@ describe('feed-card view builders', () => {
     )
 
     expect(buildFeedItemView(evaluation)).toEqual({
-      $type: 'app.certified.feed.beta.defs#evaluationView',
+      $type: 'org.hypercerts.feed.defs#evaluationView',
       summary: 'Strong evidence',
       createdAt,
       target: { uri: targetUri, cid },
     })
     expect(buildFeedItemView(measurement)).toEqual({
-      $type: 'app.certified.feed.beta.defs#measurementView',
+      $type: 'org.hypercerts.feed.defs#measurementView',
       metric: 'hectares restored',
       createdAt,
       target: { uri: targetUri, cid },
     })
     expect(buildFeedItemView(hyperboard)).toEqual({
-      $type: 'app.certified.feed.beta.defs#hyperboardView',
+      $type: 'org.hypercerts.feed.defs#hyperboardView',
       createdAt,
     })
 
@@ -687,7 +687,7 @@ describe('feed-card view builders', () => {
     )
 
     expect(buildFeedItemView(record)).toEqual({
-      $type: 'app.certified.feed.beta.defs#updateView',
+      $type: 'org.hypercerts.feed.defs#updateView',
       title: 'Field report',
       shortDescription: 'Photos and supporting documents',
       image: protocolValue(smallBlob('image/webp', secondBlobCid)),
@@ -701,42 +701,42 @@ describe('feed-card view builders', () => {
       'cert.create': {
         collection: 'org.hypercerts.claim.activity',
         value: records.activity,
-        expectedType: 'app.certified.feed.beta.defs#activityView',
+        expectedType: 'org.hypercerts.feed.defs#activityView',
       },
       'collection.create': {
         collection: 'org.hypercerts.collection',
         value: records.collection,
-        expectedType: 'app.certified.feed.beta.defs#collectionView',
+        expectedType: 'org.hypercerts.feed.defs#collectionView',
       },
       'project.created_with_cert': {
         collection: 'org.hypercerts.collection',
         value: records.collection,
-        expectedType: 'app.certified.feed.beta.defs#collectionView',
+        expectedType: 'org.hypercerts.feed.defs#collectionView',
       },
       'evaluation.create': {
         collection: 'org.hypercerts.context.evaluation',
         value: records.evaluation,
-        expectedType: 'app.certified.feed.beta.defs#evaluationView',
+        expectedType: 'org.hypercerts.feed.defs#evaluationView',
       },
       'measurement.create': {
         collection: 'org.hypercerts.context.measurement',
         value: records.measurement,
-        expectedType: 'app.certified.feed.beta.defs#measurementView',
+        expectedType: 'org.hypercerts.feed.defs#measurementView',
       },
       'hyperboard.create': {
         collection: 'org.hyperboards.board',
         value: records.hyperboard,
-        expectedType: 'app.certified.feed.beta.defs#hyperboardView',
+        expectedType: 'org.hypercerts.feed.defs#hyperboardView',
       },
       'update.create': {
         collection: 'org.hypercerts.context.attachment',
         value: records.update,
-        expectedType: 'app.certified.feed.beta.defs#updateView',
+        expectedType: 'org.hypercerts.feed.defs#updateView',
       },
       'endorsement.award': {
         collection: 'app.certified.badge.award',
         value: records.endorsement,
-        expectedType: 'app.certified.feed.beta.defs#endorsementView',
+        expectedType: 'org.hypercerts.feed.defs#endorsementView',
         endorsedActor,
       },
     } satisfies Record<
@@ -781,7 +781,7 @@ describe('feed-card view builders', () => {
     })
 
     expect(buildFeedItemView(record)).toEqual({
-      $type: 'app.certified.feed.beta.defs#activityView',
+      $type: 'org.hypercerts.feed.defs#activityView',
       title: 'Restore the watershed',
       shortDescription: 'Native forest restoration',
       createdAt,

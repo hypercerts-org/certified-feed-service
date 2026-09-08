@@ -1,16 +1,16 @@
-# Certified Feed Service agent guide
+# Hypercerts Feed Service agent guide
 
 ## Release status
 
-This service and its `app.certified.feed.beta.*` Lexicons have not had their first public release. Until then, contract changes are pre-release revisions, not breaking changes, and do not require backward compatibility. Update this section when the first public release occurs.
+This service and its `org.hypercerts.feed.*` Lexicons have not had their first public release. Until then, contract changes are pre-release revisions, not breaking changes, and do not require backward compatibility. Update this section when the first public release occurs.
 
 ## Read this first
 
 This repository is a standalone, read-only TypeScript service exposing two unauthenticated POST procedures:
 
 ```text
-app.certified.feed.beta.getFeedSkeleton
-app.certified.feed.beta.getFeed
+org.hypercerts.feed.getFeedSkeleton
+org.hypercerts.feed.getFeed
 ```
 
 The skeleton returns URI-only generic feed subjects. The hydrated endpoint returns generic feed entries with validated feed-specific views and actor summaries. Hyperindex is the only supported database owner. The service reads its current PostgreSQL state directly; it does not ingest, authenticate, write records, own migrations, cache across requests, call Hyperindex/PDS/AppView APIs, download blobs, hydrate target records, or provide immutable history.
@@ -20,7 +20,7 @@ Use **npm**, not pnpm. `package-lock.json` is authoritative. Node.js 22.13+ is s
 Before changing feed behavior, read together:
 
 - `src/feed/feed-query.sql` — primary selection, classification, ordering, pagination, and same-statement source contract
-- `src/feed/query.ts` — registered Certified feed definition, fixed SQL bind order, row mapping, and source invariants
+- `src/feed/query.ts` — registered Hypercerts feed definition, fixed SQL bind order, row mapping, and source invariants
 - `src/feed/registry.ts` and `src/feed/sql-feed.ts` — feed dispatch plus shared parsing, cursor, execution, pagination, and metrics policy
 - `test/feed.integration.test.ts` — cross-table, source-mode, and pagination invariants
 - `docs/database-contract.md` — external Hyperindex schema contract
@@ -70,7 +70,7 @@ src/server.ts
   -> src/api/get-feed-skeleton.ts
   -> FeedService
   -> FeedRegistry.loadPage(metadata)
-  -> registered Certified SQL feed
+  -> registered Hypercerts SQL feed
   -> src/feed/feed-query.sql, source mode disabled
   -> Database
 ```
@@ -83,7 +83,7 @@ src/server.ts
   -> src/api/get-feed.ts
   -> HydratedFeedService
   -> FeedRegistry.loadPage(with-source)
-  -> registered Certified SQL feed
+  -> registered Hypercerts SQL feed
   -> src/feed/feed-query.sql, source mode enabled
   -> validateFeedRecord(), dropping invalid selected sources
   -> IdentityReader.getByDids()
@@ -93,13 +93,13 @@ src/server.ts
 
 Ownership:
 
-- `src/server.ts` is the composition root. It creates the registered Certified feed, one shared registry, separate endpoint services, and one identity adapter; it also owns listener settings, initial readiness, and graceful shutdown.
+- `src/server.ts` is the composition root. It creates the registered Hypercerts feed, one shared registry, separate endpoint services, and one identity adapter; it also owns listener settings, initial readiness, and graceful shutdown.
 - `src/app.ts` is the fetch-compatible boundary. It owns fixed route metadata, POST enforcement, the 64 KiB body limit, malformed JSON, routed validation messages, and bounded request metrics.
 - `src/api/get-feed-skeleton.ts` and `src/api/get-feed.ts` register the procedures, run generated output validation inside the error boundary, and translate expected `FeedError` values.
 - `src/feed/service.ts` projects registry-selected metadata rows into the public skeleton. It does not own dispatch, cursor, or pagination policy.
 - `src/feed/registry.ts` owns `feedId` dispatch, feed/params compatibility checks, and the shared metadata/source page interface used by both endpoint services.
 - `src/feed/sql-feed.ts` owns feed-specific parameter parsing and normalization calls, feed-scoped cursor decoding, one query execution/timing, `limit + 1` trimming, result metrics, source-mode enforcement, and next-cursor creation.
-- `src/feed/query.ts` registers the current Certified feed and owns its generated parameter parsing, fixed SQL bind order, metadata/source row mapping, and explicit query invariants.
+- `src/feed/query.ts` registers the current Hypercerts feed and owns its generated parameter parsing, fixed SQL bind order, metadata/source row mapping, and explicit query invariants.
 - `src/feed/feed-query.sql` owns scope resolution, quality and endorsement rules, project pairing, classification, ordering, keyset pagination, and the conditional post-pagination source join.
 - `src/hydration/service.ts` directly coordinates source validation, omission of invalid selected sources, DID discovery, at most one identity batch, identity projection, total view construction, and output ordering. It must not call the public skeleton service.
 - `src/hydration/identity.ts` owns the combined actor, Certified-profile, and Bluesky-profile query and returns one context per requested DID.
@@ -116,7 +116,7 @@ Test at the narrowest owner:
 - hydrated-service tests fake `FeedPageLoader` and `IdentityReader`;
 - registry tests fake registered feeds and assert dispatch invariants;
 - generic SQL-feed tests fake the query executor and assert parsing, cursor, pagination, mode, timing, and metrics policy;
-- Certified-feed query tests fake the query executor and assert bind/source invariants;
+- Hypercerts-feed query tests fake the query executor and assert bind/source invariants;
 - identity tests fake its query executor;
 - validation and views use pure fixture tests;
 - Lexicon tests inspect committed JSON and generated parsers;
@@ -130,7 +130,7 @@ Changesets creates or updates the `changeset-release/main` Release pull request 
 
 ## Canonical and generated files
 
-- Project-owned `lexicons/app/certified/feed/**/*.json` is the public wire contract. Other committed Lexicons may be external dependencies pinned by `lexicons.json`; refresh them only through `lex install`.
+- Project-owned `lexicons/org/hypercerts/feed/**/*.json` is the public wire contract. Other committed Lexicons may be external dependencies pinned by `lexicons.json`; refresh them only through `lex install`.
 - `src/lexicons/` is generated and ignored. Never hand-edit or commit it.
 - `src/feed/feed-query.sql` is the canonical feed statement.
 - `dist/` and `coverage/` are generated and ignored.
@@ -144,11 +144,11 @@ A request, response, event kind, view, or public-error change normally requires 
 
 Preserve these unless the public contract is intentionally revised and documented:
 
-- Both procedures accept the same `{ feedId, params?, limit?, cursor? }` wrapper. `limit` and `cursor` are generic top-level pagination controls; `params` contains only algorithm-specific values and may be omitted for feeds that declare no params contract. The public params union remains open for future feeds. Runtime dispatch rejects an unregistered `feedId` with `UnsupportedFeed`, while the current Certified feed rejects missing params or a mismatched params discriminator with `InvalidRequest` before querying.
+- Both procedures accept the same `{ feedId, params?, limit?, cursor? }` wrapper. `limit` and `cursor` are generic top-level pagination controls; `params` contains only algorithm-specific values and may be omitted for feeds that declare no params contract. The public params union remains open for future feeds. Runtime dispatch rejects an unregistered `feedId` with `UnsupportedFeed`, while the current Hypercerts feed rejects missing params or a mismatched params discriminator with `InvalidRequest` before querying.
 - The base scope always resolves from the viewer's current Certified follows. There is no caller-supplied author override.
 - Deduplicate request lists before enforcing semantic limits: 64 evaluators, 16 kinds, and 1–50 page items.
 - Evaluator endorsement subjects are unioned after base-author resolution. Remove the viewer and deduplicate candidates. Do not query actor status: Hyperindex purges source records for explicitly deleted, deactivated, suspended, or taken-down identities, and actors absent from `actor` remain eligible.
-- Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with the generic `InvalidRequest` error and an actionable Certified-parameter message.
+- Omitted or empty `kinds` means all supported kinds. Unknown kinds fail with the generic `InvalidRequest` error and an actionable Hypercerts-parameter message.
 - Organization-quality policy uses only service-configured `TRUSTED_QUALITY_LABELER_DIDS`. Organizations are exact `app.certified.actor.organization/self` records. Quality assertions are trusted bare-DID, non-CID `external_label` rows; malformed text timestamps are ignored safely. `includeUnrated` applies only when no active trusted label exists; an active disallowed label is not unrated.
 - Materialize the complete resolved scope once for project pairing and event selection. Do not cap or truncate followed or evaluator-expanded accounts.
 - Evaluator expansion and visible endorsement events use the same JSON account-subject, self-endorsement, exact definition URI/CID, badge type, allowed-issuer, and latest exact response rules. Do not use derived endorsement adjacency data.
@@ -162,7 +162,7 @@ Preserve these unless the public contract is intentionally revised and documente
 - Every requested identity DID receives a context. Missing storage rows degrade to a DID-only summary; query rejection fails the request.
 - A valid meaningful Certified profile supplies display/avatar fields wholesale while preserving an independently valid stored handle. Otherwise a valid `app.bsky.actor.profile` supplies display/avatar fields wholesale, then a sanitized stored handle applies, then DID-only fallback. Do not expose provenance.
 - Known source records validate against `@hypercerts-org/lexicon` exactly `1.0.0`, selected by trusted collection plus feed kind. Keep the compatible direct `@atproto/lexicon` pin and supplemental MIME, integer-size, nonnegative-size, and maximum-size checks.
-- Public hydrated output is view-only. Every returned `app.certified.feed.beta.getFeed#feedItem` has a URI-only source `subject` and a required open `view`; the current `app.certified.feed.beta.defs#certifiedFeedView` variant owns Certified `kind`, `actor`, and open `content`. Drop invalid selected sources without backfilling; a hydrated page may be shorter than `limit`, or empty, while retaining the selected-page cursor. Do not expose source JSON, source CID, internal feed timestamp, or redundant event-author DID fields.
+- Public hydrated output is view-only. Every returned `org.hypercerts.feed.getFeed#feedItem` has a URI-only source `subject` and a required open `view`; the current `org.hypercerts.feed.defs#hypercertsFeedView` variant owns Hypercerts `kind`, `actor`, and open `content`. Drop invalid selected sources without backfilling; a hydrated page may be shorter than `limit`, or empty, while retaining the selected-page cursor. Do not expose source JSON, source CID, internal feed timestamp, or redundant event-author DID fields.
 - Hydrated items use a direct local `feedItem` reference. Feed views, content values, and image values remain open unions. Preserve protocol-native `org.hypercerts.defs#uri`, `#smallImage`, `#largeImage`, and `#smallBlob` discriminators and nested AT Protocol blob refs; never add a feed-specific flattened blob descriptor. Require clients to tolerate unknown future variants.
 - All eight current feed kinds map exhaustively to seven known view variants; both collection kinds use `collectionView`. The service owns this kind/view mapping.
 - Endorsement views are total and use the exact account-subject summary.

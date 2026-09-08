@@ -1,4 +1,4 @@
-# Certified Feed Service
+# Hypercerts Feed Service
 
 A standalone, read-only TypeScript service. It reads the current PostgreSQL data owned by Hyperindex and serves ordered Hypercerts feeds over XRPC.
 
@@ -8,11 +8,11 @@ Hyperindex is the only supported owner of the database. The service provides a U
 
 ## Endpoints
 
-Both endpoints are unauthenticated POST procedures. They use the same `{ feedId, params?, limit?, cursor? }` request wrapper, feed-scoped cursor contract, and stable public errors. `params` contains only algorithm-specific values; pagination is generic and top-level. The registered Certified feed requires `params.viewerDid` to choose the viewer scope. The service does not check it against an authenticated caller:
+Both endpoints are unauthenticated POST procedures. They use the same `{ feedId, params?, limit?, cursor? }` request wrapper, feed-scoped cursor contract, and stable public errors. `params` contains only algorithm-specific values; pagination is generic and top-level. The registered Hypercerts feed requires `params.viewerDid` to choose the viewer scope. The service does not check it against an authenticated caller:
 
 ```text
-POST /xrpc/app.certified.feed.beta.getFeedSkeleton
-POST /xrpc/app.certified.feed.beta.getFeed
+POST /xrpc/org.hypercerts.feed.getFeedSkeleton
+POST /xrpc/org.hypercerts.feed.getFeed
 Content-Type: application/json
 ```
 
@@ -21,12 +21,12 @@ These are app-specific XRPC procedures. They are not Bluesky's `app.bsky.feed.ge
 ### Request
 
 ```bash
-curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeed \
+curl -sS http://localhost:3000/xrpc/org.hypercerts.feed.getFeed \
   -H 'content-type: application/json' \
   --data '{
-    "feedId": "app.certified.feed.beta.defs#certifiedFeed",
+    "feedId": "org.hypercerts.feed.defs#hypercertsFeed",
     "params": {
-      "$type": "app.certified.feed.beta.defs#certifiedFeedParams",
+      "$type": "org.hypercerts.feed.defs#hypercertsFeedParams",
       "viewerDid": "did:plc:ar7c4by46qjdydhdevvrndac",
       "trustedEvaluators": ["did:plc:ewvi7nxzyoun6zhxrhs64oiz"],
       "organizationQuality": {
@@ -38,7 +38,7 @@ curl -sS http://localhost:3000/xrpc/app.certified.feed.beta.getFeed \
   }'
 ```
 
-Use the same body with `getFeedSkeleton` when another data system needs only ordered source AT-URIs. The public params union is open for future feed algorithms, including algorithms that accept no params. This service currently registers only `app.certified.feed.beta.defs#certifiedFeed` and requires `app.certified.feed.beta.defs#certifiedFeedParams`; missing params or a mismatched `$type` returns `InvalidRequest`, while an unknown `feedId` returns `UnsupportedFeed`.
+Use the same body with `getFeedSkeleton` when another data system needs only ordered source AT-URIs. The public params union is open for future feed algorithms, including algorithms that accept no params. This service currently registers only `org.hypercerts.feed.defs#hypercertsFeed` and requires `org.hypercerts.feed.defs#hypercertsFeedParams`; missing params or a mismatched `$type` returns `InvalidRequest`, while an unknown `feedId` returns `UnsupportedFeed`.
 
 ### Skeleton response
 
@@ -63,7 +63,7 @@ Each skeleton entry intentionally contains only the source record AT-URI. A down
     {
       "subject": "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/org.hypercerts.context.evaluation/3kpn",
       "view": {
-        "$type": "app.certified.feed.beta.defs#certifiedFeedView",
+        "$type": "org.hypercerts.feed.defs#hypercertsFeedView",
         "kind": "evaluation.create",
         "actor": {
           "did": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
@@ -71,7 +71,7 @@ Each skeleton entry intentionally contains only the source record AT-URI. A down
           "displayName": "Evaluator"
         },
         "content": {
-          "$type": "app.certified.feed.beta.defs#evaluationView",
+          "$type": "org.hypercerts.feed.defs#evaluationView",
           "summary": "Strong evidence",
           "createdAt": "2026-07-21T10:00:00.000Z",
           "target": {
@@ -85,7 +85,7 @@ Each skeleton entry intentionally contains only the source record AT-URI. A down
 }
 ```
 
-Every hydrated entry has a generic source `subject` and an open `view` union. The current `certifiedFeedView` variant owns the Certified event kind, actor, and kind-specific content. Clients must tolerate unknown future feed-view and content variants.
+Every hydrated entry has a generic source `subject` and an open `view` union. The current `hypercertsFeedView` variant owns the Hypercerts event kind, actor, and kind-specific content. Clients must tolerate unknown future feed-view and content variants.
 
 #### What you get
 
@@ -237,12 +237,12 @@ Each service replica has its own limited in-process pool. When planning database
 Example operator setup:
 
 ```sql
-CREATE ROLE certified_feed_reader LOGIN PASSWORD '<managed-secret>';
-GRANT CONNECT ON DATABASE hyperindex TO certified_feed_reader;
-GRANT USAGE ON SCHEMA public TO certified_feed_reader;
+CREATE ROLE hypercerts_feed_reader LOGIN PASSWORD '<managed-secret>';
+GRANT CONNECT ON DATABASE hyperindex TO hypercerts_feed_reader;
+GRANT USAGE ON SCHEMA public TO hypercerts_feed_reader;
 GRANT SELECT ON TABLE public.record, public.actor, public.external_label
-  TO certified_feed_reader;
-ALTER ROLE certified_feed_reader SET default_transaction_read_only = on;
+  TO hypercerts_feed_reader;
+ALTER ROLE hypercerts_feed_reader SET default_transaction_read_only = on;
 ```
 
 The service has no migrations or feed tables of its own. `/ready` checks that the database can be reached, PostgreSQL 16 can validate timestamps, and the session is read-only. It does not check Hyperindex tables, migrations, label subscriptions, completed backfills, or ingestion freshness. See [`docs/database-contract.md`](docs/database-contract.md) for the runtime schema contract.
@@ -271,14 +271,14 @@ npx --no-install lex install --ci --lexicons ./lexicons --manifest ./lexicons.js
 
 Run `lex install --update` only when you mean to update those pinned dependencies.
 
-The main feed statement is `src/feed/feed-query.sql`. `src/feed/query.ts` registers its Certified feed definition, while `src/feed/registry.ts` and `src/feed/sql-feed.ts` own dispatch and shared SQL-feed execution policy. During development, the watcher watches the SQL along with the TypeScript source. The build copies it next to `dist/feed/query.js` before checking that the production adapters load.
+The main feed statement is `src/feed/feed-query.sql`. `src/feed/query.ts` registers its Hypercerts feed definition, while `src/feed/registry.ts` and `src/feed/sql-feed.ts` own dispatch and shared SQL-feed execution policy. During development, the watcher watches the SQL along with the TypeScript source. The build copies it next to `dist/feed/query.js` before checking that the production adapters load.
 
 ### PostgreSQL integration tests
 
 Integration tests need a PostgreSQL 16+ database that you explicitly choose and that is empty and safe to discard:
 
 ```bash
-TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/certified_feed_test' \
+TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/hypercerts_feed_test' \
   npm run test:integration
 ```
 
@@ -302,11 +302,11 @@ See [`docs/RELEASING.md`](docs/RELEASING.md) for the contributor and maintainer 
 ## Deployment
 
 ```bash
-docker build -t certified-feed-service .
+docker build -t hypercerts-feed-service .
 docker run --rm -p 3000:3000 \
   -e DATABASE_URL='postgresql://...' \
   -e TRUSTED_QUALITY_LABELER_DIDS='did:plc:ar7c4by46qjdydhdevvrndac' \
-  certified-feed-service
+  hypercerts-feed-service
 ```
 
 Deploy the service beside Hyperindex and use private networking for the database.

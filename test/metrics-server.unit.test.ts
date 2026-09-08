@@ -121,7 +121,7 @@ describe('createMetricsServer', () => {
     expect(response.headers.get('content-type')).toBe(
       'text/plain; version=0.0.4; charset=utf-8',
     )
-    await expect(response.text()).resolves.toContain('certified_feed_ready 1')
+    await expect(response.text()).resolves.toContain('hypercerts_feed_ready 1')
   })
 
   it('returns an internal error when metrics collection fails', async () => {
