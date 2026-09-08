@@ -2,7 +2,6 @@
 
 A standalone, read-only TypeScript service. It reads the current PostgreSQL data owned by Hyperindex and serves ordered Hypercerts feeds over XRPC.
 
-> **Pre-release:** Neither this service nor its Lexicons has had a first public release. Wire contracts can change without backward compatibility.
 
 Hyperindex is the only supported owner of the database. The service provides a URI-only skeleton and a hydrated feed with generic entries and feed-specific views. It does not ingest or change indexed data, import Hyperindex code, call the Hyperindex GraphQL API, authenticate callers, fetch blob bytes, or provide an unchangeable event history.
 
