@@ -57,6 +57,7 @@ const methodNotAllowed = (expected: 'GET' | 'POST'): Response =>
   )
 
 const routeLabel = (pathname: string): string => {
+  if (pathname === '/') return 'root'
   if (pathname === '/health') return 'health'
   if (pathname === '/ready') return 'ready'
   return feedRoute(pathname)?.label ?? 'other'
@@ -227,6 +228,15 @@ const observeResponseError = async (
   metrics.observeError(body.error as FeedErrorCode)
 }
 
+const handleRootRequest = (request: Request): Response =>
+  request.method === 'GET'
+    ? jsonResponse({
+        name: 'Hypercerts Feed Service',
+        description: 'Read-only Hypercerts feeds over XRPC.',
+        endpoints: FEED_ROUTES.map((route) => route.path),
+      })
+    : methodNotAllowed('GET')
+
 const handleHealthRequest = (request: Request): Response =>
   request.method === 'GET'
     ? jsonResponse({ status: 'ok' })
@@ -293,6 +303,8 @@ const handleRequest = async (
   let response: Response
   if (matchedFeedRoute && request.method === 'OPTIONS') {
     response = corsPreflightResponse(request)
+  } else if (pathname === '/') {
+    response = handleRootRequest(request)
   } else if (pathname === '/health') {
     response = handleHealthRequest(request)
   } else if (pathname === '/ready') {
