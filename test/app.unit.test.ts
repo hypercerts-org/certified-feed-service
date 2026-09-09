@@ -101,6 +101,7 @@ describe('HTTP application', () => {
     )
 
     expect(response.status).toBe(405)
+    expect(response.headers.get('allow')).toBe('GET')
     await expect(response.json()).resolves.toEqual({
       error: 'InvalidRequest',
       message: 'This endpoint requires GET; change the HTTP method and retry.',

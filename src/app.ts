@@ -47,14 +47,17 @@ const requestTooLargeResponse = (): Response =>
     413,
   )
 
-const methodNotAllowed = (expected: 'GET' | 'POST'): Response =>
-  jsonResponse(
+const methodNotAllowed = (expected: 'GET' | 'POST'): Response => {
+  const response = jsonResponse(
     {
       error: FeedErrorCode.InvalidRequest,
       message: `This endpoint requires ${expected}; change the HTTP method and retry.`,
     },
     405,
   )
+  response.headers.set('allow', expected)
+  return response
+}
 
 const routeLabel = (pathname: string): string => {
   if (pathname === '/') return 'root'
