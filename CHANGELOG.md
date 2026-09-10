@@ -1,5 +1,11 @@
 # @hypercerts/hypercerts-feed-service
 
+## 0.1.1
+
+### Patch Changes
+
+- [#18](https://github.com/hypercerts-org/hypercerts-feed-service/pull/18) [`ac800bc`](https://github.com/hypercerts-org/hypercerts-feed-service/commit/ac800bc0504e8ba6bab110422bc46100792105c5) Thanks [@Kzoeps](https://github.com/Kzoeps)! - Describe the feed service and its public XRPC procedures at `GET /`.
+
 ## 0.1.0
 
 ### Initial Release
