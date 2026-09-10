@@ -266,7 +266,7 @@ npm run test:unit
 npm run build
 ```
 
-The committed Lexicon JSON in `lexicons/` defines the public wire contract and includes installed external dependencies. `lexicons.json` pins installed network Lexicons by AT-URI and CID. The generated TypeScript in `src/lexicons/` is ignored. Do not edit or commit it. The `codegen`, `check`, test, and build commands regenerate it. Codegen stages only the standard `org.hypercerts.defs#uri`, `#smallBlob`, `#smallImage`, and `#largeImage` fragments from the pinned `@hypercerts-org/lexicon` package. This keeps the feed from committing duplicate definitions. `AGENTS.md` explains a small, focused workaround that runs after codegen for `@atproto/lex@0.3.0`.
+The committed Lexicon JSON in `lexicons/` defines the public wire contract and includes installed external dependencies. `lexicons.json` pins installed network Lexicons by AT-URI and CID. The generated TypeScript in `src/lexicons/` is ignored. Do not edit or commit it. The `codegen`, `check`, test, and build commands regenerate it. Codegen stages only the standard `org.hypercerts.defs#uri`, `#smallBlob`, `#smallImage`, and `#largeImage` fragments from the pinned `@hypercerts-org/lexicon` package. This keeps the feed from committing duplicate definitions. `AGENTS.md` explains a small, focused workaround for the current `@atproto/lex` generator output that runs after codegen.
 
 Check the committed network Lexicons against the manifest with:
 
