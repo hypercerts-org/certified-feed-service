@@ -7,7 +7,9 @@ Hyperindex is the only supported owner of the database. The service provides a U
 
 ## Endpoints
 
-Both endpoints are unauthenticated POST procedures. They use the same `{ feedId, params?, limit?, cursor? }` request wrapper, feed-scoped cursor contract, and stable public errors. `params` contains only algorithm-specific values; pagination is generic and top-level. The registered Hypercerts feed requires `params.viewerDid` to choose the viewer scope. The service does not check it against an authenticated caller:
+`GET /` returns a small JSON description of the service and lists its public XRPC procedures. It does not query the database or report service readiness.
+
+Both feed endpoints are unauthenticated POST procedures. They use the same `{ feedId, params?, limit?, cursor? }` request wrapper, feed-scoped cursor contract, and stable public errors. `params` contains only algorithm-specific values; pagination is generic and top-level. The registered Hypercerts feed requires `params.viewerDid` to choose the viewer scope. The service does not check it against an authenticated caller:
 
 ```text
 POST /xrpc/org.hypercerts.feed.getFeedSkeleton

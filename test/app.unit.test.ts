@@ -63,6 +63,51 @@ const post = (url: string, body: string): Request =>
   })
 
 describe('HTTP application', () => {
+  it('describes the service at the root route', async () => {
+    const metrics = new Metrics()
+    const app = createApp(
+      compatibleDatabase,
+      appServices(),
+      metrics,
+      logger,
+    )
+
+    const response = await app.fetch(new Request('http://localhost/'))
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    await expect(response.json()).resolves.toEqual({
+      name: 'Hypercerts Feed Service',
+      description: 'Read-only Hypercerts feeds over XRPC.',
+      endpoints: [
+        '/xrpc/org.hypercerts.feed.getFeedSkeleton',
+        '/xrpc/org.hypercerts.feed.getFeed',
+      ],
+    })
+    const metricText = await metrics.registry.metrics()
+    expect(metricText).toContain('route="root"')
+  })
+
+  it('rejects non-GET requests to the root route', async () => {
+    const app = createApp(
+      compatibleDatabase,
+      appServices(),
+      new Metrics(),
+      logger,
+    )
+
+    const response = await app.fetch(
+      new Request('http://localhost/', { method: 'POST' }),
+    )
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('allow')).toBe('GET')
+    await expect(response.json()).resolves.toEqual({
+      error: 'InvalidRequest',
+      message: 'This endpoint requires GET; change the HTTP method and retry.',
+    })
+  })
+
   it('serves the generic skeleton POST procedure', async () => {
     let received: GetFeedSkeletonInput | undefined
     const skeleton: FeedSkeletonReader = {
