@@ -1,6 +1,8 @@
 import { LexRouter, LexServerError } from '@atproto/lex-server'
 import type { Logger } from 'pino'
 
+import { applyAuthenticatedViewer } from '../auth/input.js'
+import type { OptionalServiceAuth, ServiceAuthCredentials } from '../auth/service-auth.js'
 import { FeedError, FeedErrorCode } from '../feed/errors.js'
 import type { GetFeedSkeletonInput } from '../feed/types.js'
 import type { HydratedFeedReader } from '../hydration/service.js'
@@ -13,11 +15,15 @@ export const registerGetFeed = (
   router: LexRouter,
   feedService: HydratedFeedReader,
   logger: Logger,
+  auth?: OptionalServiceAuth,
 ): void => {
-  router.add(getFeed, async ({ input }) => {
+  const handler = async (
+    input: GetFeedSkeletonInput,
+    credentials: ServiceAuthCredentials | undefined,
+  ) => {
     try {
       const output = await feedService.getFeed(
-        input.body as GetFeedSkeletonInput,
+        applyAuthenticatedViewer(input, credentials),
       )
       return { body: $output.schema.$parse(output) }
     } catch (cause) {
@@ -42,5 +48,17 @@ export const registerGetFeed = (
         { cause },
       )
     }
-  })
+  }
+
+  if (auth === undefined) {
+    router.add(getFeed, async ({ input }) =>
+      handler(input.body as GetFeedSkeletonInput, undefined),
+    )
+  } else {
+    router.add(getFeed, {
+      auth,
+      handler: async ({ input, credentials }) =>
+        handler(input.body as GetFeedSkeletonInput, credentials),
+    })
+  }
 }
