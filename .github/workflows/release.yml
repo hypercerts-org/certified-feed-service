@@ -216,3 +216,105 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           create-github-releases: true
           push-git-tags: true
+
+  sync-development:
+    name: Open main to dev synchronization PR
+    if: needs.publish.result == 'success'
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Reuse or create synchronization PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          find_open_sync_pr() {
+            gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
+              --field state=open \
+              --field base=dev \
+              --field "head=${GITHUB_REPOSITORY_OWNER}:main" \
+              --field per_page=100 \
+              --jq '.[0].html_url // empty'
+          }
+
+          compare_main_to_dev() {
+            # GitHub compares base...head, so dev...main reports commits on main
+            # that are not yet in dev.
+            gh api --method GET "repos/${GITHUB_REPOSITORY}/compare/dev...main" \
+              --jq '.ahead_by'
+          }
+
+          read_main_ahead_by() {
+            local context="$1"
+            if ! main_ahead_by="$(compare_main_to_dev)"; then
+              echo "::error::Could not compare dev...main ${context}. Review the GitHub CLI error above and rerun the workflow."
+              exit 1
+            fi
+            case "$main_ahead_by" in
+              ''|*[!0-9]*)
+                echo "::error::GitHub returned an invalid ahead_by value while comparing dev...main ${context}: ${main_ahead_by:-<empty>}"
+                exit 1
+                ;;
+            esac
+          }
+
+          if ! existing_url="$(find_open_sync_pr)"; then
+            echo "::error::Could not check for an open main to dev synchronization pull request. Review the GitHub CLI error above and rerun the workflow."
+            exit 1
+          fi
+
+          if [ -n "$existing_url" ]; then
+            echo "::notice::Reusing existing main to dev synchronization pull request: ${existing_url}"
+            exit 0
+          fi
+
+          read_main_ahead_by 'before creating the synchronization pull request'
+          if [ "$main_ahead_by" -eq 0 ]; then
+            echo "::notice::main has no commits ahead of dev; no synchronization pull request is needed."
+            exit 0
+          fi
+
+          title='release: sync main to dev'
+          body="$(cat <<'EOF'
+          Synchronizes the completed release changes from `main` back to `dev`, including consumed Changeset fragment deletions and generated version, lockfile, and changelog metadata.
+
+          Merge this pull request with a **merge commit**. Do not squash it: preserving the release commit ancestry keeps `dev` aligned with the release history on `main`.
+          EOF
+          )"
+
+          create_error="$(mktemp)"
+          trap 'rm -f "$create_error"' EXIT
+          if created_url="$(gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base dev \
+            --head main \
+            --title "$title" \
+            --body "$body" 2>"$create_error")"; then
+            echo "::notice::Created main to dev synchronization pull request: ${created_url}"
+            exit 0
+          fi
+
+          cat "$create_error" >&2
+          if ! existing_url="$(find_open_sync_pr)"; then
+            echo "::error::Creating the main to dev synchronization pull request failed, and checking for a concurrently created pull request also failed. Review the GitHub CLI errors above and rerun the workflow."
+            exit 1
+          fi
+          if [ -n "$existing_url" ]; then
+            echo "::notice::A main to dev synchronization pull request was created concurrently; reusing it: ${existing_url}"
+            exit 0
+          fi
+
+          read_main_ahead_by 'after pull request creation failed'
+          if [ "$main_ahead_by" -eq 0 ]; then
+            echo "::notice::main no longer has commits ahead of dev; synchronization completed concurrently and no pull request is needed."
+            exit 0
+          fi
+
+          echo "::error::Could not create the main to dev synchronization pull request. Review the GitHub CLI error above, verify that the dev branch exists and allows pull requests from main, then rerun the workflow."
+          exit 1
