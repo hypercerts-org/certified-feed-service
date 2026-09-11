@@ -19,6 +19,8 @@ Content-Type: application/json
 
 These are app-specific XRPC procedures. They are not Bluesky's `app.bsky.feed.getFeedSkeleton` query.
 
+The procedure and JSON-body design is intentional. A Lexicon query cannot have an input body, and Lexicon's HTTP query-parameter `params` type cannot contain references, nested objects, or the open union needed for different feed algorithms to define different parameter shapes. Procedures can have both URL parameters and a body, but splitting `feedId`, `limit`, and `cursor` into the URL while putting algorithm-specific values in the body would make one feed request harder to construct and understand. Keeping the complete request in one JSON body conforms to the Lexicon specification and gives generated clients one coherent input object. It differs only from the style guide's usual `limit` and `cursor` convention for query endpoints. This transport shape is part of the public contract and should be settled before clients adopt it, because moving fields between the body and URL later would be a breaking change.
+
 ### Request
 
 ```bash
@@ -264,7 +266,7 @@ npm run test:unit
 npm run build
 ```
 
-The committed Lexicon JSON in `lexicons/` defines the public wire contract and includes installed external dependencies. `lexicons.json` pins installed network Lexicons by AT-URI and CID. The generated TypeScript in `src/lexicons/` is ignored. Do not edit or commit it. The `codegen`, `check`, test, and build commands regenerate it. Codegen stages only the standard `org.hypercerts.defs#uri`, `#smallBlob`, `#smallImage`, and `#largeImage` fragments from the pinned `@hypercerts-org/lexicon` package. This keeps the feed from committing duplicate definitions. `AGENTS.md` explains a small, focused workaround that runs after codegen for `@atproto/lex@0.3.0`.
+The committed Lexicon JSON in `lexicons/` defines the public wire contract and includes installed external dependencies. `lexicons.json` pins installed network Lexicons by AT-URI and CID. The generated TypeScript in `src/lexicons/` is ignored. Do not edit or commit it. The `codegen`, `check`, test, and build commands regenerate it. Codegen stages only the standard `org.hypercerts.defs#uri`, `#smallBlob`, `#smallImage`, and `#largeImage` fragments from the pinned `@hypercerts-org/lexicon` package. This keeps the feed from committing duplicate definitions. `AGENTS.md` explains a small, focused workaround for the current `@atproto/lex` generator output that runs after codegen.
 
 Check the committed network Lexicons against the manifest with:
 

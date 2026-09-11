@@ -6,7 +6,7 @@ const generatedRoot = fileURLToPath(
   new URL('../src/lexicons', import.meta.url),
 )
 
-// @atproto/lex@0.3.0 emits explicit schema generics whose optional properties
+// @atproto/lex emits explicit schema generics whose optional properties
 // conflict with exactOptionalPropertyTypes. Inference preserves the same
 // runtime schemas and generated public types without weakening app checks.
 const explicitSimpleType = /l\.typedObject<([A-Za-z_$][A-Za-z0-9_$]*)>\(/g
@@ -54,7 +54,7 @@ for (const file of files) {
     rewritten.match(/l\.record<('[^']+'|"[^"]+"),/)
   ) {
     throw new Error(
-      `Generated definitions at ${file} contain an unsupported schema generic; update the narrow @atproto/lex@0.3.0 workaround before continuing.`,
+      `Generated definitions at ${file} contain an unsupported schema generic; update the narrow @atproto/lex generated-definition workaround before continuing.`,
     )
   }
   if (rewritten !== source) await writeFile(file, rewritten)
